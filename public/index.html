@@ -1,0 +1,1203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Organicut Fresh — Daily MPK Calculator</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --primary: #1a73e8;
+  --surface: #ffffff;
+  --bg: #f1f5f9;
+  --border: #e2e8f0;
+  --text: #1e293b;
+  --muted: #94a3b8;
+  --success: #10b981;
+  --dark: #0f172a;
+  --warn: #f59e0b;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 13.5px;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.45;
+}
+
+/* ── TOP BAR ─────────────────────────────────────────── */
+.topbar {
+  position: sticky; top: 0; z-index: 200;
+  background: var(--surface); border-bottom: 1px solid var(--border);
+  padding: 0 24px; height: 56px;
+  display: flex; align-items: center; gap: 18px;
+  box-shadow: 0 1px 4px rgba(0,0,0,.07);
+}
+.brand { font-weight: 700; font-size: 15px; color: var(--dark); white-space: nowrap; letter-spacing: -.2px; }
+.brand em { color: var(--primary); font-style: normal; }
+.spacer { flex: 1; }
+.field { display: flex; align-items: center; gap: 6px; }
+.field label { font-size: 11.5px; color: var(--muted); white-space: nowrap; font-weight: 600; }
+.field input {
+  border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px;
+  font-size: 13px; color: var(--text); background: #fff; outline: none;
+  transition: border-color .15s, box-shadow .15s;
+}
+.field input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(26,115,232,.12); }
+.btn {
+  padding: 7px 15px; border-radius: 6px; border: none; font-size: 13px;
+  font-weight: 600; cursor: pointer; white-space: nowrap;
+  transition: opacity .15s, transform .1s;
+  display: flex; align-items: center; gap: 5px;
+}
+.btn:hover { opacity: .87; }
+.btn:active { transform: scale(.97); }
+.btn-primary  { background: var(--primary); color: #fff; }
+.btn-success  { background: var(--success); color: #fff; }
+.btn-save-rec { background: #7c3aed; color: #fff; }
+.btn-outline  { background: #fff; color: var(--text); border: 1px solid var(--border); }
+
+#csvStatus { font-size: 12px; color: var(--muted); white-space: nowrap; }
+#csvStatus.ok { color: var(--success); }
+
+/* ── USER BADGE ───────────────────────────────────────── */
+.user-area { display: flex; align-items: center; gap: 8px; }
+#userBadge {
+  font-size: 12px; font-weight: 600; color: #475569;
+  background: #f1f5f9; border-radius: 20px; padding: 4px 12px;
+}
+.btn-logout {
+  padding: 5px 11px; border-radius: 6px; border: 1px solid #e2e8f0;
+  font-size: 12px; font-weight: 600; color: #64748b;
+  background: #fff; cursor: pointer;
+}
+.btn-logout:hover { background: #fee2e2; color: #ef4444; border-color: #fca5a5; }
+
+/* ── SUMMARY BAR ──────────────────────────────────────── */
+.sumbar {
+  background: var(--dark); padding: 0 24px;
+  display: flex; align-items: stretch;
+}
+.si { padding: 13px 32px 13px 0; display: flex; flex-direction: column; gap: 3px; }
+.si + .si { padding-left: 32px; border-left: 1px solid rgba(255,255,255,.1); }
+.si.mpk { margin-left: auto; padding-right: 0; padding-left: 32px; border-left: 1px solid rgba(255,255,255,.1); }
+.si-label { font-size: 10px; font-weight: 700; letter-spacing: .7px; text-transform: uppercase; color: #475569; }
+.si-value { font-size: 21px; font-weight: 700; color: #e2e8f0; letter-spacing: .2px; }
+.si-value.green { color: #34d399; }
+
+/* ── MAIN ─────────────────────────────────────────────── */
+.main { padding: 20px 24px 40px; max-width: 1320px; }
+.card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px; overflow: hidden; margin-bottom: 20px;
+  box-shadow: 0 1px 3px rgba(0,0,0,.04);
+}
+.card-head {
+  padding: 13px 20px; background: #f8fafc; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+}
+.card-title { font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px; color: #475569; }
+.unmapped-note {
+  font-size: 11.5px; font-weight: 600; color: #ef4444;
+  background: #fff0f0; padding: 3px 9px; border-radius: 5px; border: 1px solid #fca5a5;
+}
+
+/* ── TABLES ───────────────────────────────────────────── */
+table { width: 100%; border-collapse: collapse; }
+th {
+  padding: 9px 16px; text-align: left; font-size: 11px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .5px; color: #94a3b8;
+  background: #f8fafc; border-bottom: 1px solid var(--border);
+}
+th.r { text-align: right; }
+td { padding: 9px 16px; font-size: 13.5px; border-bottom: 1px solid #f1f5f9; color: var(--text); vertical-align: middle; }
+td.r { text-align: right; }
+tr:last-of-type td { border-bottom: none; }
+.ft td { background: #eff6ff; font-weight: 700; border-top: 1px solid #bfdbfe; border-bottom: none !important; color: var(--primary); }
+.ft td.r { color: var(--primary); }
+
+td input[type="number"] {
+  width: 110px; border: 1px solid var(--border); border-radius: 6px;
+  padding: 5px 9px; font-size: 13px; color: var(--text); background: #fff;
+  outline: none; text-align: right;
+  transition: border-color .15s, box-shadow .15s; -moz-appearance: textfield;
+}
+td input[type="number"]::-webkit-inner-spin-button,
+td input[type="number"]::-webkit-outer-spin-button { opacity: 0.4; }
+td input[type="number"]:focus { border-color: var(--primary); box-shadow: 0 0 0 2px rgba(26,115,232,.13); }
+td input[type="number"]:hover { border-color: #94a3b8; }
+.zero { color: #cbd5e1; }
+
+/* ── TABS ─────────────────────────────────────────────── */
+.tabs { display: flex; border-bottom: 1px solid var(--border); background: #f8fafc; overflow-x: auto; scrollbar-width: none; }
+.tabs::-webkit-scrollbar { display: none; }
+.tab-btn {
+  padding: 11px 22px; font-size: 13px; font-weight: 600; color: var(--muted);
+  cursor: pointer; border: none; background: none; border-bottom: 2px solid transparent;
+  white-space: nowrap; transition: color .15s, border-color .15s, background .15s; outline: none;
+}
+.tab-btn:hover { color: var(--text); }
+.tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); background: #fff; }
+.tab-pane { display: none; }
+.tab-pane.active { display: block; }
+
+/* ── MISC ─────────────────────────────────────────────── */
+.sku-name { color: #334155; }
+.rate-cell { color: #64748b; font-variant-numeric: tabular-nums; }
+.cost-val { font-variant-numeric: tabular-nums; font-weight: 600; }
+
+/* ── ADD SKU ──────────────────────────────────────────── */
+.add-sku-bar { padding: 10px 16px; background: #f8fafc; border-top: 1px solid var(--border); display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.btn-ghost { padding: 5px 13px; border-radius: 6px; border: 1px dashed #94a3b8; font-size: 12px; font-weight: 600; color: #64748b; background: #fff; cursor: pointer; transition: border-color .15s, color .15s; }
+.btn-ghost:hover { border-color: var(--primary); color: var(--primary); }
+.add-sku-form { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.add-sku-form input { border: 1px solid var(--border); border-radius: 6px; padding: 5px 9px; font-size: 13px; outline: none; }
+.add-sku-form input:focus { border-color: var(--primary); }
+.btn-save   { padding: 5px 14px; border-radius: 6px; border: none; font-size: 12px; font-weight: 600; background: var(--primary); color: #fff; cursor: pointer; }
+.btn-cancel { padding: 5px 10px; border-radius: 6px; border: none; font-size: 12px; font-weight: 600; background: #e2e8f0; color: #475569; cursor: pointer; }
+.btn-del    { border: none; background: none; color: #cbd5e1; font-size: 15px; cursor: pointer; padding: 0 4px; line-height: 1; }
+.btn-del:hover { color: #ef4444; }
+.custom-sku-row td { background: #fffbf0; }
+.custom-sku-row td.sku-name { color: #92400e; }
+
+/* ── LOGIN OVERLAY ────────────────────────────────────── */
+#loginOverlay {
+  position: fixed; inset: 0; z-index: 9000;
+  background: rgba(15,23,42,.65); backdrop-filter: blur(4px);
+  display: flex; align-items: center; justify-content: center;
+}
+.login-box {
+  background: #fff; border-radius: 14px; padding: 40px 44px;
+  width: 380px; box-shadow: 0 20px 60px rgba(0,0,0,.25);
+}
+.login-logo { font-size: 20px; font-weight: 700; color: var(--dark); margin-bottom: 6px; }
+.login-logo em { color: var(--primary); font-style: normal; }
+.login-sub  { font-size: 13px; color: var(--muted); margin-bottom: 28px; }
+.login-label { display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 6px; }
+.login-input {
+  width: 100%; padding: 10px 14px; border: 1px solid var(--border); border-radius: 8px;
+  font-size: 14px; color: var(--text); outline: none; margin-bottom: 14px;
+  transition: border-color .15s, box-shadow .15s;
+}
+.login-input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(26,115,232,.12); }
+.login-btn {
+  width: 100%; padding: 11px; background: var(--primary); color: #fff;
+  border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer;
+  margin-top: 4px; transition: opacity .15s;
+}
+.login-btn:hover { opacity: .88; }
+.login-err { font-size: 12px; color: #ef4444; margin-top: 10px; min-height: 18px; }
+.login-switch { text-align: center; font-size: 12px; color: var(--muted); margin-top: 18px; cursor: pointer; }
+.login-switch span { color: var(--primary); font-weight: 600; }
+
+/* ── HISTORY PANEL ────────────────────────────────────── */
+#historyPanel {
+  position: fixed; top: 56px; right: 0; bottom: 0; width: 320px; z-index: 500;
+  background: #fff; border-left: 1px solid var(--border);
+  box-shadow: -4px 0 20px rgba(0,0,0,.08);
+  transform: translateX(100%); transition: transform .25s ease;
+  display: flex; flex-direction: column;
+}
+#historyPanel.open { transform: translateX(0); }
+.hist-header {
+  padding: 14px 18px; background: #f8fafc; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.hist-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px; color: #475569; }
+.hist-close { border: none; background: none; font-size: 18px; color: #94a3b8; cursor: pointer; }
+.hist-close:hover { color: #ef4444; }
+#historyList { flex: 1; overflow-y: auto; padding: 8px; }
+.hist-item {
+  padding: 11px 14px; border-radius: 8px; cursor: pointer; border: 1px solid transparent;
+  margin-bottom: 4px; transition: background .12s, border-color .12s;
+}
+.hist-item:hover { background: #f1f5f9; border-color: #e2e8f0; }
+.hist-date  { font-size: 13px; font-weight: 700; color: var(--text); }
+.hist-meta  { font-size: 11.5px; color: #64748b; margin-top: 3px; display: flex; gap: 14px; }
+.hist-empty { padding: 24px; text-align: center; color: var(--muted); font-size: 13px; }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════ LOGIN OVERLAY ═══════════════════ -->
+<div id="loginOverlay">
+  <div class="login-box">
+    <div class="login-logo">Organicut <em>Fresh</em></div>
+    <div class="login-sub" id="loginSubText">Sign in to your account</div>
+
+    <div id="loginForm">
+      <label class="login-label">Username</label>
+      <input class="login-input" id="loginUser" type="text" placeholder="Enter username" autocomplete="username">
+      <label class="login-label">Password</label>
+      <input class="login-input" id="loginPass" type="password" placeholder="Enter password" autocomplete="current-password"
+        onkeydown="if(event.key==='Enter')doLogin()">
+      <button class="login-btn" onclick="doLogin()">Sign In</button>
+      <div class="login-err" id="loginErr"></div>
+      <div class="login-switch" id="loginSwitch" onclick="showSetup()" style="display:none">
+        First time? <span>Create admin account →</span>
+      </div>
+    </div>
+
+    <div id="setupForm" style="display:none">
+      <label class="login-label">Choose Username</label>
+      <input class="login-input" id="setupUser" type="text" placeholder="e.g. admin">
+      <label class="login-label">Choose Password</label>
+      <input class="login-input" id="setupPass" type="password" placeholder="Min. 6 characters">
+      <button class="login-btn" onclick="doSetup()">Create Account</button>
+      <div class="login-err" id="setupErr"></div>
+      <div class="login-switch" onclick="showLogin()">← Back to <span>Sign In</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════ HISTORY PANEL ═══════════════════ -->
+<div id="historyPanel">
+  <div class="hist-header">
+    <span class="hist-title">Saved Records</span>
+    <button class="hist-close" onclick="toggleHistory(false)">×</button>
+  </div>
+  <div id="historyList"><div class="hist-empty">Loading…</div></div>
+</div>
+
+<!-- ═══════════════════ TOP BAR ═══════════════════ -->
+<div class="topbar">
+  <div class="brand">Organicut <em>Fresh</em></div>
+  <div class="spacer"></div>
+
+  <div class="field">
+    <label>Date</label>
+    <input type="date" id="dateInput" onchange="recalc(); tryReprocessCSV();">
+  </div>
+
+  <div class="field">
+    <label>Sale&nbsp;Qty&nbsp;(kg)</label>
+    <input type="number" id="saleQtyInput" placeholder="0" min="0" step="0.01" style="width:120px" oninput="recalc()">
+  </div>
+
+  <button class="btn btn-primary" onclick="document.getElementById('csvInput').click()">
+    ↑ Upload Biometric CSV
+  </button>
+  <input type="file" id="csvInput" accept=".csv,.CSV" style="display:none" onchange="onCSVUpload(event)">
+  <span id="csvStatus">No file uploaded</span>
+
+  <button class="btn btn-save-rec" onclick="saveRecord()">💾 Save Record</button>
+
+  <button class="btn btn-success" onclick="exportExcel()">↓ Export Excel</button>
+
+  <button class="btn btn-outline" onclick="toggleHistory()" title="View saved records">📋 History</button>
+
+  <div class="user-area">
+    <span id="userBadge"></span>
+    <button class="btn-logout" onclick="doLogout()">Logout</button>
+  </div>
+</div>
+
+<!-- ═══════════════════ SUMMARY BAR ═══════════════════ -->
+<div class="sumbar">
+  <div class="si">
+    <div class="si-label">Attendance Cost</div>
+    <div class="si-value" id="sumAtt">₹ 0.00</div>
+  </div>
+  <div class="si">
+    <div class="si-label">Per KG Cost</div>
+    <div class="si-value" id="sumKG">₹ 0.00</div>
+  </div>
+  <div class="si">
+    <div class="si-label">Total Cost</div>
+    <div class="si-value" id="sumTotal">₹ 0.00</div>
+  </div>
+  <div class="si mpk">
+    <div class="si-label">MPK (₹ / kg)</div>
+    <div class="si-value green" id="sumMPK">—</div>
+  </div>
+</div>
+
+<!-- ═══════════════════ MAIN ═══════════════════ -->
+<div class="main">
+  <div class="card">
+    <div class="card-head">
+      <span class="card-title">Attendance Cost — auto-populated from Biometric CSV (editable)</span>
+      <span id="csvDateChips" style="display:none;font-size:12px;color:#475569"></span>
+      <span class="unmapped-note" id="unmappedNote" style="display:none"></span>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Contractor</th>
+          <th class="r">Workers Present</th>
+          <th class="r">Attendance Cost (₹)</th>
+        </tr>
+      </thead>
+      <tbody id="attTbody"></tbody>
+      <tfoot>
+        <tr class="ft">
+          <td>Total Attendance Cost</td>
+          <td></td>
+          <td class="r" id="attTotal">₹ 0.00</td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+
+  <div class="card">
+    <div class="card-head">
+      <span class="card-title">Per KG Cost — manual entry by vendor</span>
+    </div>
+    <div class="tabs" id="kgTabNav"></div>
+    <div id="kgTabPanes"></div>
+  </div>
+</div>
+
+<script>
+/* ═══════════════════════════════════════════════════════
+   SKU CONFIGURATION (source of truth — matches backend default list)
+═══════════════════════════════════════════════════════ */
+
+const SKU_CFG = {
+  MP: [
+    ['TOMATO DECORING',                  4.25],
+    ['TOMATO CUTTING',                   4.30],
+    ['TOMATO CUTTING 10x10',             7.50],
+    ['TOMATO SHORTING',                  1.50],
+    ['TOMATO SORTING',                   1.50],
+    ['ONION CHOPPED',                    9.00],
+    ['RED ONION SLICE CUTTING',          6.00],
+    ['RED ONION PIZZA HUT CUTTING',      6.00],
+    ['ONION SHORTING (ARVIND)',           1.50],
+    ['ONION PEELED',                     3.25],
+    ['LETTUCE SHORTING',                 5.00],
+    ['GREEN CAPSICUM DEPLING',           4.20],
+    ['GREEN CAPSICUM SHORTING (ARVIND)', 1.50],
+    ['CORIANDER SHORTING (ARVIND)',      5.00],
+    ['CORIANDER PACKING',                0.80],
+    ['PALAK SHORTING',                   5.00],
+    ['CAPSICUM CUTTING',                 4.20],
+    ['CAPSICUM DEPLING (RAVI)',           4.20],
+    ['W. ONION CUTTING',                 3.80],
+    ['GREEN CAPSICUM SHORTING (RAVI)',   1.83],
+    ['ONION SHORTING (RAVI)',            1.60],
+    ['GREEN CHILLI SHORTING',            1.60],
+    ['RED ONION PEELED SHORTING',        1.50],
+    ['PACKING',                          1.15],
+    ['MUSHOOM CUTTING',                  5.00],
+    ['CAPSICUM RM SHORTING',             1.50],
+    ['RED ONION (PEELED)',               3.25],
+    ['CAULIFLOWER CUTTING',              4.00],
+    ['CAPSICUM DICED (BVEG)',            6.00],
+    ['FROZEN CORIANDER (BOX)',           2.00],
+    ['CORIANDER SHORTING FINAL',        10.00],
+    ['ASH GUARD',                        6.50],
+    ['ONION SLICE PIZZA HUT',            6.00],
+    ['R.ONION (RAMAKANT)',               3.25],
+    ['R.ONION (SURAJ)',                  3.25],
+    ['R. ONION (RAMBABU)',               3.25],
+    ['W.ONION (RAMAKANT)',               3.25],
+    ['W.ONION (SURAJ)',                  3.25],
+    ['W. ONION (RAMBABU)',               3.25],
+    ['SHYAM RED ONION',                  3.25],
+    ['SHYAM WHITE ONION',                3.25],
+    ['SHAKER RED ONION',                 3.25],
+    ['ARVIND RED ONION',                 3.25],
+    ['RAJNATH RED ONION',                3.25],
+  ],
+  Ashok: [
+    ['RM UNLoading',            0.20],
+    ['RM Loading',              0.20],
+    ['RM Shifting to Crates',   0.20],
+    ['RM Shifting To Coldroom', 0.20],
+    ['FG Loading',              0.20],
+    ['FG UNloading',            0.20],
+    ['Punnet Box',              0.20],
+    ['Bardana',                 0.20],
+    ['Pallet Shifting',         0.20],
+  ],
+  RS: [
+    ['CARROT PEELED 522',           4.50],
+    ['GREEN CHILLI DE-STEMMED 522', 7.50],
+    ['ACHARI MIRCH DE-STEMMED 522', 2.80],
+    ['FRENCH BEANS 522',            6.00],
+    ['GINGER 522',                  9.00],
+    ['POTATO PEELED 576',           5.50],
+    ['BHINDI TOP/BOTTEM',           8.00],
+    ['Sirka Onion',                 7.00],
+    ['GREEN CHILI SHORTING',        1.50],
+    ['CARROT LACCHA (GAJAR HALWA)', 6.00],
+    ['RED ONION PEELING 522',       3.25],
+    ['WHITE ONION PEELING 522',     3.25],
+    ['POMEGRANATE PEELING 576',    20.00],
+    ['GREEN PEAS PEELING',         18.00],
+    ['BEETROOT PEELING',            8.00],
+    ['Rebel Food Packing',          2.50],
+    ['HALDIRAM RTU PACKING',        2.50],
+    ['HALDIRAM WHOLE PACKING',      2.50],
+    ['SUBWAY PACKING',              2.50],
+    ['RED POTATO PACKING',          2.50],
+  ],
+  RJ: [
+    ['RED PUMPKIN',           7.50],
+    ['ASH GOURD',             6.50],
+    ['CARROT DICED',          6.75],
+    ['POTATO CUT',            2.70],
+    ['PUMPKIN DICE CUT',      7.50],
+    ['RTE BIRYANI BEANS CUT', 6.75],
+    ['ONION CUT 10x10',       9.00],
+    ['ONION CUT 14x14',       9.00],
+    ['ONION SLICE',           6.00],
+    ['BEANS DIMOND CUT',      7.25],
+    ['MUSHROOM',              5.00],
+    ['TOMATO CUTTING',        4.30],
+    ['JACKFRUIT CUT',        10.00],
+    ['PACKING',               1.15],
+  ],
+  'BL Unloading': [
+    ['RM UNLoading',            0.20],
+    ['RM Loading',              0.20],
+    ['RM Shifting to Crates',   0.20],
+    ['RM Shifting To Coldroom', 0.20],
+    ['FG Loading',              0.20],
+    ['FG UNloading',            0.20],
+    ['Punnet Box',              0.20],
+    ['Bardana',                 0.20],
+    ['Pallet Shifting',         0.20],
+  ],
+};
+
+const ATT_VENDORS = ['Krish Enterprises', 'Sai Enterprises', 'SATENDRA SINGH Bhadoriya'];
+const KG_VENDORS  = ['Ashok', 'RS', 'MP', 'RJ', 'BL Unloading'];
+
+/* ═══════════════════════════════════════════════════════
+   STATE
+═══════════════════════════════════════════════════════ */
+
+const attState = {};
+ATT_VENDORS.forEach(v => { attState[v] = { workers: 0, cost: 0 }; });
+
+const kgState = {};
+KG_VENDORS.forEach(v => { kgState[v] = new Array(SKU_CFG[v].length).fill(0); });
+
+// customSKUs: { vendorName: [{id, name, rate, qty}] }
+const customSKUs = {};
+KG_VENDORS.forEach(v => { customSKUs[v] = []; });
+
+let activeTab = KG_VENDORS[0];
+let _cachedCSVFile = null; // stored so user can switch date chips
+
+/* ═══════════════════════════════════════════════════════
+   API HELPER
+═══════════════════════════════════════════════════════ */
+
+async function api(method, url, body) {
+  const opts = { method, credentials: 'include' };
+  if (body instanceof FormData) {
+    opts.body = body;
+  } else if (body !== undefined) {
+    opts.headers = { 'Content-Type': 'application/json' };
+    opts.body = JSON.stringify(body);
+  }
+  const resp = await fetch(url, opts);
+  if (resp.status === 401) {
+    // Session expired — show login
+    document.getElementById('loginOverlay').style.display = 'flex';
+    throw new Error('Session expired — please log in again');
+  }
+  const data = await resp.json().catch(() => ({}));
+  if (!resp.ok) throw new Error(data.error || `HTTP ${resp.status}`);
+  return data;
+}
+
+/* ═══════════════════════════════════════════════════════
+   AUTH
+═══════════════════════════════════════════════════════ */
+
+async function checkAuth() {
+  try {
+    const user = await fetch('/api/auth/me', { credentials: 'include' }).then(r => r.json());
+    if (user.username) {
+      document.getElementById('userBadge').textContent = user.username;
+      document.getElementById('loginOverlay').style.display = 'none';
+      await initApp();
+    } else {
+      await checkIfSetupNeeded();
+    }
+  } catch {
+    await checkIfSetupNeeded();
+  }
+}
+
+async function checkIfSetupNeeded() {
+  // Try setup — if it returns 403, at least one user exists → show login
+  document.getElementById('loginOverlay').style.display = 'flex';
+  try {
+    const r = await fetch('/api/auth/setup', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: '', password: '' })
+    });
+    const d = await r.json();
+    if (d.error === 'Setup already complete — an admin already exists') {
+      showLogin();
+    } else {
+      // No users exist yet
+      document.getElementById('loginSubText').textContent = 'Create your admin account to get started';
+      showSetup();
+      document.getElementById('loginSwitch').style.display = 'none';
+    }
+  } catch {
+    showLogin();
+  }
+}
+
+function showLogin() {
+  document.getElementById('loginForm').style.display = '';
+  document.getElementById('setupForm').style.display = 'none';
+  document.getElementById('loginSubText').textContent = 'Sign in to your account';
+}
+
+function showSetup() {
+  document.getElementById('loginForm').style.display = 'none';
+  document.getElementById('setupForm').style.display = '';
+  document.getElementById('loginSubText').textContent = 'First-time setup — create admin account';
+}
+
+async function doLogin() {
+  const username = document.getElementById('loginUser').value.trim();
+  const password = document.getElementById('loginPass').value;
+  const errEl = document.getElementById('loginErr');
+  errEl.textContent = '';
+  if (!username || !password) { errEl.textContent = 'Please enter username and password.'; return; }
+  try {
+    const user = await api('POST', '/api/auth/login', { username, password });
+    document.getElementById('userBadge').textContent = user.username;
+    document.getElementById('loginOverlay').style.display = 'none';
+    await initApp();
+  } catch (e) {
+    errEl.textContent = e.message;
+  }
+}
+
+async function doSetup() {
+  const username = document.getElementById('setupUser').value.trim();
+  const password = document.getElementById('setupPass').value;
+  const errEl = document.getElementById('setupErr');
+  errEl.textContent = '';
+  if (!username || !password) { errEl.textContent = 'Please fill in both fields.'; return; }
+  try {
+    await api('POST', '/api/auth/setup', { username, password });
+    document.getElementById('loginUser').value = username;
+    document.getElementById('loginPass').value = password;
+    showLogin();
+    document.getElementById('loginSubText').textContent = 'Account created! Signing you in…';
+    await doLogin();
+  } catch (e) {
+    errEl.textContent = e.message;
+  }
+}
+
+async function doLogout() {
+  await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+  document.getElementById('loginUser').value = '';
+  document.getElementById('loginPass').value = '';
+  document.getElementById('loginOverlay').style.display = 'flex';
+}
+
+/* ═══════════════════════════════════════════════════════
+   INIT
+═══════════════════════════════════════════════════════ */
+
+async function initApp() {
+  const d = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  document.getElementById('dateInput').value =
+    d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+
+  await loadCustomSKUs();
+  renderAtt();
+  renderKGTabs();
+  recalc();
+  loadHistory();
+}
+
+/* ═══════════════════════════════════════════════════════
+   CUSTOM SKU — backend-backed
+═══════════════════════════════════════════════════════ */
+
+async function loadCustomSKUs() {
+  try {
+    const grouped = await api('GET', '/api/sku');
+    KG_VENDORS.forEach(v => {
+      customSKUs[v] = (grouped[v] || []).map(s => ({ id: s.id, name: s.name, rate: s.rate, qty: 0 }));
+    });
+  } catch (e) {
+    console.error('Failed to load custom SKUs:', e.message);
+  }
+}
+
+async function confirmAddSKU(v) {
+  const vid_ = vid(v);
+  const name = document.getElementById('addSkuName_' + vid_).value.trim();
+  const rate = parseFloat(document.getElementById('addSkuRate_' + vid_).value) || 0;
+  if (!name) { showToast('⚠ Please enter a SKU name.', true); return; }
+  try {
+    const result = await api('POST', '/api/sku', { vendorName: v, skuName: name, rate });
+    customSKUs[v].push({ id: result.id, name: result.name, rate: result.rate, qty: 0 });
+    cancelAddSKU(v);
+    refreshPane(v);
+    recalc();
+    showToast(`✓ Added "${name}" to ${v}`, false);
+  } catch (e) {
+    showToast('⚠ ' + e.message, true);
+  }
+}
+
+async function deleteCustomSKU(v, skuId) {
+  const sku = customSKUs[v].find(s => s.id === skuId);
+  if (!sku) return;
+  if (!confirm(`Remove "${sku.name}" from ${v}?`)) return;
+  try {
+    await api('DELETE', `/api/sku/${skuId}`);
+    const idx = customSKUs[v].findIndex(s => s.id === skuId);
+    if (idx >= 0) customSKUs[v].splice(idx, 1);
+    refreshPane(v);
+    recalc();
+  } catch (e) {
+    showToast('⚠ ' + e.message, true);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════
+   CALCULATIONS
+═══════════════════════════════════════════════════════ */
+
+function r2(n) { return Math.round(n * 100) / 100; }
+
+function totalAtt() {
+  return ATT_VENDORS.reduce((s, v) => s + (parseFloat(attState[v].cost) || 0), 0);
+}
+
+function vendorKG(v) {
+  const defCost  = SKU_CFG[v].reduce((s, [, rate], i) => s + (kgState[v][i] || 0) * rate, 0);
+  const custCost = customSKUs[v].reduce((s, sku) => s + (sku.qty || 0) * sku.rate, 0);
+  return defCost + custCost;
+}
+
+function totalKG() { return KG_VENDORS.reduce((s, v) => s + vendorKG(v), 0); }
+
+function grandTotal() { return totalAtt() + totalKG(); }
+
+function getMPK() {
+  const sq = parseFloat(document.getElementById('saleQtyInput').value) || 0;
+  return sq > 0 ? grandTotal() / sq : null;
+}
+
+/* ═══════════════════════════════════════════════════════
+   FORMATTING
+═══════════════════════════════════════════════════════ */
+
+function fc(n) {
+  if (n == null || isNaN(n)) return '—';
+  return '₹ ' + n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+function fn(n, d = 2) {
+  if (n == null || isNaN(n)) return '—';
+  return n.toLocaleString('en-IN', { minimumFractionDigits: d, maximumFractionDigits: d });
+}
+function vid(v) { return v.replace(/[^a-zA-Z0-9]/g, '_'); }
+
+/* ═══════════════════════════════════════════════════════
+   RECALC
+═══════════════════════════════════════════════════════ */
+
+function recalc() {
+  const att = totalAtt(), kg = totalKG(), total = att + kg, mpk = getMPK();
+  document.getElementById('sumAtt').textContent   = fc(att);
+  document.getElementById('sumKG').textContent    = fc(kg);
+  document.getElementById('sumTotal').textContent = fc(total);
+  document.getElementById('sumMPK').textContent   = mpk != null ? fn(mpk) : '—';
+  document.getElementById('attTotal').textContent = fc(att);
+  KG_VENDORS.forEach(v => {
+    const el = document.getElementById('kgTot_' + vid(v));
+    if (el) el.textContent = fc(vendorKG(v));
+  });
+}
+
+/* ═══════════════════════════════════════════════════════
+   RENDER — ATTENDANCE TABLE
+═══════════════════════════════════════════════════════ */
+
+function renderAtt() {
+  document.getElementById('attTbody').innerHTML = ATT_VENDORS.map(v => {
+    const s = attState[v], vk = v.replace(/'/g, "\\'");
+    return `<tr>
+      <td>${v}</td>
+      <td class="r">
+        <input type="number" min="0" step="1" value="${s.workers}" style="width:80px"
+          onchange="attState['${vk}'].workers=parseInt(this.value)||0;recalc();">
+      </td>
+      <td class="r">
+        <input type="number" min="0" step="0.01" value="${s.cost}" style="width:130px"
+          onchange="attState['${vk}'].cost=parseFloat(this.value)||0;recalc();">
+      </td>
+    </tr>`;
+  }).join('');
+  recalc();
+}
+
+/* ═══════════════════════════════════════════════════════
+   RENDER — KG TABS
+═══════════════════════════════════════════════════════ */
+
+function renderKGTabs() {
+  document.getElementById('kgTabNav').innerHTML = KG_VENDORS.map(v => {
+    const vesc = v.replace(/'/g, "\\'");
+    return `<button class="tab-btn ${v===activeTab?'active':''}" onclick="switchTab('${vesc}',this)">${v}</button>`;
+  }).join('');
+  document.getElementById('kgTabPanes').innerHTML = KG_VENDORS.map(v => buildPane(v)).join('');
+}
+
+function buildPane(v) {
+  const vid_ = vid(v);
+  const defRows = SKU_CFG[v].map(([name, rate], i) => {
+    const qty = kgState[v][i] || 0, cost = qty * rate;
+    return `<tr>
+      <td class="sku-name">${name}</td>
+      <td class="r rate-cell">₹&nbsp;${rate.toFixed(2)}</td>
+      <td class="r"><input type="number" min="0" step="0.001" value="${qty||''}" placeholder="—"
+        data-v="${vid_}" data-type="def" data-i="${i}" data-rate="${rate}" onchange="onKG(this)"></td>
+      <td class="r cost-val" id="kc_${vid_}_${i}">${cost>0?fc(cost):'<span class="zero">—</span>'}</td>
+    </tr>`;
+  }).join('');
+
+  const custRows = customSKUs[v].map((sku) => {
+    const qty = sku.qty || 0, cost = qty * sku.rate;
+    const vesc = v.replace(/'/g, "\\'");
+    return `<tr class="custom-sku-row">
+      <td class="sku-name">${sku.name}
+        <button class="btn-del" title="Remove" onclick="deleteCustomSKU('${vesc}',${sku.id})">×</button>
+      </td>
+      <td class="r rate-cell">₹&nbsp;${sku.rate.toFixed(2)}</td>
+      <td class="r"><input type="number" min="0" step="0.001" value="${qty||''}" placeholder="—"
+        data-v="${vid_}" data-type="cust" data-ci="${sku.id}" data-rate="${sku.rate}" onchange="onKG(this)"></td>
+      <td class="r cost-val" id="kcc_${vid_}_${sku.id}">${cost>0?fc(cost):'<span class="zero">—</span>'}</td>
+    </tr>`;
+  }).join('');
+
+  const vesc = v.replace(/'/g, "\\'");
+  return `<div class="tab-pane ${v===activeTab?'active':''}" id="kgPane_${vid_}">
+    <table>
+      <thead><tr><th>SKU</th><th class="r">Rate (₹/kg)</th><th class="r">Qty (kg)</th><th class="r">Cost (₹)</th></tr></thead>
+      <tbody>${defRows}${custRows}</tbody>
+      <tfoot><tr class="ft"><td colspan="3">${v} — Total KG Cost</td>
+        <td class="r cost-val" id="kgTot_${vid_}">${fc(vendorKG(v))}</td></tr></tfoot>
+    </table>
+    <div class="add-sku-bar">
+      <div id="addSkuForm_${vid_}" class="add-sku-form" style="display:none">
+        <input id="addSkuName_${vid_}" placeholder="SKU name" style="width:180px">
+        <input id="addSkuRate_${vid_}" type="number" placeholder="Rate ₹/kg" min="0" step="0.01" style="width:110px">
+        <button class="btn-save" onclick="confirmAddSKU('${vesc}')">Save</button>
+        <button class="btn-cancel" onclick="cancelAddSKU('${vesc}')">Cancel</button>
+      </div>
+      <button class="btn-ghost" id="addSkuBtn_${vid_}" onclick="showAddSKUForm('${vesc}')">+ Add SKU</button>
+    </div>
+  </div>`;
+}
+
+function refreshPane(v) {
+  const pane = document.getElementById('kgPane_' + vid(v));
+  if (!pane) return;
+  const wasActive = pane.classList.contains('active');
+  const tmp = document.createElement('div');
+  tmp.innerHTML = buildPane(v);
+  const built = tmp.firstElementChild;
+  if (wasActive) built.classList.add('active');
+  pane.replaceWith(built);
+}
+
+function showAddSKUForm(v) {
+  const vid_ = vid(v);
+  document.getElementById('addSkuForm_' + vid_).style.display = 'flex';
+  document.getElementById('addSkuBtn_'  + vid_).style.display = 'none';
+  document.getElementById('addSkuName_' + vid_).focus();
+}
+
+function cancelAddSKU(v) {
+  const vid_ = vid(v);
+  document.getElementById('addSkuForm_' + vid_).style.display = 'none';
+  document.getElementById('addSkuBtn_'  + vid_).style.display = '';
+  document.getElementById('addSkuName_' + vid_).value = '';
+  document.getElementById('addSkuRate_' + vid_).value = '';
+}
+
+function switchTab(vendor, btn) {
+  activeTab = vendor;
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+  btn.classList.add('active');
+  const pane = document.getElementById('kgPane_' + vid(vendor));
+  if (pane) pane.classList.add('active');
+}
+
+function onKG(input) {
+  const v_    = input.dataset.v;
+  const type  = input.dataset.type;
+  const rate  = parseFloat(input.dataset.rate);
+  const qty   = parseFloat(input.value) || 0;
+  const rawV  = KG_VENDORS.find(k => vid(k) === v_);
+
+  let costCellId;
+  if (type === 'def') {
+    const i = parseInt(input.dataset.i);
+    if (rawV) kgState[rawV][i] = qty;
+    costCellId = 'kc_' + v_ + '_' + i;
+  } else {
+    const skuId = parseInt(input.dataset.ci);
+    if (rawV) { const s = customSKUs[rawV].find(x => x.id === skuId); if (s) s.qty = qty; }
+    costCellId = 'kcc_' + v_ + '_' + skuId;
+  }
+
+  const cost = qty * rate;
+  const costCell = document.getElementById(costCellId);
+  if (costCell) costCell.innerHTML = cost > 0 ? fc(cost) : '<span class="zero">—</span>';
+
+  const totCell = document.getElementById('kgTot_' + v_);
+  if (totCell && rawV) totCell.textContent = fc(vendorKG(rawV));
+  recalc();
+}
+
+/* ═══════════════════════════════════════════════════════
+   CSV UPLOAD — sends to backend, gets parsed data back
+═══════════════════════════════════════════════════════ */
+
+function showToast(msg, isError) {
+  let t = document.getElementById('toast');
+  if (!t) {
+    t = document.createElement('div');
+    t.id = 'toast';
+    Object.assign(t.style, {
+      position:'fixed', bottom:'24px', left:'50%', transform:'translateX(-50%)',
+      padding:'12px 20px', borderRadius:'8px', fontSize:'13px', fontWeight:'600',
+      zIndex:'9999', boxShadow:'0 4px 16px rgba(0,0,0,.25)', maxWidth:'80vw',
+      whiteSpace:'pre-wrap', textAlign:'center', lineHeight:'1.6', transition:'opacity .4s'
+    });
+    document.body.appendChild(t);
+  }
+  t.textContent = msg;
+  t.style.background = isError ? '#dc2626' : '#1e293b';
+  t.style.color = '#fff';
+  t.style.opacity = '1';
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => { t.style.opacity = '0'; }, isError ? 12000 : 4000);
+}
+
+async function onCSVUpload(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  e.target.value = '';
+  _cachedCSVFile = file;
+
+  const date = document.getElementById('dateInput').value.trim();
+  const fd = new FormData();
+  fd.append('file', file);
+  if (date) fd.append('date', date);
+
+  const st = document.getElementById('csvStatus');
+  st.textContent = 'Uploading…';
+  st.className   = '';
+
+  try {
+    const result = await api('POST', '/api/upload/csv', fd);
+
+    // Auto-switch date picker to the resolved date
+    if (result.date) document.getElementById('dateInput').value = result.date;
+
+    // Populate attendance state
+    ATT_VENDORS.forEach(v => {
+      const data = result.byContractor[v] || { workers: 0, totalCost: 0 };
+      attState[v].workers = data.workers;
+      attState[v].cost    = r2(data.totalCost);
+    });
+
+    st.textContent = '✓ ' + file.name + ' (' + result.totalRows + ' rows)';
+    st.className   = 'ok';
+
+    updateCSVMeta(result);
+    renderAtt();
+
+    // Try to auto-load any saved record for this date
+    if (result.date) silentLoadRecord(result.date);
+
+  } catch (err) {
+    st.textContent = '✗ Upload failed';
+    showToast('⚠ CSV Error: ' + err.message, true);
+  }
+}
+
+async function tryReprocessCSV() {
+  if (!_cachedCSVFile) return;
+  const date = document.getElementById('dateInput').value.trim();
+  const fd = new FormData();
+  fd.append('file', _cachedCSVFile);
+  if (date) fd.append('date', date);
+  try {
+    const result = await api('POST', '/api/upload/csv', fd);
+    if (result.date) document.getElementById('dateInput').value = result.date;
+    ATT_VENDORS.forEach(v => {
+      const data = result.byContractor[v] || { workers: 0, totalCost: 0 };
+      attState[v].workers = data.workers;
+      attState[v].cost    = r2(data.totalCost);
+    });
+    updateCSVMeta(result);
+    renderAtt();
+  } catch (err) {
+    showToast('⚠ Reprocess failed: ' + err.message, true);
+  }
+}
+
+function updateCSVMeta(result) {
+  const { unmapped, unmappedNames = [], sortedDates = [], date: filterDate, totalRows = 0, byContractor = {} } = result;
+  const totalProcessed = Object.values(byContractor).reduce((s, c) => s + (c.workers || 0), 0);
+
+  const note = document.getElementById('unmappedNote');
+  if (unmapped > 0) {
+    note.textContent = 'Unmapped contractors (ignored): ' + (unmappedNames.length ? unmappedNames.join(', ') : unmapped + ' rows');
+    note.style.display = '';
+  } else {
+    note.style.display = 'none';
+  }
+
+  const dsEl = document.getElementById('csvDateChips');
+  if (sortedDates.length > 1) {
+    dsEl.innerHTML = 'Dates in CSV: ' + sortedDates.map(d => {
+      const active = d === filterDate ? 'style="background:#1a73e8;color:#fff;border-color:#1a73e8"' : '';
+      return `<button onclick="pickCSVDate('${d}')" ${active}
+        style="margin:0 3px;padding:3px 10px;border:1px solid #cbd5e1;border-radius:5px;
+               font-size:12px;font-weight:600;cursor:pointer;background:#f8fafc;color:#334155"
+      >${d}</button>`;
+    }).join('');
+    dsEl.style.display = '';
+  } else {
+    dsEl.innerHTML = ''; dsEl.style.display = 'none';
+  }
+
+  if (totalProcessed === 0) {
+    showToast('⚠ 0 rows matched any known contractor.\n' + (totalRows > 0
+      ? 'Check the CSV has a "Contractor Name" column with Krish / Sai / SATENDRA values.'
+      : 'The CSV appears empty or has an unrecognised format.'), true);
+  } else {
+    const dateMsg = filterDate ? ' for ' + filterDate : '';
+    showToast('✓ Matched ' + totalProcessed + ' employees' + dateMsg + '.', false);
+  }
+}
+
+function pickCSVDate(d) {
+  document.getElementById('dateInput').value = d;
+  tryReprocessCSV();
+}
+
+/* ═══════════════════════════════════════════════════════
+   SAVE & LOAD RECORDS
+═══════════════════════════════════════════════════════ */
+
+async function saveRecord() {
+  const date    = document.getElementById('dateInput').value;
+  if (!date) { showToast('⚠ Please select a date before saving.', true); return; }
+
+  const saleQty = parseFloat(document.getElementById('saleQtyInput').value) || 0;
+  const att     = totalAtt(), kg = totalKG(), total = att + kg;
+  const mpk     = saleQty > 0 ? total / saleQty : 0;
+
+  const attendance = ATT_VENDORS.map(v => ({
+    contractorName: v,
+    workers: attState[v].workers || 0,
+    cost:    parseFloat(attState[v].cost) || 0,
+  }));
+
+  const kgEntries = [];
+  KG_VENDORS.forEach(v => {
+    SKU_CFG[v].forEach(([name, rate], i) => {
+      const qty = kgState[v][i] || 0;
+      if (qty > 0) kgEntries.push({ vendorName: v, skuName: name, rate, qty, cost: r2(qty * rate) });
+    });
+    customSKUs[v].forEach(sku => {
+      if ((sku.qty || 0) > 0)
+        kgEntries.push({ vendorName: v, skuName: sku.name, rate: sku.rate, qty: sku.qty, cost: r2(sku.qty * sku.rate) });
+    });
+  });
+
+  try {
+    await api('POST', '/api/records', {
+      date, attendanceCost: att, kgCost: kg, totalCost: total, saleQty, mpk,
+      attendance, kgEntries,
+    });
+    showToast('✓ Record saved for ' + date, false);
+    loadHistory();
+  } catch (e) {
+    showToast('⚠ Save failed: ' + e.message, true);
+  }
+}
+
+async function silentLoadRecord(date) {
+  try {
+    const record = await api('GET', '/api/records/' + date);
+    applyRecord(record);
+    showToast('✓ Loaded saved record for ' + date, false);
+  } catch {
+    // 404 = no record yet, that's fine
+  }
+}
+
+function applyRecord(record) {
+  // Attendance
+  ATT_VENDORS.forEach(v => {
+    const a = (record.attendance || []).find(x => x.contractor_name === v);
+    attState[v] = { workers: a ? (a.workers || 0) : 0, cost: a ? parseFloat(a.cost) || 0 : 0 };
+  });
+
+  // KG
+  KG_VENDORS.forEach(v => { kgState[v] = new Array(SKU_CFG[v].length).fill(0); });
+  customSKUs_resetQty();
+
+  (record.kgEntries || []).forEach(e => {
+    const v   = e.vendor_name;
+    const qty = parseFloat(e.qty) || 0;
+    const idx = SKU_CFG[v]?.findIndex(([name]) => name === e.sku_name);
+    if (idx >= 0) {
+      kgState[v][idx] = qty;
+    } else {
+      const cs = customSKUs[v]?.find(s => s.name === e.sku_name);
+      if (cs) cs.qty = qty;
+    }
+  });
+
+  // Sale qty
+  if (record.sale_qty) {
+    document.getElementById('saleQtyInput').value = parseFloat(record.sale_qty) || '';
+  }
+
+  renderAtt();
+  renderKGTabs();
+  recalc();
+}
+
+function customSKUs_resetQty() {
+  KG_VENDORS.forEach(v => { customSKUs[v].forEach(s => { s.qty = 0; }); });
+}
+
+/* ═══════════════════════════════════════════════════════
+   HISTORY PANEL
+═══════════════════════════════════════════════════════ */
+
+let historyOpen = false;
+
+function toggleHistory(force) {
+  historyOpen = force !== undefined ? force : !historyOpen;
+  document.getElementById('historyPanel').classList.toggle('open', historyOpen);
+  if (historyOpen) loadHistory();
+}
+
+async function loadHistory() {
+  const list = document.getElementById('historyList');
+  try {
+    const records = await api('GET', '/api/records');
+    if (!records.length) {
+      list.innerHTML = '<div class="hist-empty">No records saved yet.</div>';
+      return;
+    }
+    list.innerHTML = records.map(r => {
+      const d = new Date(r.record_date);
+      const dateStr = d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+      return `<div class="hist-item" onclick="loadHistoryRecord('${r.record_date}')">
+        <div class="hist-date">${dateStr}</div>
+        <div class="hist-meta">
+          <span>Total: ${fc(parseFloat(r.total_cost))}</span>
+          <span>MPK: ${parseFloat(r.mpk) > 0 ? fn(parseFloat(r.mpk)) : '—'}</span>
+        </div>
+      </div>`;
+    }).join('');
+  } catch (e) {
+    list.innerHTML = '<div class="hist-empty">Failed to load records.</div>';
+  }
+}
+
+async function loadHistoryRecord(date) {
+  try {
+    const record = await api('GET', '/api/records/' + date);
+    document.getElementById('dateInput').value = date;
+    applyRecord(record);
+    toggleHistory(false);
+    showToast('✓ Loaded record for ' + date, false);
+  } catch (e) {
+    showToast('⚠ Failed to load record: ' + e.message, true);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════
+   EXCEL EXPORT
+═══════════════════════════════════════════════════════ */
+
+function exportExcel() {
+  if (typeof XLSX === 'undefined') {
+    alert('SheetJS library not loaded — check your internet connection and reload the page.');
+    return;
+  }
+
+  const date    = document.getElementById('dateInput').value || 'Unknown';
+  const saleQty = parseFloat(document.getElementById('saleQtyInput').value) || 0;
+
+  const krishCost = parseFloat(attState['Krish Enterprises'].cost)        || 0;
+  const saiCost   = parseFloat(attState['Sai Enterprises'].cost)          || 0;
+  const ssbCost   = parseFloat(attState['SATENDRA SINGH Bhadoriya'].cost) || 0;
+
+  const ashokCost = vendorKG('Ashok');
+  const mpCost    = vendorKG('MP');
+  const rjCost    = vendorKG('RJ');
+  const blCost    = vendorKG('BL Unloading');
+  const rsCost    = vendorKG('RS');
+
+  const total = grandTotal();
+  const mpk   = saleQty > 0 ? total / saleQty : '';
+
+  const aoa = [];
+  aoa.push(['Date','Krish Att Cost','Sai Att Cost','SSB Att Cost',
+    'Ashok KG Cost','MP KG Cost','RJ KG Cost','BL KG Cost','RS KG Cost',
+    'Total Cost','Sale Qty (kg)','MPK']);
+  aoa.push([date, krishCost, saiCost, ssbCost, ashokCost, mpCost, rjCost, blCost, rsCost, total, saleQty, mpk]);
+  aoa.push([]);
+
+  aoa.push(['=== ATTENDANCE BREAKDOWN ===']);
+  aoa.push(['Contractor','Workers Present','Cost (₹)']);
+  ATT_VENDORS.forEach(v => { aoa.push([v, attState[v].workers, parseFloat(attState[v].cost)||0]); });
+  aoa.push(['Total Attendance','',r2(totalAtt())]);
+  aoa.push([]);
+
+  aoa.push(['=== KG COST BREAKDOWN ===']);
+  KG_VENDORS.forEach(v => {
+    aoa.push(['--- ' + v + ' ---']);
+    aoa.push(['SKU','Rate (₹/kg)','Qty (kg)','Cost (₹)']);
+    SKU_CFG[v].forEach(([name, rate], i) => {
+      const qty = kgState[v][i] || 0;
+      if (qty > 0) aoa.push([name, rate, qty, r2(qty * rate)]);
+    });
+    customSKUs[v].forEach(sku => {
+      if ((sku.qty||0) > 0) aoa.push([sku.name + ' *', sku.rate, sku.qty, r2(sku.qty * sku.rate)]);
+    });
+    aoa.push([v + ' Total KG Cost','','',r2(vendorKG(v))]);
+    aoa.push([]);
+  });
+
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = [32,16,14,14,16,14,14,14,14,14,14,12].map(w => ({ wch: w }));
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Daily MPK');
+  XLSX.writeFile(wb, 'Organicut_MPK_' + date + '.xlsx');
+}
+
+/* ═══════════════════════════════════════════════════════
+   BOOT
+═══════════════════════════════════════════════════════ */
+
+checkAuth();
+</script>
+</body>
+</html>
