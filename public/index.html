@@ -1231,11 +1231,12 @@ async function loadHistory() {
 
 async function loadHistoryRecord(date) {
   try {
-    const record = await api('GET', '/api/records/' + date);
-    document.getElementById('dateInput').value = date;
+    const cleanDate = (date || '').slice(0, 10);
+    const record = await api('GET', '/api/records/' + cleanDate);
+    document.getElementById('dateInput').value = cleanDate;
     applyRecord(record);
     toggleHistory(false);
-    showToast('✓ Loaded record for ' + date, false);
+    showToast('✓ Loaded record for ' + cleanDate, false);
   } catch (e) {
     showToast('⚠ Failed to load record: ' + e.message, true);
   }
@@ -1251,7 +1252,7 @@ function exportExcel() {
     return;
   }
 
-  const date    = document.getElementById('dateInput').value || 'Unknown';
+  const date    = (document.getElementById('dateInput').value || 'Unknown').slice(0, 10);
   const saleQty = parseFloat(document.getElementById('saleQtyInput').value) || 0;
 
   const attCost = totalAtt();
