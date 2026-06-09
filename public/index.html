@@ -114,6 +114,20 @@ body {
 .btn-success  { background: var(--accent);  color: #fff; }
 .btn-outline  { background: rgba(255,255,255,.1); color: rgba(255,255,255,.9); border: 1px solid rgba(255,255,255,.22); }
 
+.export-dd { position: relative; }
+.export-dd-menu {
+  display: none; position: absolute; top: calc(100% + 4px); right: 0; z-index: 200;
+  background: #1e3a2b; border: 1px solid rgba(255,255,255,.18); border-radius: 8px;
+  overflow: hidden; min-width: 168px; box-shadow: 0 6px 20px rgba(0,0,0,.35);
+}
+.export-dd-menu.open { display: block; }
+.export-dd-menu button {
+  display: block; width: 100%; padding: 9px 14px; background: none; border: none;
+  color: #fff; font-size: 12.5px; font-weight: 600; text-align: left; cursor: pointer;
+  white-space: nowrap;
+}
+.export-dd-menu button:hover { background: rgba(255,255,255,.12); }
+
 /* ── SUMMARY BAR ──────────────────────────────────────── */
 .sumbar {
   background: var(--dark);
@@ -384,7 +398,13 @@ td input[type="number"]:hover { border-color: #7dbf99; }
     <button class="btn btn-upload" onclick="document.getElementById('csvInput').click()">↑ Upload CSV</button>
     <input type="file" id="csvInput" accept=".csv,.CSV" style="display:none" onchange="onCSVUpload(event)">
     <button class="btn btn-save-rec" onclick="saveRecord()">💾 Save Record</button>
-    <button class="btn btn-success" onclick="exportExcel()">↓ Export Excel</button>
+    <div class="export-dd" id="exportDd">
+      <button class="btn btn-success" onclick="toggleExportDd()">↓ Export Excel ▾</button>
+      <div class="export-dd-menu" id="exportDdMenu">
+        <button onclick="exportExcel();toggleExportDd()">Export Today</button>
+        <button onclick="exportAllRecords();toggleExportDd()">Export All Records</button>
+      </div>
+    </div>
     <button class="btn btn-outline" onclick="toggleHistory()">📋 History</button>
   </div>
 
@@ -1285,6 +1305,91 @@ function exportExcel() {
   XLSX.utils.book_append_sheet(wb, ws2, 'Attendance Detail');
   XLSX.utils.book_append_sheet(wb, ws3, 'KG Detail');
   XLSX.writeFile(wb, 'Organicut_MPK_' + date + '.xlsx');
+}
+
+function toggleExportDd() {
+  document.getElementById('exportDdMenu').classList.toggle('open');
+}
+document.addEventListener('click', function(e) {
+  const dd = document.getElementById('exportDd');
+  if (dd && !dd.contains(e.target)) {
+    document.getElementById('exportDdMenu').classList.remove('open');
+  }
+});
+
+async function exportAllRecords() {
+  if (typeof XLSX === 'undefined') {
+    alert('SheetJS library not loaded — check your internet connection and reload the page.');
+    return;
+  }
+  showToast('⏳ Fetching all records…', false);
+  try {
+    const records = await api('GET', '/api/records');
+    if (!records.length) { showToast('⚠ No records found.', true); return; }
+
+    records.sort((a, b) => a.record_date.localeCompare(b.record_date));
+
+    const summaryRows = [['Date','Attendance Cost','KG Cost','Total Cost','Sale Qty (kg)','MPK',
+      'Krish Cost','Sai Cost','SSB Cost','Ashok KG','MP KG','RJ KG','BL KG','RS KG']];
+    const attRows = [['Date','Contractor','Workers','Cost (₹)']];
+    const kgRows  = [['Date','Vendor','SKU','Rate (₹/kg)','Qty (kg)','Cost (₹)']];
+
+    for (const rec of records) {
+      const date   = rec.record_date;
+      const detail = await api('GET', '/api/records/' + date);
+
+      const getAtt = name => {
+        const a = (detail.attendance || []).find(x => x.contractor_name === name);
+        return a ? parseFloat(a.cost) || 0 : 0;
+      };
+      const getVendorKG = vendorName =>
+        (detail.kgEntries || [])
+          .filter(e => e.vendor_name === vendorName)
+          .reduce((s, e) => s + (parseFloat(e.cost) || 0), 0);
+
+      summaryRows.push([
+        date,
+        r2(parseFloat(detail.attendance_cost) || 0),
+        r2(parseFloat(detail.kg_cost) || 0),
+        r2(parseFloat(detail.total_cost) || 0),
+        parseFloat(detail.sale_qty) || 0,
+        parseFloat(detail.mpk) > 0 ? r2(parseFloat(detail.mpk)) : '',
+        getAtt('Krish Enterprises'),
+        getAtt('Sai Enterprises'),
+        getAtt('SATENDRA SINGH Bhadoriya'),
+        r2(getVendorKG('Ashok')),
+        r2(getVendorKG('MP')),
+        r2(getVendorKG('RJ')),
+        r2(getVendorKG('BL Unloading')),
+        r2(getVendorKG('RS')),
+      ]);
+
+      (detail.attendance || []).forEach(a => {
+        attRows.push([date, a.contractor_name, a.workers || 0, parseFloat(a.cost) || 0]);
+      });
+
+      (detail.kgEntries || []).forEach(e => {
+        kgRows.push([date, e.vendor_name, e.sku_name,
+          parseFloat(e.rate) || 0, parseFloat(e.qty) || 0, r2(parseFloat(e.cost) || 0)]);
+      });
+    }
+
+    const ws1 = XLSX.utils.aoa_to_sheet(summaryRows);
+    ws1['!cols'] = [12,16,12,12,14,10,12,10,12,10,10,10,10,10].map(w => ({ wch: w }));
+    const ws2 = XLSX.utils.aoa_to_sheet(attRows);
+    ws2['!cols'] = [12,32,10,12].map(w => ({ wch: w }));
+    const ws3 = XLSX.utils.aoa_to_sheet(kgRows);
+    ws3['!cols'] = [12,14,28,12,10,12].map(w => ({ wch: w }));
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws1, 'Daily Summary');
+    XLSX.utils.book_append_sheet(wb, ws2, 'Attendance Detail');
+    XLSX.utils.book_append_sheet(wb, ws3, 'KG Detail');
+    XLSX.writeFile(wb, 'Organicut_MPK_All_Records.xlsx');
+    showToast('✓ Exported ' + records.length + ' record' + (records.length === 1 ? '' : 's'), false);
+  } catch (e) {
+    showToast('⚠ Export failed: ' + e.message, true);
+  }
 }
 
 /* ═══════════════════════════════════════════════════════
