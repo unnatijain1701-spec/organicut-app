@@ -1234,51 +1234,56 @@ function exportExcel() {
   const date    = document.getElementById('dateInput').value || 'Unknown';
   const saleQty = parseFloat(document.getElementById('saleQtyInput').value) || 0;
 
+  const attCost = totalAtt();
+  const kgCost  = totalKG();
+  const total   = grandTotal();
+  const mpk     = saleQty > 0 ? r2(total / saleQty) : '';
+
   const krishCost = parseFloat(attState['Krish Enterprises'].cost)        || 0;
   const saiCost   = parseFloat(attState['Sai Enterprises'].cost)          || 0;
   const ssbCost   = parseFloat(attState['SATENDRA SINGH Bhadoriya'].cost) || 0;
 
-  const ashokCost = vendorKG('Ashok');
-  const mpCost    = vendorKG('MP');
-  const rjCost    = vendorKG('RJ');
-  const blCost    = vendorKG('BL Unloading');
-  const rsCost    = vendorKG('RS');
+  const ashokKG = vendorKG('Ashok');
+  const mpKG    = vendorKG('MP');
+  const rjKG    = vendorKG('RJ');
+  const blKG    = vendorKG('BL Unloading');
+  const rsKG    = vendorKG('RS');
 
-  const total = grandTotal();
-  const mpk   = saleQty > 0 ? total / saleQty : '';
+  // Sheet 1: Daily Summary
+  const ws1 = XLSX.utils.aoa_to_sheet([
+    ['Date','Attendance Cost','KG Cost','Total Cost','Sale Qty (kg)','MPK',
+     'Krish Cost','Sai Cost','SSB Cost','Ashok KG','MP KG','RJ KG','BL KG','RS KG'],
+    [date, r2(attCost), r2(kgCost), r2(total), saleQty, mpk,
+     krishCost, saiCost, ssbCost, ashokKG, mpKG, rjKG, blKG, rsKG]
+  ]);
+  ws1['!cols'] = [12,16,12,12,14,10,12,10,12,10,10,10,10,10].map(w => ({ wch: w }));
 
-  const aoa = [];
-  aoa.push(['Date','Krish Att Cost','Sai Att Cost','SSB Att Cost',
-    'Ashok KG Cost','MP KG Cost','RJ KG Cost','BL KG Cost','RS KG Cost',
-    'Total Cost','Sale Qty (kg)','MPK']);
-  aoa.push([date, krishCost, saiCost, ssbCost, ashokCost, mpCost, rjCost, blCost, rsCost, total, saleQty, mpk]);
-  aoa.push([]);
+  // Sheet 2: Attendance Detail
+  const attRows = [['Date','Contractor','Workers','Cost (₹)']];
+  ATT_VENDORS.forEach(v => {
+    attRows.push([date, v, attState[v].workers || 0, parseFloat(attState[v].cost) || 0]);
+  });
+  const ws2 = XLSX.utils.aoa_to_sheet(attRows);
+  ws2['!cols'] = [12,32,10,12].map(w => ({ wch: w }));
 
-  aoa.push(['=== ATTENDANCE BREAKDOWN ===']);
-  aoa.push(['Contractor','Workers Present','Cost (₹)']);
-  ATT_VENDORS.forEach(v => { aoa.push([v, attState[v].workers, parseFloat(attState[v].cost)||0]); });
-  aoa.push(['Total Attendance','',r2(totalAtt())]);
-  aoa.push([]);
-
-  aoa.push(['=== KG COST BREAKDOWN ===']);
+  // Sheet 3: KG Detail
+  const kgRows = [['Date','Vendor','SKU','Rate (₹/kg)','Qty (kg)','Cost (₹)']];
   KG_VENDORS.forEach(v => {
-    aoa.push(['--- ' + v + ' ---']);
-    aoa.push(['SKU','Rate (₹/kg)','Qty (kg)','Cost (₹)']);
     SKU_CFG[v].forEach(([name, rate], i) => {
       const qty = kgState[v][i] || 0;
-      if (qty > 0) aoa.push([name, rate, qty, r2(qty * rate)]);
+      if (qty > 0) kgRows.push([date, v, name, rate, qty, r2(qty * rate)]);
     });
     customSKUs[v].forEach(sku => {
-      if ((sku.qty||0) > 0) aoa.push([sku.name + ' *', sku.rate, sku.qty, r2(sku.qty * sku.rate)]);
+      if ((sku.qty || 0) > 0) kgRows.push([date, v, sku.name + ' *', sku.rate, sku.qty, r2(sku.qty * sku.rate)]);
     });
-    aoa.push([v + ' Total KG Cost','','',r2(vendorKG(v))]);
-    aoa.push([]);
   });
+  const ws3 = XLSX.utils.aoa_to_sheet(kgRows);
+  ws3['!cols'] = [12,14,28,12,10,12].map(w => ({ wch: w }));
 
-  const ws = XLSX.utils.aoa_to_sheet(aoa);
-  ws['!cols'] = [32,16,14,14,16,14,14,14,14,14,14,12].map(w => ({ wch: w }));
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Daily MPK');
+  XLSX.utils.book_append_sheet(wb, ws1, 'Daily Summary');
+  XLSX.utils.book_append_sheet(wb, ws2, 'Attendance Detail');
+  XLSX.utils.book_append_sheet(wb, ws3, 'KG Detail');
   XLSX.writeFile(wb, 'Organicut_MPK_' + date + '.xlsx');
 }
 
