@@ -269,6 +269,57 @@ td input[type="number"]:hover { border-color: #7dbf99; }
 .login-switch { text-align: center; font-size: 12px; color: var(--muted); margin-top: 18px; cursor: pointer; }
 .login-switch span { color: var(--primary); font-weight: 600; }
 
+/* ── USERS PANEL ─────────────────────────────────────── */
+.btn-manage-users {
+  padding: 5px 10px; border-radius: 7px;
+  border: 1px solid rgba(255,255,255,.22);
+  font-size: 12px; font-weight: 600; color: rgba(255,255,255,.85);
+  background: rgba(255,255,255,.1); cursor: pointer; white-space: nowrap;
+  transition: background .15s;
+}
+.btn-manage-users:hover { background: rgba(255,255,255,.2); }
+#usersPanel {
+  position: fixed; top: 0; right: 0; bottom: 0; width: 320px; z-index: 500;
+  background: #fff; border-left: 1px solid var(--border);
+  box-shadow: -4px 0 24px rgba(0,0,0,.1);
+  transform: translateX(100%); transition: transform .25s ease;
+  display: flex; flex-direction: column;
+}
+#usersPanel.open { transform: translateX(0); }
+.user-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 14px; border-radius: 9px; margin-bottom: 4px;
+  border: 1px solid var(--border); background: #fff;
+}
+.user-row-name { font-size: 13px; font-weight: 600; color: var(--text); }
+.user-row-you  { font-size: 11px; color: var(--muted); margin-left: 6px; font-weight: 400; }
+.user-del-btn {
+  padding: 4px 10px; border: 1px solid #fca5a5; border-radius: 6px;
+  background: #fff1f1; color: #ef4444; font-size: 11.5px; font-weight: 600;
+  cursor: pointer; transition: background .12s;
+}
+.user-del-btn:hover { background: #fca5a5; }
+.users-add-form {
+  padding: 14px 16px; border-top: 1px solid var(--border); background: #f9fdf9;
+}
+.users-add-title {
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .6px; color: var(--muted); margin-bottom: 10px;
+}
+.users-input {
+  width: 100%; padding: 8px 12px; border: 1.5px solid var(--border); border-radius: 8px;
+  font-size: 13px; color: var(--text); outline: none; margin-bottom: 8px;
+  transition: border-color .15s;
+}
+.users-input:focus { border-color: var(--primary); }
+.users-add-btn {
+  width: 100%; padding: 9px; background: var(--primary); color: #fff;
+  border: none; border-radius: 8px; font-size: 13px; font-weight: 700;
+  cursor: pointer; transition: background .15s;
+}
+.users-add-btn:hover { background: var(--primary-h); }
+.users-form-err { font-size: 12px; color: #ef4444; min-height: 16px; margin-bottom: 6px; }
+
 /* ── HISTORY PANEL ────────────────────────────────────── */
 #historyPanel {
   position: fixed; top: 0; right: 0; bottom: 0; width: 320px; z-index: 500;
@@ -357,6 +408,22 @@ td input[type="number"]:hover { border-color: #7dbf99; }
   </div>
 </div>
 
+<!-- ═══════════════════ USERS PANEL ════════════════════ -->
+<div id="usersPanel">
+  <div class="hist-header">
+    <span class="hist-title">Manage Users</span>
+    <button class="hist-close" onclick="toggleUsersPanel(false)">×</button>
+  </div>
+  <div id="usersList" style="flex:1;overflow-y:auto;padding:8px;"></div>
+  <div class="users-add-form">
+    <div class="users-add-title">Add New User</div>
+    <input class="users-input" id="newUsername" type="text" placeholder="Username" autocomplete="off">
+    <input class="users-input" id="newPassword" type="password" placeholder="Password (min 6 chars)" autocomplete="new-password">
+    <div id="usersFormErr" class="users-form-err"></div>
+    <button class="users-add-btn" onclick="addUser()">Add User</button>
+  </div>
+</div>
+
 <!-- ═══════════════════ HISTORY PANEL ═══════════════════ -->
 <div id="historyPanel">
   <div class="hist-header">
@@ -388,6 +455,7 @@ td input[type="number"]:hover { border-color: #7dbf99; }
 
     <div class="user-area">
       <span id="userBadge"></span>
+      <button class="btn-manage-users" id="manageUsersBtn" style="display:none" onclick="toggleUsersPanel()">⚙ Users</button>
       <button class="btn-logout" onclick="doLogout()">Logout</button>
     </div>
   </div>
@@ -469,6 +537,8 @@ td input[type="number"]:hover { border-color: #7dbf99; }
 </div>
 
 <script>
+let currentUsername = '';
+
 /* ═══════════════════════════════════════════════════════
    SKU CONFIGURATION
 ═══════════════════════════════════════════════════════ */
@@ -631,7 +701,9 @@ async function checkAuth() {
   try {
     const user = await fetch('/api/auth/me', { credentials: 'include' }).then(r => r.json());
     if (user.username) {
+      currentUsername = user.username;
       document.getElementById('userBadge').textContent = user.username;
+      document.getElementById('manageUsersBtn').style.display = '';
       document.getElementById('loginOverlay').style.display = 'none';
       await initApp();
     } else {
@@ -682,7 +754,9 @@ async function doLogin() {
   if (!username || !password) { errEl.textContent = 'Please enter username and password.'; return; }
   try {
     const user = await api('POST', '/api/auth/login', { username, password });
+    currentUsername = user.username;
     document.getElementById('userBadge').textContent = user.username;
+    document.getElementById('manageUsersBtn').style.display = '';
     document.getElementById('loginOverlay').style.display = 'none';
     await initApp();
   } catch (e) {
@@ -710,6 +784,9 @@ async function doSetup() {
 
 async function doLogout() {
   await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+  currentUsername = '';
+  document.getElementById('manageUsersBtn').style.display = 'none';
+  toggleUsersPanel(false);
   document.getElementById('loginUser').value = '';
   document.getElementById('loginPass').value = '';
   document.getElementById('loginOverlay').style.display = 'flex';
@@ -1390,6 +1467,68 @@ async function exportAllRecords() {
     showToast('✓ Exported ' + records.length + ' record' + (records.length === 1 ? '' : 's'), false);
   } catch (e) {
     showToast('⚠ Export failed: ' + e.message, true);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════
+   USER MANAGEMENT
+═══════════════════════════════════════════════════════ */
+
+let usersPanelOpen = false;
+
+function toggleUsersPanel(force) {
+  usersPanelOpen = (force !== undefined) ? force : !usersPanelOpen;
+  document.getElementById('usersPanel').classList.toggle('open', usersPanelOpen);
+  if (usersPanelOpen) loadUsers();
+}
+
+async function loadUsers() {
+  const list = document.getElementById('usersList');
+  list.innerHTML = '<div class="hist-empty">Loading…</div>';
+  try {
+    const users = await api('GET', '/api/auth/users');
+    if (!users.length) {
+      list.innerHTML = '<div class="hist-empty">No users found.</div>';
+      return;
+    }
+    list.innerHTML = users.map(u => {
+      const isYou = u.username === currentUsername;
+      return `<div class="user-row">
+        <span class="user-row-name">${u.username}${isYou ? '<span class="user-row-you">(you)</span>' : ''}</span>
+        ${isYou ? '' : `<button class="user-del-btn" onclick="deleteUser(${u.id},'${u.username.replace(/'/g,"\\'")}')">Delete</button>`}
+      </div>`;
+    }).join('');
+  } catch (e) {
+    list.innerHTML = '<div class="hist-empty">Failed to load users.</div>';
+  }
+}
+
+async function addUser() {
+  const username = document.getElementById('newUsername').value.trim();
+  const password = document.getElementById('newPassword').value;
+  const errEl    = document.getElementById('usersFormErr');
+  errEl.textContent = '';
+  if (!username || !password) { errEl.textContent = 'Both fields are required.'; return; }
+  if (password.length < 6)    { errEl.textContent = 'Password must be at least 6 characters.'; return; }
+  try {
+    await api('POST', '/api/auth/users', { username, password });
+    document.getElementById('newUsername').value = '';
+    document.getElementById('newPassword').value = '';
+    showToast('✓ User "' + username + '" created', false);
+    loadUsers();
+  } catch (e) {
+    errEl.textContent = e.message;
+  }
+}
+
+async function deleteUser(id, username) {
+  if (!confirm('Delete user "' + username + '"? This cannot be undone.')) return;
+  try {
+    await api('DELETE', '/api/auth/users/' + id);
+    showToast('✓ User "' + username + '" deleted', false);
+    loadUsers();
+  } catch (e) {
+    showToast('⚠ ' + e.message, true);
   }
 }
 
