@@ -7,6 +7,8 @@ CREATE TABLE IF NOT EXISTS users (
   created_at    TIMESTAMPTZ DEFAULT NOW()
 );
 
+ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(20) NOT NULL DEFAULT 'user';
+
 CREATE TABLE IF NOT EXISTS daily_records (
   id              SERIAL PRIMARY KEY,
   record_date     DATE UNIQUE NOT NULL,

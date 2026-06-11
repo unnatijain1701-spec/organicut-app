@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Organicut Fresh — Daily MPK Calculator</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -378,6 +379,96 @@ td input[type="number"]:hover { border-color: #7dbf99; }
 .hist-del-btn:hover { background: #fef2f2; color: #ef4444; opacity: 1; }
 .hist-empty { padding: 24px; text-align: center; color: var(--muted); font-size: 13px; }
 
+/* ── DASHBOARD OVERLAY ────────────────────────────────── */
+#dashboardOverlay {
+  position: fixed; inset: 0; z-index: 400;
+  background: var(--bg); overflow-y: auto;
+  display: flex; flex-direction: column;
+}
+.dash-header {
+  position: sticky; top: 0; z-index: 10;
+  background: var(--primary);
+  padding: 0 24px; height: 52px;
+  display: flex; align-items: center; justify-content: space-between;
+  box-shadow: 0 2px 10px rgba(0,0,0,.18);
+}
+.dash-header-title { font-weight: 800; font-size: 16px; color: #fff; letter-spacing: -.2px; }
+.dash-header-title em { color: #96e0bb; font-style: normal; }
+.dash-close {
+  border: none; background: none; color: rgba(255,255,255,.8);
+  font-size: 26px; cursor: pointer; line-height: 1; padding: 4px 8px;
+  border-radius: 6px; transition: background .15s;
+}
+.dash-close:hover { background: rgba(255,255,255,.18); color: #fff; }
+.dash-body { padding: 24px; max-width: 1320px; width: 100%; }
+.dash-cards {
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  gap: 16px; margin-bottom: 24px;
+}
+.dash-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; padding: 20px 22px;
+  box-shadow: 0 1px 4px rgba(30,107,69,.07);
+}
+.dash-card-label {
+  font-size: 10px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .7px; color: var(--muted); margin-bottom: 10px;
+}
+.dash-card-value {
+  font-size: 26px; font-weight: 800; color: var(--text); letter-spacing: -.4px;
+}
+.dash-card-value.green { color: var(--primary); }
+.dash-card-sub { font-size: 11px; color: var(--muted); margin-top: 5px; }
+.dash-section {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; padding: 20px 22px; margin-bottom: 20px;
+  box-shadow: 0 1px 4px rgba(30,107,69,.07);
+}
+.dash-section-head {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 18px;
+}
+.dash-section-title { font-size: 13px; font-weight: 700; color: var(--text); }
+.dash-toggle {
+  display: flex; background: #edf7f1; border-radius: 8px;
+  padding: 3px; border: 1px solid var(--border);
+}
+.dash-toggle-btn {
+  padding: 5px 16px; border-radius: 6px; border: none;
+  font-size: 12px; font-weight: 600; cursor: pointer;
+  color: var(--muted); background: none; transition: all .15s;
+}
+.dash-toggle-btn.active { background: var(--primary); color: #fff; }
+.dash-trend {
+  padding: 13px 18px; border-radius: 10px; margin-bottom: 20px;
+  font-size: 13px; font-weight: 600;
+  background: var(--surface); border: 1px solid var(--border);
+  color: var(--muted);
+}
+.dash-trend.up   { color: var(--success); background: #f0fdf4; border-color: #bbf7d0; }
+.dash-trend.down { color: #ef4444; background: #fef2f2; border-color: #fca5a5; }
+.dash-table-wrap {
+  overflow-x: auto; border-radius: 12px;
+  border: 1px solid var(--border); margin-bottom: 32px;
+  box-shadow: 0 1px 4px rgba(30,107,69,.07);
+}
+.dash-table-wrap table { min-width: 700px; }
+tr.dash-row-alt td { background: #f7fdf9; }
+.dash-row-del {
+  padding: 4px 10px; border: 1px solid #fca5a5; border-radius: 6px;
+  background: #fff1f1; color: #ef4444; font-size: 11.5px; font-weight: 600;
+  cursor: pointer; transition: background .12s; white-space: nowrap;
+}
+.dash-row-del:hover { background: #fca5a5; }
+@media (max-width: 900px) {
+  .dash-cards { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 480px) {
+  .dash-cards { grid-template-columns: 1fr 1fr; }
+  .dash-card-value { font-size: 20px; }
+  .dash-body { padding: 14px; }
+}
+
 /* ── RESPONSIVE ───────────────────────────────────────── */
 @media (max-width: 800px) {
   .topbar-main { padding: 6px 12px; min-height: 48px; gap: 6px; }
@@ -478,6 +569,85 @@ td input[type="number"]:hover { border-color: #7dbf99; }
   <div id="historyList"><div class="hist-empty">Loading…</div></div>
 </div>
 
+<!-- ═══════════════════ DASHBOARD OVERLAY ═══════════════════ -->
+<div id="dashboardOverlay" style="display:none">
+  <div class="dash-header">
+    <span class="dash-header-title">📊 Admin <em>Dashboard</em></span>
+    <button class="dash-close" onclick="closeDashboard()">×</button>
+  </div>
+  <div class="dash-body">
+
+    <!-- 4 summary cards -->
+    <div class="dash-cards">
+      <div class="dash-card">
+        <div class="dash-card-label">Avg MPK This Month</div>
+        <div class="dash-card-value green" id="dcAvgMPK">—</div>
+      </div>
+      <div class="dash-card">
+        <div class="dash-card-label">Best Day MPK</div>
+        <div class="dash-card-value" id="dcBestMPK">—</div>
+        <div class="dash-card-sub" id="dcBestDate"></div>
+      </div>
+      <div class="dash-card">
+        <div class="dash-card-label">Worst Day MPK</div>
+        <div class="dash-card-value" id="dcWorstMPK">—</div>
+        <div class="dash-card-sub" id="dcWorstDate"></div>
+      </div>
+      <div class="dash-card">
+        <div class="dash-card-label">Days Recorded This Month</div>
+        <div class="dash-card-value" id="dcDaysCount">—</div>
+      </div>
+    </div>
+
+    <!-- Line chart section -->
+    <div class="dash-section">
+      <div class="dash-section-head">
+        <span class="dash-section-title" id="dashChartTitle">Daily MPK</span>
+        <div class="dash-toggle">
+          <button class="dash-toggle-btn active" id="btnDaily" onclick="setChartView('daily')">Daily</button>
+          <button class="dash-toggle-btn" id="btnMonthly" onclick="setChartView('monthly')">Monthly</button>
+        </div>
+      </div>
+      <canvas id="dashLineChart" height="100"></canvas>
+    </div>
+
+    <!-- Bar chart (monthly only) -->
+    <div class="dash-section" id="dashBarSection" style="display:none">
+      <div class="dash-section-head">
+        <span class="dash-section-title">Monthly Cost Breakdown (Avg per Day)</span>
+      </div>
+      <canvas id="dashBarChart" height="100"></canvas>
+    </div>
+
+    <!-- Trend indicator -->
+    <div class="dash-trend" id="dashTrend">Loading trend…</div>
+
+    <!-- Records table -->
+    <div class="dash-section" style="padding:0;overflow:hidden">
+      <div class="dash-section-head" style="padding:16px 20px 0">
+        <span class="dash-section-title">All Records</span>
+      </div>
+      <div class="dash-table-wrap" style="border:none;border-radius:0;margin-bottom:0;box-shadow:none">
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th class="r">Attendance Cost</th>
+              <th class="r">KG Cost</th>
+              <th class="r">Total Cost</th>
+              <th class="r">Sale Qty</th>
+              <th class="r">MPK</th>
+              <th class="r">Action</th>
+            </tr>
+          </thead>
+          <tbody id="dashTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+</div>
+
 <!-- ═══════════════════ TOP BAR ═══════════════════ -->
 <div class="topbar">
   <div class="topbar-main">
@@ -508,6 +678,7 @@ td input[type="number"]:hover { border-color: #7dbf99; }
     </div>
     <span class="tb-sep"></span>
     <button class="btn btn-outline" onclick="toggleHistory()" title="Saved records">📋 History</button>
+    <button class="btn btn-outline" id="dashboardBtn" style="display:none" onclick="loadDashboard()" title="Admin dashboard">📊 Dashboard</button>
     <div class="user-dd" id="userDd">
       <button class="user-dd-btn" id="userDdBtn" onclick="toggleUserDd()">
         <span id="userBadge"></span><span class="user-dd-caret">▾</span>
@@ -581,6 +752,7 @@ td input[type="number"]:hover { border-color: #7dbf99; }
 
 <script>
 let currentUsername = '';
+let currentRole = '';
 
 /* ═══════════════════════════════════════════════════════
    SKU CONFIGURATION
@@ -752,8 +924,10 @@ async function checkAuth() {
     const user = await fetch('/api/auth/me', { credentials: 'include' }).then(r => r.json());
     if (user.username) {
       currentUsername = user.username;
+      currentRole = user.role || 'user';
       document.getElementById('userBadge').textContent = user.username;
       document.getElementById('manageUsersBtn').style.display = '';
+      document.getElementById('dashboardBtn').style.display = currentRole === 'admin' ? '' : 'none';
       document.getElementById('loginOverlay').style.display = 'none';
       await initApp();
     } else {
@@ -805,8 +979,10 @@ async function doLogin() {
   try {
     const user = await api('POST', '/api/auth/login', { username, password });
     currentUsername = user.username;
+    currentRole = user.role || 'user';
     document.getElementById('userBadge').textContent = user.username;
     document.getElementById('manageUsersBtn').style.display = '';
+    document.getElementById('dashboardBtn').style.display = currentRole === 'admin' ? '' : 'none';
     document.getElementById('loginOverlay').style.display = 'none';
     await initApp();
   } catch (e) {
@@ -836,7 +1012,10 @@ async function doLogout() {
   closeUserDd();
   await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
   currentUsername = '';
+  currentRole = '';
   document.getElementById('manageUsersBtn').style.display = 'none';
+  document.getElementById('dashboardBtn').style.display = 'none';
+  closeDashboard();
   toggleUsersPanel(false);
   document.getElementById('loginUser').value = '';
   document.getElementById('loginPass').value = '';
@@ -1799,6 +1978,207 @@ async function deleteUser(id, username) {
     loadUsers();
   } catch (e) {
     showToast('⚠ ' + e.message, true);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════
+   ADMIN DASHBOARD
+═══════════════════════════════════════════════════════ */
+
+let _dashLine = null;
+let _dashBar  = null;
+let _dashData = null;
+let _dashView = 'daily';
+
+async function loadDashboard() {
+  if (currentRole !== 'admin') return;
+  document.getElementById('dashboardOverlay').style.display = 'flex';
+  try {
+    const data = await api('GET', '/api/records/analytics');
+    _dashData = data;
+    _renderDashCards(data);
+    _renderDashTrend(data);
+    setChartView('daily');
+    _renderDashTable(data);
+  } catch (e) {
+    showToast('Failed to load dashboard: ' + e.message, true);
+  }
+}
+
+function closeDashboard() {
+  document.getElementById('dashboardOverlay').style.display = 'none';
+  if (_dashLine) { _dashLine.destroy(); _dashLine = null; }
+  if (_dashBar)  { _dashBar.destroy();  _dashBar  = null; }
+}
+
+function _renderDashCards(data) {
+  const now = new Date();
+  const thisMonth = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+  const thisRecs  = data.daily.filter(r => r.date.slice(0, 7) === thisMonth);
+
+  const avgMPK = thisRecs.length
+    ? thisRecs.reduce((s, r) => s + parseFloat(r.mpk), 0) / thisRecs.length
+    : null;
+
+  const valid = data.daily.filter(r => parseFloat(r.mpk) > 0);
+  const best  = valid.length ? valid.reduce((b, r) => parseFloat(r.mpk) > parseFloat(b.mpk) ? r : b) : null;
+  const worst = valid.length ? valid.reduce((w, r) => parseFloat(r.mpk) < parseFloat(w.mpk) ? r : w) : null;
+
+  document.getElementById('dcAvgMPK').textContent    = avgMPK !== null ? '₹ ' + avgMPK.toFixed(2) : '—';
+  document.getElementById('dcBestMPK').textContent   = best  ? '₹ ' + parseFloat(best.mpk).toFixed(2)  : '—';
+  document.getElementById('dcBestDate').textContent  = best  ? best.date  : '';
+  document.getElementById('dcWorstMPK').textContent  = worst ? '₹ ' + parseFloat(worst.mpk).toFixed(2) : '—';
+  document.getElementById('dcWorstDate').textContent = worst ? worst.date : '';
+  document.getElementById('dcDaysCount').textContent = String(thisRecs.length);
+}
+
+function _renderDashTrend(data) {
+  const now = new Date();
+  const thisMonth = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+  const prevDate  = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const prevMonth = prevDate.getFullYear() + '-' + String(prevDate.getMonth() + 1).padStart(2, '0');
+
+  const curr = data.monthly.find(m => m.month === thisMonth);
+  const prev = data.monthly.find(m => m.month === prevMonth);
+  const el   = document.getElementById('dashTrend');
+
+  if (!curr || !prev || !parseFloat(prev.avg_mpk)) {
+    el.textContent = 'Trend: Not enough data to compare months.';
+    el.className   = 'dash-trend';
+    return;
+  }
+
+  const c = parseFloat(curr.avg_mpk), p = parseFloat(prev.avg_mpk);
+  const pct = Math.abs((c - p) / p * 100).toFixed(1);
+
+  if (c > p) {
+    el.textContent = `This month vs last month: MPK ↑ ${pct}% (improving)`;
+    el.className   = 'dash-trend up';
+  } else {
+    el.textContent = `This month vs last month: MPK ↓ ${pct}% (worsening)`;
+    el.className   = 'dash-trend down';
+  }
+}
+
+function setChartView(view) {
+  _dashView = view;
+  document.getElementById('btnDaily').classList.toggle('active', view === 'daily');
+  document.getElementById('btnMonthly').classList.toggle('active', view === 'monthly');
+  document.getElementById('dashBarSection').style.display = view === 'monthly' ? '' : 'none';
+  document.getElementById('dashChartTitle').textContent   = view === 'daily' ? 'Daily MPK' : 'Monthly Avg MPK';
+  _renderLineChart();
+  if (view === 'monthly') _renderBarChart();
+}
+
+function _renderLineChart() {
+  if (!_dashData) return;
+  if (_dashLine) { _dashLine.destroy(); _dashLine = null; }
+
+  const ctx = document.getElementById('dashLineChart').getContext('2d');
+  const labels = _dashView === 'daily'
+    ? _dashData.daily.map(r => r.date)
+    : _dashData.monthly.map(m => m.month);
+  const values = _dashView === 'daily'
+    ? _dashData.daily.map(r => parseFloat(r.mpk))
+    : _dashData.monthly.map(m => parseFloat(m.avg_mpk));
+
+  _dashLine = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: 'MPK (₹/kg)',
+        data: values,
+        borderColor: '#1e6b45',
+        backgroundColor: 'rgba(30,107,69,.09)',
+        borderWidth: 2.5,
+        pointRadius: 4,
+        pointBackgroundColor: '#1e6b45',
+        tension: 0.3,
+        fill: true
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: true,
+      plugins: {
+        legend: { display: false },
+        tooltip: { mode: 'index', intersect: false,
+          callbacks: { label: ctx => '₹ ' + ctx.parsed.y.toFixed(2) + ' / kg' }
+        }
+      },
+      scales: {
+        x: { grid: { color: 'rgba(0,0,0,.04)' }, ticks: { font: { size: 11 }, maxTicksLimit: 14 } },
+        y: { grid: { color: 'rgba(0,0,0,.04)' },
+             ticks: { font: { size: 11 }, callback: v => '₹' + v.toFixed(1) } }
+      }
+    }
+  });
+}
+
+function _renderBarChart() {
+  if (!_dashData) return;
+  if (_dashBar) { _dashBar.destroy(); _dashBar = null; }
+
+  const ctx = document.getElementById('dashBarChart').getContext('2d');
+  const months = _dashData.monthly;
+
+  _dashBar = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: months.map(m => m.month),
+      datasets: [
+        { label: 'Attendance Cost', data: months.map(m => parseFloat(m.avg_attendance_cost)),
+          backgroundColor: '#1e6b45', borderRadius: 4 },
+        { label: 'KG Cost', data: months.map(m => parseFloat(m.avg_kg_cost)),
+          backgroundColor: '#3aaa6b', borderRadius: 4 }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: true,
+      plugins: {
+        legend: { position: 'top', labels: { font: { size: 11 }, boxWidth: 12 } },
+        tooltip: { mode: 'index',
+          callbacks: { label: ctx => ctx.dataset.label + ': ₹' + ctx.parsed.y.toFixed(2) }
+        }
+      },
+      scales: {
+        x: { grid: { display: false }, ticks: { font: { size: 11 } } },
+        y: { grid: { color: 'rgba(0,0,0,.04)' },
+             ticks: { font: { size: 11 }, callback: v => '₹' + v.toFixed(0) } }
+      }
+    }
+  });
+}
+
+function _renderDashTable(data) {
+  const tbody = document.getElementById('dashTableBody');
+  const rows  = [...data.daily].reverse();
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:28px">No records yet.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = rows.map((r, i) => `
+    <tr class="${i % 2 === 1 ? 'dash-row-alt' : ''}">
+      <td>${r.date}</td>
+      <td class="r">₹ ${parseFloat(r.attendance_cost).toFixed(2)}</td>
+      <td class="r">₹ ${parseFloat(r.kg_cost).toFixed(2)}</td>
+      <td class="r">₹ ${parseFloat(r.total_cost).toFixed(2)}</td>
+      <td class="r">${parseFloat(r.sale_qty || 0).toFixed(0)} kg</td>
+      <td class="r">₹ ${parseFloat(r.mpk).toFixed(2)}</td>
+      <td class="r">
+        <button class="dash-row-del" onclick="dashDeleteRecord('${r.date}')">🗑 Delete</button>
+      </td>
+    </tr>`).join('');
+}
+
+async function dashDeleteRecord(date) {
+  if (!confirm(`Delete record for ${date}? This cannot be undone.`)) return;
+  try {
+    await api('DELETE', `/api/records/${date}`);
+    showToast(`Record for ${date} deleted`);
+    await loadDashboard();
+  } catch (e) {
+    showToast(e.message, true);
   }
 }
 

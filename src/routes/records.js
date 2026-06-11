@@ -18,6 +18,37 @@ router.get('/', async (req, res) => {
   }
 });
 
+// GET /api/records/analytics  — summary data for admin dashboard
+router.get('/analytics', async (req, res) => {
+  try {
+    const { rows: daily } = await db.query(`
+      SELECT
+        record_date::text AS date,
+        mpk, total_cost, attendance_cost, kg_cost, sale_qty
+      FROM daily_records
+      ORDER BY record_date ASC
+    `);
+
+    const { rows: monthly } = await db.query(`
+      SELECT
+        TO_CHAR(record_date, 'YYYY-MM') AS month,
+        ROUND(AVG(mpk)::numeric, 4)             AS avg_mpk,
+        ROUND(AVG(total_cost)::numeric, 2)       AS avg_total,
+        ROUND(AVG(attendance_cost)::numeric, 2)  AS avg_attendance_cost,
+        ROUND(AVG(kg_cost)::numeric, 2)          AS avg_kg_cost,
+        COUNT(*)                                 AS count
+      FROM daily_records
+      GROUP BY TO_CHAR(record_date, 'YYYY-MM')
+      ORDER BY month ASC
+    `);
+
+    res.json({ daily, monthly });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // GET /api/records/:date  — full record with attendance + KG breakdown
 router.get('/:date', async (req, res) => {
   try {

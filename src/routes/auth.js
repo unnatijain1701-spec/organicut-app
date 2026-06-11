@@ -22,12 +22,12 @@ router.post('/login', async (req, res) => {
     if (!ok) return res.status(401).json({ error: 'Invalid username or password' });
 
     const token = jwt.sign(
-      { id: rows[0].id, username: rows[0].username },
+      { id: rows[0].id, username: rows[0].username, role: rows[0].role },
       process.env.JWT_SECRET,
       { expiresIn: '7d' }
     );
     res.cookie('token', token, COOKIE_OPTS);
-    res.json({ username: rows[0].username });
+    res.json({ username: rows[0].username, role: rows[0].role });
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: 'Server error' });
@@ -46,7 +46,7 @@ router.get('/me', (req, res) => {
   if (!token) return res.status(401).json({ error: 'Not logged in' });
   try {
     const user = jwt.verify(token, process.env.JWT_SECRET);
-    res.json({ username: user.username });
+    res.json({ username: user.username, role: user.role || 'user' });
   } catch {
     res.status(401).json({ error: 'Session expired' });
   }
@@ -69,7 +69,7 @@ router.post('/setup', async (req, res) => {
     }
 
     const hash = await bcrypt.hash(password, 12);
-    await db.query('INSERT INTO users (username, password_hash) VALUES ($1, $2)', [username.trim(), hash]);
+    await db.query('INSERT INTO users (username, password_hash, role) VALUES ($1, $2, $3)', [username.trim(), hash, 'admin']);
     res.json({ ok: true, message: 'Admin user created. You can now log in.' });
   } catch (e) {
     console.error(e);
