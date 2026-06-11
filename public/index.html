@@ -1303,11 +1303,18 @@ function buildPane(v) {
           <td class="r cost-val" id="kgTot_${vid_}">${fc(vendorKG(v))}</td></tr></tfoot>
       </table>
     </div>
-    <div class="unloading-bar">
-      <span>Unloading Cost (₹)</span>
-      <input type="number" min="0" step="0.01" value="${unloadingCosts[v]||''}" placeholder="0.00"
-        data-v="${vid_}" onchange="onUnloadingCost(this)">
-      <span class="cost-val" id="kgUnload_${vid_}">${(unloadingCosts[v]||0)>0?fc(unloadingCosts[v]):''}</span>
+    <div class="unloading-bar" id="unloadBar_${vid_}">
+      <button class="btn-ghost" id="unloadBtn_${vid_}"
+        style="${(unloadingCosts[v]||0)>0?'display:none':''}"
+        onclick="showUnloadingInput('${vesc}')">+ Add Unloading Cost</button>
+      <div id="unloadWrap_${vid_}"
+        style="display:${(unloadingCosts[v]||0)>0?'flex':'none'};align-items:center;gap:10px;width:100%">
+        <span>Unloading Cost (₹)</span>
+        <input type="number" min="0" step="0.01" value="${(unloadingCosts[v]||0)>0?unloadingCosts[v]:''}" placeholder="0.00"
+          id="unloadInp_${vid_}" data-v="${vid_}" onchange="onUnloadingCost(this)">
+        <button class="btn-del" title="Remove unloading cost" onclick="removeUnloadingCost('${vesc}')">×</button>
+        <span class="cost-val" id="kgUnload_${vid_}">${(unloadingCosts[v]||0)>0?fc(unloadingCosts[v]):''}</span>
+      </div>
     </div>
     <div class="add-sku-bar">
       <div id="addSkuForm_${vid_}" class="add-sku-form" style="display:none">
@@ -1392,6 +1399,21 @@ function onUnloadingCost(input) {
   const totCell = document.getElementById('kgTot_' + input.dataset.v);
   if (totCell) totCell.textContent = fc(vendorKG(rawV));
   recalc();
+}
+
+function showUnloadingInput(v) {
+  const v_ = vid(v);
+  document.getElementById('unloadBtn_' + v_).style.display = 'none';
+  const wrap = document.getElementById('unloadWrap_' + v_);
+  wrap.style.display = 'flex';
+  const inp = document.getElementById('unloadInp_' + v_);
+  if (inp) inp.focus();
+}
+
+function removeUnloadingCost(v) {
+  unloadingCosts[v] = 0;
+  recalc();
+  refreshPane(v);
 }
 
 /* ═══════════════════════════════════════════════════════
