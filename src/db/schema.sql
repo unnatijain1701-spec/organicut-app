@@ -38,6 +38,18 @@ CREATE TABLE IF NOT EXISTS vendor_kg_entries (
   cost        NUMERIC(12,2) DEFAULT 0
 );
 
+-- KG vendors (dynamic list, seeded with defaults)
+CREATE TABLE IF NOT EXISTS kg_vendors (
+  id         SERIAL PRIMARY KEY,
+  name       VARCHAR(200) UNIQUE NOT NULL,
+  sort_order INTEGER DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+INSERT INTO kg_vendors (name, sort_order) VALUES
+  ('Ashok', 1), ('RS', 2), ('MP', 3), ('RJ', 4), ('BL Unloading', 5)
+ON CONFLICT (name) DO NOTHING;
+
 -- Custom SKUs added by the user (beyond the hardcoded defaults)
 CREATE TABLE IF NOT EXISTS custom_skus (
   id           SERIAL PRIMARY KEY,

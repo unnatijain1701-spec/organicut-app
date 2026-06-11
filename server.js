@@ -9,6 +9,7 @@ const authRoutes    = require('./src/routes/auth');
 const recordRoutes  = require('./src/routes/records');
 const uploadRoutes  = require('./src/routes/upload');
 const skuRoutes     = require('./src/routes/sku');
+const vendorRoutes  = require('./src/routes/vendors');
 const { authenticateToken } = require('./src/middleware/auth');
 
 const app = express();
@@ -21,6 +22,7 @@ app.use('/api/auth',    authRoutes);
 app.use('/api/records', authenticateToken, recordRoutes);
 app.use('/api/upload',  authenticateToken, uploadRoutes);
 app.use('/api/sku',     authenticateToken, skuRoutes);
+app.use('/api/vendors', authenticateToken, vendorRoutes);
 
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));

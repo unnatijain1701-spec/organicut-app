@@ -320,6 +320,16 @@ td input[type="number"]:hover { border-color: #7dbf99; }
 .users-add-btn:hover { background: var(--primary-h); }
 .users-form-err { font-size: 12px; color: #ef4444; min-height: 16px; margin-bottom: 6px; }
 
+/* ── VENDORS PANEL ───────────────────────────────────── */
+#vendorsPanel {
+  position: fixed; top: 0; right: 0; bottom: 0; width: 320px; z-index: 500;
+  background: #fff; border-left: 1px solid var(--border);
+  box-shadow: -4px 0 24px rgba(0,0,0,.1);
+  transform: translateX(100%); transition: transform .25s ease;
+  display: flex; flex-direction: column;
+}
+#vendorsPanel.open { transform: translateX(0); }
+
 /* ── HISTORY PANEL ────────────────────────────────────── */
 #historyPanel {
   position: fixed; top: 0; right: 0; bottom: 0; width: 320px; z-index: 500;
@@ -424,6 +434,21 @@ td input[type="number"]:hover { border-color: #7dbf99; }
   </div>
 </div>
 
+<!-- ═══════════════════ VENDORS PANEL ═══════════════════ -->
+<div id="vendorsPanel">
+  <div class="hist-header">
+    <span class="hist-title">KG Vendors</span>
+    <button class="hist-close" onclick="toggleVendorsPanel(false)">×</button>
+  </div>
+  <div id="vendorsList" style="flex:1;overflow-y:auto;padding:8px;"></div>
+  <div class="users-add-form">
+    <div class="users-add-title">Add New Vendor</div>
+    <input class="users-input" id="newVendorName" type="text" placeholder="Vendor name" autocomplete="off">
+    <div id="vendorsFormErr" class="users-form-err"></div>
+    <button class="users-add-btn" onclick="addVendor()">Add Vendor</button>
+  </div>
+</div>
+
 <!-- ═══════════════════ HISTORY PANEL ═══════════════════ -->
 <div id="historyPanel">
   <div class="hist-header">
@@ -474,6 +499,7 @@ td input[type="number"]:hover { border-color: #7dbf99; }
       </div>
     </div>
     <button class="btn btn-outline" onclick="toggleHistory()">📋 History</button>
+    <button class="btn btn-outline" onclick="toggleVendorsPanel()">⚙ Vendors</button>
   </div>
 
 </div>
@@ -653,7 +679,7 @@ const SKU_CFG = {
 };
 
 const ATT_VENDORS = ['Krish Enterprises', 'Sai Enterprises', 'SATENDRA SINGH Bhadoriya'];
-const KG_VENDORS  = ['Ashok', 'RS', 'MP', 'RJ', 'BL Unloading'];
+let KG_VENDORS = [];  // populated from /api/vendors on init
 
 /* ═══════════════════════════════════════════════════════
    STATE
@@ -662,13 +688,9 @@ const KG_VENDORS  = ['Ashok', 'RS', 'MP', 'RJ', 'BL Unloading'];
 const attState = {};
 ATT_VENDORS.forEach(v => { attState[v] = { workers: 0, cost: 0 }; });
 
-const kgState = {};
-KG_VENDORS.forEach(v => { kgState[v] = new Array(SKU_CFG[v].length).fill(0); });
-
+const kgState    = {};
 const customSKUs = {};
-KG_VENDORS.forEach(v => { customSKUs[v] = []; });
-
-let activeTab = KG_VENDORS[0];
+let activeTab = '';
 let _cachedCSVFile = null;
 
 /* ═══════════════════════════════════════════════════════
@@ -802,11 +824,30 @@ async function initApp() {
   document.getElementById('dateInput').value =
     d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
 
+  await loadKGVendors();
   await loadCustomSKUs();
   renderAtt();
   renderKGTabs();
   recalc();
   loadHistory();
+}
+
+/* ═══════════════════════════════════════════════════════
+   KG VENDORS — dynamic list from backend
+═══════════════════════════════════════════════════════ */
+
+async function loadKGVendors() {
+  try {
+    const vendors = await api('GET', '/api/vendors');
+    KG_VENDORS = vendors.map(v => v.name);
+    KG_VENDORS.forEach(v => {
+      if (!kgState[v])    kgState[v]    = new Array((SKU_CFG[v] || []).length).fill(0);
+      if (!customSKUs[v]) customSKUs[v] = [];
+    });
+    if (!activeTab || !KG_VENDORS.includes(activeTab)) activeTab = KG_VENDORS[0] || '';
+  } catch (e) {
+    console.error('Failed to load KG vendors:', e.message);
+  }
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -867,8 +908,8 @@ function totalAtt() {
 }
 
 function vendorKG(v) {
-  const defCost  = SKU_CFG[v].reduce((s, [, rate], i) => s + (kgState[v][i] || 0) * rate, 0);
-  const custCost = customSKUs[v].reduce((s, sku) => s + (sku.qty || 0) * sku.rate, 0);
+  const defCost  = (SKU_CFG[v] || []).reduce((s, [, rate], i) => s + (kgState[v]?.[i] || 0) * rate, 0);
+  const custCost = (customSKUs[v] || []).reduce((s, sku) => s + (sku.qty || 0) * sku.rate, 0);
   return defCost + custCost;
 }
 
@@ -948,7 +989,7 @@ function renderKGTabs() {
 
 function buildPane(v) {
   const vid_ = vid(v);
-  const defRows = SKU_CFG[v].map(([name, rate], i) => {
+  const defRows = (SKU_CFG[v] || []).map(([name, rate], i) => {
     const qty = kgState[v][i] || 0, cost = qty * rate;
     return `<tr>
       <td class="sku-name">${name}</td>
@@ -1204,8 +1245,8 @@ async function saveRecord() {
 
   const kgEntries = [];
   KG_VENDORS.forEach(v => {
-    SKU_CFG[v].forEach(([name, rate], i) => {
-      const qty = kgState[v][i] || 0;
+    (SKU_CFG[v] || []).forEach(([name, rate], i) => {
+      const qty = kgState[v]?.[i] || 0;
       if (qty > 0) kgEntries.push({ vendorName: v, skuName: name, rate, qty, cost: r2(qty * rate) });
     });
     customSKUs[v].forEach(sku => {
@@ -1242,7 +1283,7 @@ function applyRecord(record) {
     attState[v] = { workers: a ? (a.workers || 0) : 0, cost: a ? parseFloat(a.cost) || 0 : 0 };
   });
 
-  KG_VENDORS.forEach(v => { kgState[v] = new Array(SKU_CFG[v].length).fill(0); });
+  KG_VENDORS.forEach(v => { kgState[v] = new Array((SKU_CFG[v] || []).length).fill(0); });
   customSKUs_resetQty();
 
   (record.kgEntries || []).forEach(e => {
@@ -1367,8 +1408,8 @@ function exportExcel() {
   // Sheet 3: KG Detail
   const kgRows = [['Date','Vendor','SKU','Rate (₹/kg)','Qty (kg)','Cost (₹)']];
   KG_VENDORS.forEach(v => {
-    SKU_CFG[v].forEach(([name, rate], i) => {
-      const qty = kgState[v][i] || 0;
+    (SKU_CFG[v] || []).forEach(([name, rate], i) => {
+      const qty = kgState[v]?.[i] || 0;
       if (qty > 0) kgRows.push([date, v, name, rate, qty, r2(qty * rate)]);
     });
     customSKUs[v].forEach(sku => {
@@ -1467,6 +1508,74 @@ async function exportAllRecords() {
     showToast('✓ Exported ' + records.length + ' record' + (records.length === 1 ? '' : 's'), false);
   } catch (e) {
     showToast('⚠ Export failed: ' + e.message, true);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════
+   VENDOR MANAGEMENT PANEL
+═══════════════════════════════════════════════════════ */
+
+let vendorsPanelOpen = false;
+
+function toggleVendorsPanel(force) {
+  vendorsPanelOpen = (force !== undefined) ? force : !vendorsPanelOpen;
+  document.getElementById('vendorsPanel').classList.toggle('open', vendorsPanelOpen);
+  if (vendorsPanelOpen) loadVendorsList();
+}
+
+async function loadVendorsList() {
+  const list = document.getElementById('vendorsList');
+  list.innerHTML = '<div class="hist-empty">Loading…</div>';
+  try {
+    const vendors = await api('GET', '/api/vendors');
+    if (!vendors.length) { list.innerHTML = '<div class="hist-empty">No vendors found.</div>'; return; }
+    list.innerHTML = vendors.map(v => `
+      <div class="user-row">
+        <span class="user-row-name">${v.name}</span>
+        ${vendors.length > 1
+          ? `<button class="user-del-btn" onclick="deleteVendor(${v.id},'${v.name.replace(/'/g,"\\'")}')">Delete</button>`
+          : '<span style="font-size:11px;color:var(--muted)">last</span>'}
+      </div>`).join('');
+  } catch (e) {
+    list.innerHTML = '<div class="hist-empty">Failed to load vendors.</div>';
+  }
+}
+
+async function addVendor() {
+  const name  = document.getElementById('newVendorName').value.trim();
+  const errEl = document.getElementById('vendorsFormErr');
+  errEl.textContent = '';
+  if (!name) { errEl.textContent = 'Vendor name is required.'; return; }
+  try {
+    const v = await api('POST', '/api/vendors', { name });
+    document.getElementById('newVendorName').value = '';
+    KG_VENDORS.push(v.name);
+    kgState[v.name]    = new Array((SKU_CFG[v.name] || []).length).fill(0);
+    customSKUs[v.name] = [];
+    activeTab = v.name;
+    renderKGTabs();
+    recalc();
+    loadVendorsList();
+    showToast('✓ Added vendor "' + v.name + '"', false);
+  } catch (e) {
+    errEl.textContent = e.message;
+  }
+}
+
+async function deleteVendor(id, name) {
+  if (!confirm('Remove vendor "' + name + '"?\nAll unsaved KG data for this vendor will be cleared.')) return;
+  try {
+    await api('DELETE', '/api/vendors/' + id);
+    KG_VENDORS = KG_VENDORS.filter(v => v !== name);
+    delete kgState[name];
+    delete customSKUs[name];
+    if (activeTab === name) activeTab = KG_VENDORS[0] || '';
+    renderKGTabs();
+    recalc();
+    loadVendorsList();
+    showToast('✓ Removed vendor "' + name + '"', false);
+  } catch (e) {
+    showToast('⚠ ' + e.message, true);
   }
 }
 
