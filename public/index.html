@@ -31,19 +31,17 @@ body {
   line-height: 1.45;
 }
 
-/* ── TOP BAR — two rows ──────────────────────────────── */
+/* ── TOP BAR — single row ────────────────────────────── */
 .topbar {
   position: sticky; top: 0; z-index: 200;
   background: var(--primary);
   box-shadow: 0 2px 10px rgba(0,0,0,.18);
 }
 
-/* Row 1: brand + fields + user */
 .topbar-main {
-  padding: 0 20px;
+  padding: 0 16px;
   min-height: 52px;
-  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
-  border-bottom: 1px solid rgba(255,255,255,.12);
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
 }
 
 .brand {
@@ -71,9 +69,11 @@ body {
 .field input[type="date"] { color-scheme: dark; min-width: 130px; }
 .field input[type="number"] { width: 110px; }
 
-.spacer { flex: 1; min-width: 8px; }
+.spacer { flex: 1; min-width: 4px; }
+.tb-sep { width: 1px; height: 18px; background: rgba(255,255,255,.22); flex-shrink: 0; margin: 0 2px; }
+.tb-actions { display: flex; align-items: center; gap: 6px; }
 
-/* Row 1 user area */
+/* user area */
 .user-area { display: flex; align-items: center; gap: 8px; }
 #userBadge {
   font-size: 12px; font-weight: 700; color: #fff;
@@ -87,19 +87,6 @@ body {
   transition: background .15s;
 }
 .btn-logout:hover { background: rgba(220,50,50,.4); border-color: rgba(220,50,50,.5); }
-
-/* Row 2: action bar */
-.topbar-actions {
-  padding: 7px 20px;
-  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-  background: var(--primary-h);
-}
-
-#csvStatus {
-  font-size: 12px; color: rgba(255,255,255,.55);
-  flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-#csvStatus.ok { color: #96e0bb; }
 
 .btn {
   padding: 6px 13px; border-radius: 7px; border: none; font-size: 12.5px;
@@ -218,6 +205,27 @@ td input[type="number"]:hover { border-color: #7dbf99; }
 .cost-val { font-variant-numeric: tabular-nums; font-weight: 600; }
 
 /* ── ADD SKU ──────────────────────────────────────────── */
+.unloading-bar {
+  padding: 8px 16px; background: #f5fbf7; border-top: 1px solid var(--border);
+  display: flex; align-items: center; gap: 10px;
+  font-size: 12.5px; font-weight: 600; color: var(--muted);
+}
+.unloading-bar input {
+  width: 130px; padding: 5px 9px; border: 1px solid var(--border); border-radius: 6px;
+  font-size: 13px; outline: none; color: var(--text);
+}
+.unloading-bar input:focus { border-color: var(--primary); }
+.unloading-bar .cost-val { margin-left: auto; font-weight: 700; color: var(--primary); font-size: 13px; }
+.btn-edit-sku {
+  border: none; background: none; color: var(--muted); cursor: pointer;
+  padding: 1px 4px; font-size: 12px; opacity: .45; line-height: 1;
+}
+.btn-edit-sku:hover { color: var(--primary); opacity: 1; }
+.sku-edit-inp {
+  border: 1px solid var(--border); border-radius: 5px; padding: 3px 7px;
+  font-size: 12.5px; outline: none; color: var(--text);
+}
+.sku-edit-inp:focus { border-color: var(--primary); }
 .add-sku-bar { padding: 10px 16px; background: #edf7f1; border-top: 1px solid var(--border); display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .btn-ghost {
   padding: 5px 13px; border-radius: 7px; border: 1px dashed #7dbf99;
@@ -348,19 +356,26 @@ td input[type="number"]:hover { border-color: #7dbf99; }
 .hist-close:hover { color: #ef4444; }
 #historyList { flex: 1; overflow-y: auto; padding: 8px; }
 .hist-item {
-  padding: 11px 14px; border-radius: 9px; cursor: pointer;
-  border: 1px solid transparent; margin-bottom: 4px;
+  display: flex; align-items: center; gap: 6px;
+  border-radius: 9px; border: 1px solid transparent; margin-bottom: 4px;
   transition: background .12s, border-color .12s;
 }
 .hist-item:hover { background: #edf7f1; border-color: var(--border); }
+.hist-item-body { flex: 1; padding: 10px 12px; cursor: pointer; min-width: 0; }
 .hist-date  { font-size: 13px; font-weight: 700; color: var(--text); }
 .hist-meta  { font-size: 11.5px; color: var(--muted); margin-top: 3px; display: flex; gap: 14px; }
+.hist-del-btn {
+  flex-shrink: 0; padding: 6px 8px; margin-right: 6px;
+  border: none; background: none; color: var(--muted);
+  font-size: 14px; cursor: pointer; border-radius: 6px; opacity: .5;
+  transition: background .12s, opacity .12s;
+}
+.hist-del-btn:hover { background: #fef2f2; color: #ef4444; opacity: 1; }
 .hist-empty { padding: 24px; text-align: center; color: var(--muted); font-size: 13px; }
 
 /* ── RESPONSIVE ───────────────────────────────────────── */
 @media (max-width: 800px) {
-  .topbar-main { padding: 8px 14px; min-height: 48px; gap: 8px; }
-  .topbar-actions { padding: 7px 14px; }
+  .topbar-main { padding: 6px 12px; min-height: 48px; gap: 6px; }
   .field input[type="date"]   { min-width: 120px; }
   .field input[type="number"] { width: 90px; }
   .sumbar { grid-template-columns: repeat(2, 1fr); }
@@ -378,7 +393,7 @@ td input[type="number"]:hover { border-color: #7dbf99; }
   .spacer { display: none; }
   .user-area { margin-left: auto; }
   .btn { padding: 6px 10px; font-size: 12px; }
-  #csvStatus { width: 100%; flex: none; }
+  .tb-actions { flex-wrap: wrap; }
   .si-value { font-size: 16px; }
   .login-box { padding: 28px 22px; }
   th, td { padding: 8px 10px; font-size: 13px; }
@@ -460,11 +475,9 @@ td input[type="number"]:hover { border-color: #7dbf99; }
 
 <!-- ═══════════════════ TOP BAR ═══════════════════ -->
 <div class="topbar">
-
-  <!-- Row 1: brand + date + sale qty + user -->
   <div class="topbar-main">
     <div class="brand"><span class="brand-icon">🌿</span> Organicut <em>Fresh</em></div>
-
+    <span class="tb-sep"></span>
     <div class="topbar-fields">
       <div class="field">
         <label>Date</label>
@@ -475,33 +488,29 @@ td input[type="number"]:hover { border-color: #7dbf99; }
         <input type="number" id="saleQtyInput" placeholder="0" min="0" step="0.01" oninput="recalc()">
       </div>
     </div>
-
     <div class="spacer"></div>
-
+    <div class="tb-actions">
+      <button class="btn btn-upload" onclick="document.getElementById('csvInput').click()" title="Upload attendance CSV">↑ CSV</button>
+      <input type="file" id="csvInput" accept=".csv,.CSV" style="display:none" onchange="onCSVUpload(event)">
+      <button class="btn btn-save-rec" onclick="saveRecord()">💾 Save</button>
+      <div class="export-dd" id="exportDd">
+        <button class="btn btn-success" onclick="toggleExportDd()">↓ Excel ▾</button>
+        <div class="export-dd-menu" id="exportDdMenu">
+          <button onclick="exportExcel();toggleExportDd()">Export Today</button>
+          <button onclick="exportAllRecords();toggleExportDd()">Export All Records</button>
+        </div>
+      </div>
+      <span class="tb-sep"></span>
+      <button class="btn btn-outline" onclick="toggleHistory()" title="Saved records">📋 History</button>
+      <button class="btn btn-outline" onclick="toggleVendorsPanel()" title="Manage KG vendors">⚙ Vendors</button>
+    </div>
+    <span class="tb-sep"></span>
     <div class="user-area">
       <span id="userBadge"></span>
       <button class="btn-manage-users" id="manageUsersBtn" style="display:none" onclick="toggleUsersPanel()">⚙ Users</button>
       <button class="btn-logout" onclick="doLogout()">Logout</button>
     </div>
   </div>
-
-  <!-- Row 2: action buttons -->
-  <div class="topbar-actions">
-    <span id="csvStatus">No file uploaded</span>
-    <button class="btn btn-upload" onclick="document.getElementById('csvInput').click()">↑ Upload CSV</button>
-    <input type="file" id="csvInput" accept=".csv,.CSV" style="display:none" onchange="onCSVUpload(event)">
-    <button class="btn btn-save-rec" onclick="saveRecord()">💾 Save Record</button>
-    <div class="export-dd" id="exportDd">
-      <button class="btn btn-success" onclick="toggleExportDd()">↓ Export Excel ▾</button>
-      <div class="export-dd-menu" id="exportDdMenu">
-        <button onclick="exportExcel();toggleExportDd()">Export Today</button>
-        <button onclick="exportAllRecords();toggleExportDd()">Export All Records</button>
-      </div>
-    </div>
-    <button class="btn btn-outline" onclick="toggleHistory()">📋 History</button>
-    <button class="btn btn-outline" onclick="toggleVendorsPanel()">⚙ Vendors</button>
-  </div>
-
 </div>
 
 <!-- ═══════════════════ SUMMARY BAR ═══════════════════ -->
@@ -678,6 +687,16 @@ const SKU_CFG = {
   ],
 };
 
+// Apply any locally-saved rate overrides for default SKUs
+try {
+  const _ov = JSON.parse(localStorage.getItem('skuRateOverrides') || '{}');
+  Object.entries(_ov).forEach(([key, rate]) => {
+    const sep = key.lastIndexOf(':');
+    const vendor = key.slice(0, sep), idx = parseInt(key.slice(sep + 1));
+    if (SKU_CFG[vendor]?.[idx]) SKU_CFG[vendor][idx][1] = rate;
+  });
+} catch {}
+
 const ATT_VENDORS = ['Krish Enterprises', 'Sai Enterprises', 'SATENDRA SINGH Bhadoriya'];
 let KG_VENDORS = [];  // populated from /api/vendors on init
 
@@ -688,8 +707,9 @@ let KG_VENDORS = [];  // populated from /api/vendors on init
 const attState = {};
 ATT_VENDORS.forEach(v => { attState[v] = { workers: 0, cost: 0 }; });
 
-const kgState    = {};
-const customSKUs = {};
+const kgState        = {};
+const customSKUs     = {};
+const unloadingCosts = {};  // flat ₹ unloading cost per vendor per day
 let activeTab = '';
 let _cachedCSVFile = null;
 
@@ -841,8 +861,9 @@ async function loadKGVendors() {
     const vendors = await api('GET', '/api/vendors');
     KG_VENDORS = vendors.map(v => v.name);
     KG_VENDORS.forEach(v => {
-      if (!kgState[v])    kgState[v]    = new Array((SKU_CFG[v] || []).length).fill(0);
-      if (!customSKUs[v]) customSKUs[v] = [];
+      if (!kgState[v])        kgState[v]        = new Array((SKU_CFG[v] || []).length).fill(0);
+      if (!customSKUs[v])     customSKUs[v]     = [];
+      if (unloadingCosts[v] === undefined) unloadingCosts[v] = 0;
     });
     if (!activeTab || !KG_VENDORS.includes(activeTab)) activeTab = KG_VENDORS[0] || '';
   } catch (e) {
@@ -897,6 +918,72 @@ async function deleteCustomSKU(v, skuId) {
   }
 }
 
+/* ── Custom SKU inline edit ── */
+
+function startEditCustomSKU(v, skuId) {
+  const sku  = customSKUs[v].find(s => s.id === skuId);
+  if (!sku) return;
+  const row  = document.getElementById('custrow_' + vid(v) + '_' + skuId);
+  if (!row) return;
+  const vesc = v.replace(/'/g, "\\'");
+  row.innerHTML = `
+    <td><input class="sku-edit-inp" id="eSN_${skuId}" value="${sku.name.replace(/"/g,'&quot;')}" style="width:160px"></td>
+    <td><input class="sku-edit-inp" id="eSR_${skuId}" type="number" value="${sku.rate}" min="0" step="0.01" style="width:80px"></td>
+    <td colspan="2" class="r" style="white-space:nowrap">
+      <button class="btn-save" onclick="saveCustomSKUEdit('${vesc}',${skuId})">Save</button>
+      <button class="btn-cancel" onclick="refreshPane('${vesc}')">Cancel</button>
+    </td>`;
+  document.getElementById('eSN_' + skuId).focus();
+}
+
+async function saveCustomSKUEdit(v, skuId) {
+  const name = document.getElementById('eSN_' + skuId)?.value.trim();
+  const rate = parseFloat(document.getElementById('eSR_' + skuId)?.value) || 0;
+  if (!name) { showToast('⚠ SKU name cannot be empty.', true); return; }
+  try {
+    const result = await api('PATCH', '/api/sku/' + skuId, { skuName: name, rate });
+    const sku = customSKUs[v].find(s => s.id === skuId);
+    if (sku) { sku.name = result.name; sku.rate = result.rate; }
+    refreshPane(v);
+    recalc();
+    showToast('✓ SKU updated', false);
+  } catch (e) {
+    showToast('⚠ ' + e.message, true);
+  }
+}
+
+/* ── Default SKU rate edit (persisted in localStorage) ── */
+
+function startEditDefaultSKU(v, i) {
+  const row = document.getElementById('defrow_' + vid(v) + '_' + i);
+  if (!row) return;
+  const rate = (SKU_CFG[v] || [])[i]?.[1] ?? 0;
+  const vesc = v.replace(/'/g, "\\'");
+  const rateCell = row.querySelector('#defrate_' + vid(v) + '_' + i);
+  if (rateCell) rateCell.innerHTML =
+    `<input class="sku-edit-inp" id="eDR_${vid(v)}_${i}" type="number" value="${rate}" min="0" step="0.01" style="width:80px"
+       onkeydown="if(event.key==='Enter')saveDefaultSKUEdit('${vesc}',${i});if(event.key==='Escape')refreshPane('${vesc}')">
+     <button class="btn-save" style="margin-left:4px" onclick="saveDefaultSKUEdit('${vesc}',${i})">✓</button>
+     <button class="btn-cancel" onclick="refreshPane('${vesc}')">✕</button>`;
+  document.getElementById('eDR_' + vid(v) + '_' + i)?.focus();
+}
+
+function saveDefaultSKUEdit(v, i) {
+  const inp = document.getElementById('eDR_' + vid(v) + '_' + i);
+  if (!inp) return;
+  const newRate = parseFloat(inp.value) || 0;
+  if (SKU_CFG[v]?.[i]) SKU_CFG[v][i][1] = newRate;
+  // persist overrides in localStorage
+  try {
+    const store = JSON.parse(localStorage.getItem('skuRateOverrides') || '{}');
+    store[v + ':' + i] = newRate;
+    localStorage.setItem('skuRateOverrides', JSON.stringify(store));
+  } catch {}
+  refreshPane(v);
+  recalc();
+  showToast('✓ Rate updated', false);
+}
+
 /* ═══════════════════════════════════════════════════════
    CALCULATIONS
 ═══════════════════════════════════════════════════════ */
@@ -910,7 +997,7 @@ function totalAtt() {
 function vendorKG(v) {
   const defCost  = (SKU_CFG[v] || []).reduce((s, [, rate], i) => s + (kgState[v]?.[i] || 0) * rate, 0);
   const custCost = (customSKUs[v] || []).reduce((s, sku) => s + (sku.qty || 0) * sku.rate, 0);
-  return defCost + custCost;
+  return defCost + custCost + (unloadingCosts[v] || 0);
 }
 
 function totalKG() { return KG_VENDORS.reduce((s, v) => s + vendorKG(v), 0); }
@@ -991,9 +1078,12 @@ function buildPane(v) {
   const vid_ = vid(v);
   const defRows = (SKU_CFG[v] || []).map(([name, rate], i) => {
     const qty = kgState[v][i] || 0, cost = qty * rate;
-    return `<tr>
-      <td class="sku-name">${name}</td>
-      <td class="r rate-cell">₹&nbsp;${rate.toFixed(2)}</td>
+    const vesc = v.replace(/'/g, "\\'");
+    return `<tr id="defrow_${vid_}_${i}">
+      <td class="sku-name">${name}
+        <button class="btn-edit-sku" title="Edit rate" onclick="startEditDefaultSKU('${vesc}',${i})">✎</button>
+      </td>
+      <td class="r rate-cell" id="defrate_${vid_}_${i}">₹&nbsp;${rate.toFixed(2)}</td>
       <td class="r"><input type="number" min="0" step="0.001" value="${qty||''}" placeholder="—"
         data-v="${vid_}" data-type="def" data-i="${i}" data-rate="${rate}" onchange="onKG(this)"></td>
       <td class="r cost-val" id="kc_${vid_}_${i}">${cost>0?fc(cost):'<span class="zero">—</span>'}</td>
@@ -1003,8 +1093,9 @@ function buildPane(v) {
   const custRows = customSKUs[v].map((sku) => {
     const qty = sku.qty || 0, cost = qty * sku.rate;
     const vesc = v.replace(/'/g, "\\'");
-    return `<tr class="custom-sku-row">
+    return `<tr class="custom-sku-row" id="custrow_${vid_}_${sku.id}">
       <td class="sku-name">${sku.name}
+        <button class="btn-edit-sku" title="Edit" onclick="startEditCustomSKU('${vesc}',${sku.id})">✎</button>
         <button class="btn-del" title="Remove" onclick="deleteCustomSKU('${vesc}',${sku.id})">×</button>
       </td>
       <td class="r rate-cell">₹&nbsp;${sku.rate.toFixed(2)}</td>
@@ -1023,6 +1114,12 @@ function buildPane(v) {
         <tfoot><tr class="ft"><td colspan="3">${v} — Total KG Cost</td>
           <td class="r cost-val" id="kgTot_${vid_}">${fc(vendorKG(v))}</td></tr></tfoot>
       </table>
+    </div>
+    <div class="unloading-bar">
+      <span>Unloading Cost (₹)</span>
+      <input type="number" min="0" step="0.01" value="${unloadingCosts[v]||''}" placeholder="0.00"
+        data-v="${vid_}" onchange="onUnloadingCost(this)">
+      <span class="cost-val" id="kgUnload_${vid_}">${(unloadingCosts[v]||0)>0?fc(unloadingCosts[v]):''}</span>
     </div>
     <div class="add-sku-bar">
       <div id="addSkuForm_${vid_}" class="add-sku-form" style="display:none">
@@ -1098,6 +1195,17 @@ function onKG(input) {
   recalc();
 }
 
+function onUnloadingCost(input) {
+  const rawV = KG_VENDORS.find(k => vid(k) === input.dataset.v);
+  if (!rawV) return;
+  unloadingCosts[rawV] = parseFloat(input.value) || 0;
+  const label = document.getElementById('kgUnload_' + input.dataset.v);
+  if (label) label.textContent = unloadingCosts[rawV] > 0 ? fc(unloadingCosts[rawV]) : '';
+  const totCell = document.getElementById('kgTot_' + input.dataset.v);
+  if (totCell) totCell.textContent = fc(vendorKG(rawV));
+  recalc();
+}
+
 /* ═══════════════════════════════════════════════════════
    CSV UPLOAD
 ═══════════════════════════════════════════════════════ */
@@ -1134,9 +1242,7 @@ async function onCSVUpload(e) {
   fd.append('file', file);
   if (date) fd.append('date', date);
 
-  const st = document.getElementById('csvStatus');
-  st.textContent = 'Uploading…';
-  st.className   = '';
+  showToast('⏳ Uploading ' + file.name + '…', false);
 
   try {
     const result = await api('POST', '/api/upload/csv', fd);
@@ -1149,8 +1255,7 @@ async function onCSVUpload(e) {
       attState[v].cost    = r2(data.totalCost);
     });
 
-    st.textContent = '✓ ' + file.name + ' (' + result.totalRows + ' rows)';
-    st.className   = 'ok';
+    showToast('✓ ' + file.name + ' — ' + result.totalRows + ' rows loaded', false);
 
     updateCSVMeta(result);
     renderAtt();
@@ -1253,6 +1358,8 @@ async function saveRecord() {
       if ((sku.qty || 0) > 0)
         kgEntries.push({ vendorName: v, skuName: sku.name, rate: sku.rate, qty: sku.qty, cost: r2(sku.qty * sku.rate) });
     });
+    const ul = unloadingCosts[v] || 0;
+    if (ul > 0) kgEntries.push({ vendorName: v, skuName: '__UNLOADING__', rate: 1, qty: ul, cost: ul });
   });
 
   try {
@@ -1289,6 +1396,10 @@ function applyRecord(record) {
   (record.kgEntries || []).forEach(e => {
     const v   = e.vendor_name;
     const qty = parseFloat(e.qty) || 0;
+    if (e.sku_name === '__UNLOADING__') {
+      if (v in unloadingCosts) unloadingCosts[v] = qty;
+      return;
+    }
     const idx = SKU_CFG[v]?.findIndex(([name]) => name === e.sku_name);
     if (idx >= 0) {
       kgState[v][idx] = qty;
@@ -1308,7 +1419,10 @@ function applyRecord(record) {
 }
 
 function customSKUs_resetQty() {
-  KG_VENDORS.forEach(v => { customSKUs[v].forEach(s => { s.qty = 0; }); });
+  KG_VENDORS.forEach(v => {
+    customSKUs[v].forEach(s => { s.qty = 0; });
+    unloadingCosts[v] = 0;
+  });
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -1334,12 +1448,16 @@ async function loadHistory() {
     list.innerHTML = records.map(r => {
       const d = new Date(r.record_date);
       const dateStr = d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
-      return `<div class="hist-item" onclick="loadHistoryRecord('${r.record_date}')">
-        <div class="hist-date">${dateStr}</div>
-        <div class="hist-meta">
-          <span>Total: ${fc(parseFloat(r.total_cost))}</span>
-          <span>MPK: ${parseFloat(r.mpk) > 0 ? fn(parseFloat(r.mpk)) : '—'}</span>
+      const cleanDate = (r.record_date + '').slice(0, 10);
+      return `<div class="hist-item">
+        <div class="hist-item-body" onclick="loadHistoryRecord('${cleanDate}')">
+          <div class="hist-date">${dateStr}</div>
+          <div class="hist-meta">
+            <span>Total: ${fc(parseFloat(r.total_cost))}</span>
+            <span>MPK: ${parseFloat(r.mpk) > 0 ? fn(parseFloat(r.mpk)) : '—'}</span>
+          </div>
         </div>
+        <button class="hist-del-btn" title="Delete this record" onclick="deleteHistoryRecord('${cleanDate}')">🗑</button>
       </div>`;
     }).join('');
   } catch (e) {
@@ -1357,6 +1475,17 @@ async function loadHistoryRecord(date) {
     showToast('✓ Loaded record for ' + cleanDate, false);
   } catch (e) {
     showToast('⚠ Failed to load record: ' + e.message, true);
+  }
+}
+
+async function deleteHistoryRecord(date) {
+  if (!confirm('Delete record for ' + date + '?\nThis cannot be undone.')) return;
+  try {
+    await api('DELETE', '/api/records/' + date);
+    showToast('✓ Deleted record for ' + date, false);
+    loadHistory();
+  } catch (e) {
+    showToast('⚠ ' + e.message, true);
   }
 }
 
@@ -1415,6 +1544,8 @@ function exportExcel() {
     customSKUs[v].forEach(sku => {
       if ((sku.qty || 0) > 0) kgRows.push([date, v, sku.name + ' *', sku.rate, sku.qty, r2(sku.qty * sku.rate)]);
     });
+    const ul = unloadingCosts[v] || 0;
+    if (ul > 0) kgRows.push([date, v, 'Unloading Cost', '', '', r2(ul)]);
   });
   const ws3 = XLSX.utils.aoa_to_sheet(kgRows);
   ws3['!cols'] = [12,14,28,12,10,12].map(w => ({ wch: w }));
@@ -1488,8 +1619,12 @@ async function exportAllRecords() {
       });
 
       (detail.kgEntries || []).forEach(e => {
-        kgRows.push([date, e.vendor_name, e.sku_name,
-          parseFloat(e.rate) || 0, parseFloat(e.qty) || 0, r2(parseFloat(e.cost) || 0)]);
+        if (e.sku_name === '__UNLOADING__') {
+          kgRows.push([date, e.vendor_name, 'Unloading Cost', '', '', r2(parseFloat(e.cost) || 0)]);
+        } else {
+          kgRows.push([date, e.vendor_name, e.sku_name,
+            parseFloat(e.rate) || 0, parseFloat(e.qty) || 0, r2(parseFloat(e.cost) || 0)]);
+        }
       });
     }
 
@@ -1550,8 +1685,9 @@ async function addVendor() {
     const v = await api('POST', '/api/vendors', { name });
     document.getElementById('newVendorName').value = '';
     KG_VENDORS.push(v.name);
-    kgState[v.name]    = new Array((SKU_CFG[v.name] || []).length).fill(0);
-    customSKUs[v.name] = [];
+    kgState[v.name]        = new Array((SKU_CFG[v.name] || []).length).fill(0);
+    customSKUs[v.name]     = [];
+    unloadingCosts[v.name] = 0;
     activeTab = v.name;
     renderKGTabs();
     recalc();
@@ -1569,6 +1705,7 @@ async function deleteVendor(id, name) {
     KG_VENDORS = KG_VENDORS.filter(v => v !== name);
     delete kgState[name];
     delete customSKUs[name];
+    delete unloadingCosts[name];
     if (activeTab === name) activeTab = KG_VENDORS[0] || '';
     renderKGTabs();
     recalc();

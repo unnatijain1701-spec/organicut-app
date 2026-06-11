@@ -45,6 +45,31 @@ router.post('/', async (req, res) => {
   }
 });
 
+// PATCH /api/sku/:id  — update name and/or rate
+router.patch('/:id', async (req, res) => {
+  const { skuName, rate } = req.body || {};
+  if (!skuName && rate == null) {
+    return res.status(400).json({ error: 'skuName or rate is required' });
+  }
+  try {
+    const sets = [], vals = [];
+    if (skuName) { sets.push(`sku_name = $${vals.length + 1}`); vals.push(skuName.trim()); }
+    if (rate != null) { sets.push(`rate = $${vals.length + 1}`); vals.push(parseFloat(rate)); }
+    vals.push(req.params.id);
+    const { rows } = await db.query(
+      `UPDATE custom_skus SET ${sets.join(', ')} WHERE id = $${vals.length} RETURNING id, vendor_name, sku_name, rate`,
+      vals
+    );
+    if (!rows.length) return res.status(404).json({ error: 'SKU not found' });
+    const r = rows[0];
+    res.json({ id: r.id, name: r.sku_name, rate: parseFloat(r.rate) });
+  } catch (e) {
+    if (e.code === '23505') return res.status(409).json({ error: 'SKU name already exists for this vendor' });
+    console.error(e);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // DELETE /api/sku/:id
 router.delete('/:id', async (req, res) => {
   try {
