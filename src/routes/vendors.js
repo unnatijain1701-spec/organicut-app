@@ -3,10 +3,9 @@ const db = require('../db');
 
 const router = express.Router();
 
-// GET /api/vendors
 router.get('/', async (req, res) => {
   try {
-    const { rows } = await db.query('SELECT id, name FROM kg_vendors ORDER BY sort_order, id');
+    const { rows } = await db.query('SELECT id, name FROM kg_vendors ORDER BY display_order, id');
     res.json(rows);
   } catch (e) {
     console.error(e);
@@ -14,12 +13,9 @@ router.get('/', async (req, res) => {
   }
 });
 
-// POST /api/vendors
 router.post('/', async (req, res) => {
   const { name } = req.body || {};
-  if (!name || !name.trim()) {
-    return res.status(400).json({ error: 'Vendor name is required' });
-  }
+  if (!name || !name.trim()) return res.status(400).json({ error: 'Vendor name is required' });
   try {
     const { rows } = await db.query(
       'INSERT INTO kg_vendors (name) VALUES ($1) RETURNING id, name',
@@ -33,7 +29,6 @@ router.post('/', async (req, res) => {
   }
 });
 
-// DELETE /api/vendors/:id
 router.delete('/:id', async (req, res) => {
   try {
     const { rowCount } = await db.query('DELETE FROM kg_vendors WHERE id = $1', [req.params.id]);

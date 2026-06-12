@@ -7,8 +7,6 @@ CREATE TABLE IF NOT EXISTS users (
   created_at    TIMESTAMPTZ DEFAULT NOW()
 );
 
-ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(20) NOT NULL DEFAULT 'user';
-
 CREATE TABLE IF NOT EXISTS daily_records (
   id              SERIAL PRIMARY KEY,
   record_date     DATE UNIQUE NOT NULL,
@@ -40,25 +38,31 @@ CREATE TABLE IF NOT EXISTS vendor_kg_entries (
   cost        NUMERIC(12,2) DEFAULT 0
 );
 
+-- Custom SKUs added by the user (beyond the hardcoded defaults)
+CREATE TABLE IF NOT EXISTS custom_skus (
+  id            SERIAL PRIMARY KEY,
+  vendor_name   VARCHAR(200) NOT NULL,
+  sku_name      VARCHAR(200) NOT NULL,
+  rate          NUMERIC(10,4) DEFAULT 0,
+  display_order INTEGER DEFAULT 0,
+  created_at    TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(vendor_name, sku_name)
+);
+
 -- KG vendors (dynamic list, seeded with defaults)
 CREATE TABLE IF NOT EXISTS kg_vendors (
   id         SERIAL PRIMARY KEY,
   name       VARCHAR(200) UNIQUE NOT NULL,
-  sort_order INTEGER DEFAULT 0,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-INSERT INTO kg_vendors (name, sort_order) VALUES
-  ('Ashok', 1), ('RS', 2), ('MP', 3), ('RJ', 4), ('BL Unloading', 5)
-ON CONFLICT (name) DO NOTHING;
+-- Safe migration: add display_order if table existed without it
+ALTER TABLE kg_vendors ADD COLUMN IF NOT EXISTS display_order INTEGER DEFAULT 0;
 
--- Custom SKUs added by the user (beyond the hardcoded defaults)
-CREATE TABLE IF NOT EXISTS custom_skus (
-  id           SERIAL PRIMARY KEY,
-  vendor_name  VARCHAR(200) NOT NULL,
-  sku_name     VARCHAR(200) NOT NULL,
-  rate         NUMERIC(10,4) DEFAULT 0,
-  display_order INTEGER DEFAULT 0,
-  created_at   TIMESTAMPTZ DEFAULT NOW(),
-  UNIQUE(vendor_name, sku_name)
-);
+INSERT INTO kg_vendors (name, display_order) VALUES
+  ('Ashok',        1),
+  ('RS',           2),
+  ('MP',           3),
+  ('RJ',           4),
+  ('BL Unloading', 5)
+ON CONFLICT (name) DO NOTHING;

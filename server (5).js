@@ -1,7 +1,7 @@
 require('dotenv').config();
-const express    = require('express');
-const path       = require('path');
-const fs         = require('fs');
+const express      = require('express');
+const path         = require('path');
+const fs           = require('fs');
 const cookieParser = require('cookie-parser');
 
 const db            = require('./src/db');
@@ -24,12 +24,9 @@ app.use('/api/upload',  authenticateToken, uploadRoutes);
 app.use('/api/sku',     authenticateToken, skuRoutes);
 app.use('/api/vendors', authenticateToken, vendorRoutes);
 
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
+app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 
 async function start() {
-  // Auto-run schema migrations so Railway deploys work without a manual step
   const schema = fs.readFileSync(path.join(__dirname, 'src/db/schema.sql'), 'utf8');
   await db.query(schema);
   console.log('Database schema verified.');
