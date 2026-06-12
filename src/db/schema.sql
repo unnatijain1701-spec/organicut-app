@@ -7,6 +7,11 @@ CREATE TABLE IF NOT EXISTS users (
   created_at    TIMESTAMPTZ DEFAULT NOW()
 );
 
+ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(20) DEFAULT 'user';
+
+-- Make the first-ever user (lowest id) the admin
+UPDATE users SET role = 'admin' WHERE id = (SELECT MIN(id) FROM users);
+
 CREATE TABLE IF NOT EXISTS daily_records (
   id              SERIAL PRIMARY KEY,
   record_date     DATE UNIQUE NOT NULL,
@@ -38,7 +43,6 @@ CREATE TABLE IF NOT EXISTS vendor_kg_entries (
   cost        NUMERIC(12,2) DEFAULT 0
 );
 
--- Custom SKUs added by the user (beyond the hardcoded defaults)
 CREATE TABLE IF NOT EXISTS custom_skus (
   id            SERIAL PRIMARY KEY,
   vendor_name   VARCHAR(200) NOT NULL,
@@ -49,14 +53,12 @@ CREATE TABLE IF NOT EXISTS custom_skus (
   UNIQUE(vendor_name, sku_name)
 );
 
--- KG vendors (dynamic list, seeded with defaults)
 CREATE TABLE IF NOT EXISTS kg_vendors (
   id         SERIAL PRIMARY KEY,
   name       VARCHAR(200) UNIQUE NOT NULL,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Safe migration: add display_order if table existed without it
 ALTER TABLE kg_vendors ADD COLUMN IF NOT EXISTS display_order INTEGER DEFAULT 0;
 
 INSERT INTO kg_vendors (name, display_order) VALUES
