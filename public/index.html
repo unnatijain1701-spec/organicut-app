@@ -146,6 +146,9 @@ body {
 .btn-save-rec { background: var(--orange); color: #fff; }
 .btn-success  { background: var(--accent);  color: #fff; }
 .btn-outline  { background: rgba(255,255,255,.1); color: rgba(255,255,255,.9); border: 1px solid rgba(255,255,255,.22); }
+/* Buttons on light card backgrounds */
+.btn-card-upload { background: var(--primary); color: #fff; }
+.btn-card-outline { background: transparent; color: var(--primary); border: 1px solid var(--primary); font-weight: 600; }
 
 .export-dd { position: relative; }
 .export-dd-menu {
@@ -754,6 +757,7 @@ tr.dash-row-alt td { background: #f7fdf9; }
     <div class="spacer"></div>
     <div class="tb-actions">
       <button class="btn btn-save-rec" onclick="saveRecord()">💾 Save</button>
+      <button class="btn btn-outline" id="reloadBtn" onclick="reloadTodayData()" title="Pull latest saved data for this date">🔄</button>
       <div class="export-dd" id="exportDd">
         <button class="btn btn-success" onclick="toggleExportDd()">↓ Excel ▾</button>
         <div class="export-dd-menu" id="exportDdMenu">
@@ -797,14 +801,14 @@ tr.dash-row-alt td { background: #f7fdf9; }
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
         <span id="csvDateChips" style="display:none;font-size:12px;color:#4a7a5e"></span>
         <span class="unmapped-note" id="unmappedNote" style="display:none"></span>
-        <button class="btn btn-upload" onclick="document.getElementById('csvInput').click()" title="Upload biometric CSV">📂 Upload CSV</button>
+        <button class="btn btn-card-upload" onclick="document.getElementById('csvInput').click()" title="Upload biometric CSV">📂 Upload CSV</button>
         <input type="file" id="csvInput" accept=".csv,.CSV" style="display:none" onchange="onCSVUpload(event)">
-        <button class="btn btn-outline" onclick="showAddContractorForm()" id="addContractorBtn">+ Add manually</button>
+        <button class="btn btn-card-outline" onclick="showAddContractorForm()" id="addContractorBtn">+ Add manually</button>
         <span id="addContractorForm" style="display:none;gap:6px;align-items:center">
           <input id="newContractorName" type="text" placeholder="Contractor name" class="input"
             style="width:180px" onkeydown="if(event.key==='Enter')confirmAddContractor();if(event.key==='Escape')cancelAddContractor();">
           <button class="btn btn-save-rec" onclick="confirmAddContractor()">Add</button>
-          <button class="btn btn-outline" onclick="cancelAddContractor()">Cancel</button>
+          <button class="btn btn-card-outline" onclick="cancelAddContractor()">Cancel</button>
         </span>
       </div>
     </div>
@@ -1366,7 +1370,7 @@ function renderUnloadingTable() {
   });
 
   // Header: Activity | Rate/kg | [VendorA qty | VendorA cost] | [VendorB qty | VendorB cost] ...
-  const headerCols = unloadVendors.map(v => `<th class="r" colspan="2" style="text-align:center;background:#edf7f1">${v}</th>`).join('');
+  const headerCols = unloadVendors.map(v => `<th colspan="2" style="text-align:center;background:#d4eede;color:var(--primary);font-size:13px;font-weight:800;letter-spacing:.4px;padding:10px 12px">${v.toUpperCase()}</th>`).join('');
 
   const dataRows = allActivities.map(actName => {
     // Rate from first vendor that has this activity
@@ -1730,6 +1734,16 @@ async function silentLoadRecord(date) {
   } catch {
     // 404 = no record yet, fine
   }
+}
+
+async function reloadTodayData() {
+  const date = document.getElementById('dateInput').value;
+  if (!date) { showToast('⚠ Select a date first', true); return; }
+  const btn = document.getElementById('reloadBtn');
+  if (btn) { btn.textContent = '⏳'; btn.disabled = true; }
+  _freshCSVLoaded = false;
+  await silentLoadRecord(date);
+  if (btn) { btn.textContent = '🔄'; btn.disabled = false; }
 }
 
 function applyRecord(record) {
