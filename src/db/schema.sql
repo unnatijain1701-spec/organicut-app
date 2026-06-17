@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS users (
 
 ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(20) DEFAULT 'user';
 
--- Make the first-ever user (lowest id) the admin
+-- First user ever created becomes admin
 UPDATE users SET role = 'admin' WHERE id = (SELECT MIN(id) FROM users);
 
 CREATE TABLE IF NOT EXISTS daily_records (
@@ -51,6 +51,15 @@ CREATE TABLE IF NOT EXISTS custom_skus (
   display_order INTEGER DEFAULT 0,
   created_at    TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE(vendor_name, sku_name)
+);
+
+-- Persists default SKU rate edits across devices (replaces localStorage)
+CREATE TABLE IF NOT EXISTS sku_rate_overrides (
+  vendor_name VARCHAR(200) NOT NULL,
+  sku_index   INTEGER NOT NULL,
+  rate        NUMERIC(10,4) DEFAULT 0,
+  updated_at  TIMESTAMPTZ DEFAULT NOW(),
+  PRIMARY KEY (vendor_name, sku_index)
 );
 
 CREATE TABLE IF NOT EXISTS kg_vendors (

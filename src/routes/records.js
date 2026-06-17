@@ -18,30 +18,63 @@ router.get('/', async (req, res) => {
   }
 });
 
-// GET /api/records/analytics  — summary data for admin dashboard
+// GET /api/records/export  — ALL records with full detail in 3 queries (no N+1)
+router.get('/export', async (req, res) => {
+  try {
+    const { rows: records } = await db.query(
+      'SELECT * FROM daily_records ORDER BY record_date ASC'
+    );
+    const { rows: attendance } = await db.query(`
+      SELECT ca.record_id, ca.contractor_name, ca.workers, ca.cost
+      FROM contractor_attendance ca
+    `);
+    const { rows: kgEntries } = await db.query(`
+      SELECT vke.record_id, vke.vendor_name, vke.sku_name, vke.rate, vke.qty, vke.cost
+      FROM vendor_kg_entries vke
+    `);
+
+    const attMap = {};
+    attendance.forEach(a => {
+      if (!attMap[a.record_id]) attMap[a.record_id] = [];
+      attMap[a.record_id].push(a);
+    });
+    const kgMap = {};
+    kgEntries.forEach(e => {
+      if (!kgMap[e.record_id]) kgMap[e.record_id] = [];
+      kgMap[e.record_id].push(e);
+    });
+
+    const result = records.map(r => ({
+      ...r,
+      attendance: attMap[r.id] || [],
+      kgEntries:  kgMap[r.id]  || [],
+    }));
+
+    res.json(result);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// GET /api/records/analytics  — monthly + daily aggregates for dashboard
 router.get('/analytics', async (req, res) => {
   try {
     const { rows: daily } = await db.query(`
-      SELECT
-        record_date::text AS date,
-        mpk, total_cost, attendance_cost, kg_cost, sale_qty
-      FROM daily_records
-      ORDER BY record_date ASC
+      SELECT record_date AS date, attendance_cost, kg_cost, total_cost, sale_qty, mpk
+      FROM daily_records ORDER BY record_date ASC
     `);
-
     const { rows: monthly } = await db.query(`
       SELECT
         TO_CHAR(record_date, 'YYYY-MM') AS month,
-        ROUND(AVG(mpk)::numeric, 4)             AS avg_mpk,
-        ROUND(AVG(total_cost)::numeric, 2)       AS avg_total,
-        ROUND(AVG(attendance_cost)::numeric, 2)  AS avg_attendance_cost,
-        ROUND(AVG(kg_cost)::numeric, 2)          AS avg_kg_cost,
-        COUNT(*)                                 AS count
+        AVG(mpk)::NUMERIC(10,4)             AS avg_mpk,
+        AVG(attendance_cost)::NUMERIC(12,2) AS avg_attendance_cost,
+        AVG(kg_cost)::NUMERIC(12,2)         AS avg_kg_cost,
+        COUNT(*)                            AS days
       FROM daily_records
       GROUP BY TO_CHAR(record_date, 'YYYY-MM')
       ORDER BY month ASC
     `);
-
     res.json({ daily, monthly });
   } catch (e) {
     console.error(e);
@@ -111,7 +144,7 @@ router.post('/', async (req, res) => {
 
     await client.query('DELETE FROM vendor_kg_entries WHERE record_id = $1', [recordId]);
     for (const e of (kgEntries || [])) {
-      if (!(e.qty > 0)) continue; // skip zero-qty rows
+      if (!(e.qty > 0)) continue;
       await client.query(
         'INSERT INTO vendor_kg_entries (record_id, vendor_name, sku_name, rate, qty, cost) VALUES ($1,$2,$3,$4,$5,$6)',
         [recordId, e.vendorName, e.skuName, e.rate ?? 0, e.qty, e.cost ?? 0]

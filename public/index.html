@@ -673,6 +673,7 @@ tr.dash-row-alt td { background: #f7fdf9; }
         <div class="export-dd-menu" id="exportDdMenu">
           <button onclick="exportExcel();toggleExportDd()">Export Today</button>
           <button onclick="exportAllRecords();toggleExportDd()">Export All Records</button>
+          <button onclick="downloadBackup();toggleExportDd()">Download Backup (JSON)</button>
         </div>
       </div>
     </div>
@@ -867,15 +868,7 @@ const SKU_CFG = {
   ],
 };
 
-// Apply any locally-saved rate overrides for default SKUs
-try {
-  const _ov = JSON.parse(localStorage.getItem('skuRateOverrides') || '{}');
-  Object.entries(_ov).forEach(([key, rate]) => {
-    const sep = key.lastIndexOf(':');
-    const vendor = key.slice(0, sep), idx = parseInt(key.slice(sep + 1));
-    if (SKU_CFG[vendor]?.[idx]) SKU_CFG[vendor][idx][1] = rate;
-  });
-} catch {}
+// SKU rate overrides are loaded from DB in initApp() via loadSKURateOverrides()
 
 const ATT_VENDORS = ['Krish Enterprises', 'Sai Enterprises', 'SATENDRA SINGH Bhadoriya'];
 let KG_VENDORS = [];  // populated from /api/vendors on init
@@ -1026,12 +1019,26 @@ async function doLogout() {
    INIT
 ═══════════════════════════════════════════════════════ */
 
+async function loadSKURateOverrides() {
+  try {
+    const overrides = await api('GET', '/api/sku/rates');
+    overrides.forEach(({ vendor_name, sku_index, rate }) => {
+      if (SKU_CFG[vendor_name]?.[sku_index]) {
+        SKU_CFG[vendor_name][sku_index][1] = parseFloat(rate);
+      }
+    });
+  } catch (e) {
+    console.error('Failed to load SKU rate overrides:', e.message);
+  }
+}
+
 async function initApp() {
   const d = new Date();
   const pad = n => String(n).padStart(2, '0');
   document.getElementById('dateInput').value =
     d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
 
+  await loadSKURateOverrides();
   await loadKGVendors();
   await loadCustomSKUs();
   renderAtt();
@@ -1140,7 +1147,7 @@ async function saveCustomSKUEdit(v, skuId) {
   }
 }
 
-/* ── Default SKU rate edit (persisted in localStorage) ── */
+/* ── Default SKU rate edit (persisted in DB via /api/sku/rates) ── */
 
 function startEditDefaultSKU(v, i) {
   const row = document.getElementById('defrow_' + vid(v) + '_' + i);
@@ -1156,17 +1163,16 @@ function startEditDefaultSKU(v, i) {
   document.getElementById('eDR_' + vid(v) + '_' + i)?.focus();
 }
 
-function saveDefaultSKUEdit(v, i) {
+async function saveDefaultSKUEdit(v, i) {
   const inp = document.getElementById('eDR_' + vid(v) + '_' + i);
   if (!inp) return;
   const newRate = parseFloat(inp.value) || 0;
   if (SKU_CFG[v]?.[i]) SKU_CFG[v][i][1] = newRate;
-  // persist overrides in localStorage
   try {
-    const store = JSON.parse(localStorage.getItem('skuRateOverrides') || '{}');
-    store[v + ':' + i] = newRate;
-    localStorage.setItem('skuRateOverrides', JSON.stringify(store));
-  } catch {}
+    await api('POST', '/api/sku/rates', { vendorName: v, skuIndex: i, rate: newRate });
+  } catch (e) {
+    console.error('Failed to save rate override:', e.message);
+  }
   refreshPane(v);
   recalc();
   showToast('✓ Rate updated', false);
@@ -1799,19 +1805,18 @@ async function exportAllRecords() {
   }
   showToast('⏳ Fetching all records…', false);
   try {
-    const records = await api('GET', '/api/records');
+    const records = await api('GET', '/api/records/export');
     if (!records.length) { showToast('⚠ No records found.', true); return; }
-
-    records.sort((a, b) => a.record_date.localeCompare(b.record_date));
 
     const summaryRows = [['Date','Attendance Cost','KG Cost','Total Cost','Sale Qty (kg)','MPK',
       'Krish Cost','Sai Cost','SSB Cost','Ashok KG','MP KG','RJ KG','BL KG','RS KG']];
     const attRows = [['Date','Contractor','Workers','Cost (₹)']];
     const kgRows  = [['Date','Vendor','SKU','Rate (₹/kg)','Qty (kg)','Cost (₹)']];
 
-    for (const rec of records) {
-      const date   = rec.record_date;
-      const detail = await api('GET', '/api/records/' + date);
+    for (const detail of records) {
+      const date = typeof detail.record_date === 'string'
+        ? detail.record_date.slice(0, 10)
+        : detail.record_date;
 
       const getAtt = name => {
         const a = (detail.attendance || []).find(x => x.contractor_name === name);
@@ -1868,6 +1873,23 @@ async function exportAllRecords() {
     showToast('✓ Exported ' + records.length + ' record' + (records.length === 1 ? '' : 's'), false);
   } catch (e) {
     showToast('⚠ Export failed: ' + e.message, true);
+  }
+}
+
+async function downloadBackup() {
+  showToast('⏳ Preparing backup…', false);
+  try {
+    const records = await api('GET', '/api/records/export');
+    const blob = new Blob([JSON.stringify(records, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const date = new Date().toISOString().slice(0, 10);
+    a.href = url; a.download = 'Organicut_Backup_' + date + '.json';
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast('✓ Backup downloaded (' + records.length + ' records)', false);
+  } catch (e) {
+    showToast('⚠ Backup failed: ' + e.message, true);
   }
 }
 
@@ -2212,3 +2234,7 @@ checkAuth();
 </script>
 </body>
 </html>
+
+
+
+Check this code once, how is it different from your old index.html
