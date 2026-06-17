@@ -213,6 +213,21 @@ td input[type="number"]:hover { border-color: #7dbf99; }
 .tab-pane { display: none; }
 .tab-pane.active { display: block; }
 
+/* ── KG CATEGORY TABS ─────────────────────────────────── */
+.kg-cat-tabs {
+  display: flex; background: #e4f3ea; border-bottom: 2px solid var(--border); padding: 0 18px; gap: 2px;
+}
+.kg-cat-btn {
+  padding: 12px 22px; font-size: 12px; font-weight: 700; color: var(--muted);
+  cursor: pointer; border: none; background: none;
+  border-bottom: 3px solid transparent; margin-bottom: -2px; white-space: nowrap;
+  text-transform: uppercase; letter-spacing: .55px;
+  transition: color .15s, border-color .15s; outline: none;
+}
+.kg-cat-btn:hover { color: var(--text); }
+.kg-cat-btn.active { color: var(--primary); border-bottom-color: var(--primary); }
+.unload-table th[colspan] { text-align: center; background: #edf7f1; }
+
 /* ── MISC ─────────────────────────────────────────────── */
 .sku-name { color: #234d34; }
 .rate-cell { color: var(--muted); font-variant-numeric: tabular-nums; }
@@ -494,6 +509,19 @@ tr.dash-row-alt td { background: #f7fdf9; }
   .login-box { padding: 28px 22px; }
   th, td { padding: 8px 10px; font-size: 13px; }
 }
+/* ── Vendors panel — per-vendor SKU management ── */
+.vendor-section { border: 1px solid var(--line,#e6efe9); border-radius: 10px; margin-bottom: 10px; overflow: hidden; }
+.vendor-section-header { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: var(--bg,#f3faf6); }
+.vendor-section-name { font-weight: 700; font-size: 14px; color: var(--text,#102219); }
+.vendor-skus { padding: 6px 14px 12px; background: #fff; }
+.panel-sku-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid #f0f5f2; font-size: 13px; }
+.panel-sku-row:last-of-type { border-bottom: none; }
+.panel-sku-name { flex: 1; }
+.panel-sku-rate { color: var(--muted,#6c8175); font-size: 12px; min-width: 72px; text-align: right; }
+.panel-add-sku-form { display: flex; align-items: center; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+.panel-add-sku-form input { border: 1px solid var(--line,#e6efe9); border-radius: 6px; padding: 5px 9px; font-size: 12px; outline: none; }
+.panel-add-sku-form input:focus { border-color: var(--primary,#1e6b45); }
+.no-custom-skus { font-size: 12px; color: var(--muted,#6c8175); padding: 4px 0 6px; }
 </style>
 </head>
 <body>
@@ -656,7 +684,7 @@ tr.dash-row-alt td { background: #f7fdf9; }
     <div class="topbar-fields">
       <div class="field">
         <label>Date</label>
-        <input type="date" id="dateInput" onchange="recalc(); tryReprocessCSV();">
+        <input type="date" id="dateInput" onchange="_freshCSVLoaded=false; recalc(); tryReprocessCSV();">
       </div>
       <div class="field">
         <label>Sale&nbsp;Qty&nbsp;(kg)</label>
@@ -740,14 +768,32 @@ tr.dash-row-alt td { background: #f7fdf9; }
         </tfoot>
       </table>
     </div>
+    <div style="margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-outline" onclick="showAddContractorForm()" id="addContractorBtn">+ Add contractor</button>
+      <span id="addContractorForm" style="display:none;gap:6px;align-items:center">
+        <input id="newContractorName" type="text" placeholder="Contractor name" class="input"
+          style="width:200px" onkeydown="if(event.key==='Enter')confirmAddContractor();if(event.key==='Escape')cancelAddContractor();">
+        <button class="btn btn-save-rec" onclick="confirmAddContractor()">Add</button>
+        <button class="btn btn-outline" onclick="cancelAddContractor()">Cancel</button>
+      </span>
+    </div>
   </div>
 
   <div class="card">
     <div class="card-head">
       <span class="card-title">Per KG Cost — manual entry by vendor</span>
     </div>
-    <div class="tabs" id="kgTabNav"></div>
-    <div id="kgTabPanes"></div>
+    <div class="kg-cat-tabs">
+      <button class="kg-cat-btn active" id="kgCatBtnUnloading" onclick="switchKGCat('unloading')">Loading &amp; Unloading</button>
+      <button class="kg-cat-btn" id="kgCatBtnProcessing" onclick="switchKGCat('processing')">SKU Processing</button>
+    </div>
+    <div id="kgCatUnloading">
+      <div id="unloadingTableWrap"></div>
+    </div>
+    <div id="kgCatProcessing" style="display:none">
+      <div class="tabs" id="kgTabNav"></div>
+      <div id="kgTabPanes"></div>
+    </div>
   </div>
 </div>
 
@@ -883,7 +929,9 @@ const kgState        = {};
 const customSKUs     = {};
 const unloadingCosts = {};  // flat ₹ unloading cost per vendor per day
 let activeTab = '';
+let activeKGCat = 'unloading';
 let _cachedCSVFile = null;
+let _freshCSVLoaded = false;  // true immediately after CSV upload; prevents saved record from overwriting attendance
 
 /* ═══════════════════════════════════════════════════════
    API HELPER
@@ -1080,70 +1128,32 @@ async function loadCustomSKUs() {
   }
 }
 
-async function confirmAddSKU(v) {
-  const vid_ = vid(v);
-  const name = document.getElementById('addSkuName_' + vid_).value.trim();
-  const rate = parseFloat(document.getElementById('addSkuRate_' + vid_).value) || 0;
-  if (!name) { showToast('⚠ Please enter a SKU name.', true); return; }
-  try {
-    const result = await api('POST', '/api/sku', { vendorName: v, skuName: name, rate });
-    customSKUs[v].push({ id: result.id, name: result.name, rate: result.rate, qty: 0 });
-    cancelAddSKU(v);
-    refreshPane(v);
-    recalc();
-    showToast(`✓ Added "${name}" to ${v}`, false);
-  } catch (e) {
-    showToast('⚠ ' + e.message, true);
-  }
+
+/* ── Manual contractor add / remove ── */
+
+function showAddContractorForm() {
+  const form = document.getElementById('addContractorForm');
+  form.style.display = 'inline-flex';
+  document.getElementById('addContractorBtn').style.display = 'none';
+  document.getElementById('newContractorName').focus();
 }
-
-async function deleteCustomSKU(v, skuId) {
-  const sku = customSKUs[v].find(s => s.id === skuId);
-  if (!sku) return;
-  if (!confirm(`Remove "${sku.name}" from ${v}?`)) return;
-  try {
-    await api('DELETE', `/api/sku/${skuId}`);
-    const idx = customSKUs[v].findIndex(s => s.id === skuId);
-    if (idx >= 0) customSKUs[v].splice(idx, 1);
-    refreshPane(v);
-    recalc();
-  } catch (e) {
-    showToast('⚠ ' + e.message, true);
-  }
+function cancelAddContractor() {
+  document.getElementById('addContractorForm').style.display = 'none';
+  document.getElementById('addContractorBtn').style.display = '';
+  document.getElementById('newContractorName').value = '';
 }
-
-/* ── Custom SKU inline edit ── */
-
-function startEditCustomSKU(v, skuId) {
-  const sku  = customSKUs[v].find(s => s.id === skuId);
-  if (!sku) return;
-  const row  = document.getElementById('custrow_' + vid(v) + '_' + skuId);
-  if (!row) return;
-  const vesc = v.replace(/'/g, "\\'");
-  row.innerHTML = `
-    <td><input class="sku-edit-inp" id="eSN_${skuId}" value="${sku.name.replace(/"/g,'&quot;')}" style="width:160px"></td>
-    <td><input class="sku-edit-inp" id="eSR_${skuId}" type="number" value="${sku.rate}" min="0" step="0.01" style="width:80px"></td>
-    <td colspan="2" class="r" style="white-space:nowrap">
-      <button class="btn-save" onclick="saveCustomSKUEdit('${vesc}',${skuId})">Save</button>
-      <button class="btn-cancel" onclick="refreshPane('${vesc}')">Cancel</button>
-    </td>`;
-  document.getElementById('eSN_' + skuId).focus();
+function confirmAddContractor() {
+  const name = document.getElementById('newContractorName').value.trim();
+  if (!name) { showToast('⚠ Enter a contractor name.', true); return; }
+  if (ATT_VENDORS.includes(name)) { showToast('⚠ Already in list.', true); return; }
+  ATT_VENDORS.push(name);
+  attState[name] = { workers: 0, cost: 0 };
+  cancelAddContractor();
+  renderAtt();
 }
-
-async function saveCustomSKUEdit(v, skuId) {
-  const name = document.getElementById('eSN_' + skuId)?.value.trim();
-  const rate = parseFloat(document.getElementById('eSR_' + skuId)?.value) || 0;
-  if (!name) { showToast('⚠ SKU name cannot be empty.', true); return; }
-  try {
-    const result = await api('PATCH', '/api/sku/' + skuId, { skuName: name, rate });
-    const sku = customSKUs[v].find(s => s.id === skuId);
-    if (sku) { sku.name = result.name; sku.rate = result.rate; }
-    refreshPane(v);
-    recalc();
-    showToast('✓ SKU updated', false);
-  } catch (e) {
-    showToast('⚠ ' + e.message, true);
-  }
+function removeContractor(v) {
+  ATT_VENDORS = ATT_VENDORS.filter(x => x !== v);
+  renderAtt();
 }
 
 /* ── Default SKU rate edit (persisted in DB via /api/sku/rates) ── */
@@ -1238,20 +1248,28 @@ function recalc() {
 ═══════════════════════════════════════════════════════ */
 
 function renderAtt() {
-  document.getElementById('attTbody').innerHTML = ATT_VENDORS.map(v => {
-    const s = attState[v], vk = v.replace(/'/g, "\\'");
-    return `<tr>
-      <td>${v}</td>
-      <td class="r">
-        <input type="number" min="0" step="1" value="${s.workers}" style="width:80px"
-          onchange="attState['${vk}'].workers=parseInt(this.value)||0;recalc();">
-      </td>
-      <td class="r">
-        <input type="number" min="0" step="0.01" value="${s.cost}" style="width:130px"
-          onchange="attState['${vk}'].cost=parseFloat(this.value)||0;recalc();">
-      </td>
-    </tr>`;
-  }).join('');
+  if (ATT_VENDORS.length === 0) {
+    document.getElementById('attTbody').innerHTML =
+      `<tr><td colspan="4" style="text-align:center;color:#8a9a90;padding:18px;font-size:13px">
+        No contractors yet — upload a CSV or add one manually below
+      </td></tr>`;
+  } else {
+    document.getElementById('attTbody').innerHTML = ATT_VENDORS.map(v => {
+      const s = attState[v], vk = v.replace(/'/g, "\\'");
+      return `<tr>
+        <td>${v} <button onclick="removeContractor('${vk}')" title="Remove row"
+          style="border:none;background:none;cursor:pointer;color:#b04040;font-size:13px;padding:0 4px">×</button></td>
+        <td class="r">
+          <input type="number" min="0" step="1" value="${s.workers}" style="width:80px"
+            onchange="attState['${vk}'].workers=parseInt(this.value)||0;recalc();">
+        </td>
+        <td class="r">
+          <input type="number" min="0" step="0.01" value="${s.cost}" style="width:130px"
+            onchange="attState['${vk}'].cost=parseFloat(this.value)||0;recalc();">
+        </td>
+      </tr>`;
+    }).join('');
+  }
   recalc();
 }
 
@@ -1259,12 +1277,99 @@ function renderAtt() {
    RENDER — KG TABS
 ═══════════════════════════════════════════════════════ */
 
+function isUnloadingVendor(v) {
+  const skus = SKU_CFG[v] || [];
+  if (skus.length === 0) return false;
+  return skus.every(([name]) => /load|unload|shift|pallet|bardana|punnet|crate|coldroom/i.test(name));
+}
+
+function switchKGCat(cat) {
+  activeKGCat = cat;
+  ['unloading', 'processing'].forEach(c => {
+    const cap = c.charAt(0).toUpperCase() + c.slice(1);
+    const btn  = document.getElementById('kgCatBtn'  + cap);
+    const pane = document.getElementById('kgCat' + cap);
+    if (btn)  btn.classList.toggle('active', c === cat);
+    if (pane) pane.style.display = c === cat ? '' : 'none';
+  });
+}
+
+function renderUnloadingTable() {
+  const wrap = document.getElementById('unloadingTableWrap');
+  if (!wrap) return;
+  const unloadVendors = KG_VENDORS.filter(v => isUnloadingVendor(v));
+
+  if (unloadVendors.length === 0) {
+    wrap.innerHTML = '<p style="padding:18px;color:var(--muted);text-align:center;font-size:13px">No loading/unloading vendors configured.</p>';
+    return;
+  }
+
+  // Collect all unique activity names (preserve order from first vendor)
+  const allActivities = [];
+  const seen = new Set();
+  unloadVendors.forEach(v => {
+    (SKU_CFG[v] || []).forEach(([name]) => { if (!seen.has(name)) { seen.add(name); allActivities.push(name); } });
+  });
+
+  // Header: Activity | Rate/kg | [VendorA qty | VendorA cost] | [VendorB qty | VendorB cost] ...
+  const headerCols = unloadVendors.map(v => `<th class="r" colspan="2" style="text-align:center;background:#edf7f1">${v}</th>`).join('');
+
+  const dataRows = allActivities.map(actName => {
+    // Rate from first vendor that has this activity
+    let displayRate = 0;
+    const vendorCells = unloadVendors.map(v => {
+      const vd = vid(v);
+      const idx = (SKU_CFG[v] || []).findIndex(([n]) => n === actName);
+      if (idx === -1) return '<td></td><td class="r"><span class="zero">—</span></td>';
+      const rate = (SKU_CFG[v][idx])?.[1] ?? 0;
+      if (!displayRate) displayRate = rate;
+      const qty  = kgState[v]?.[idx] || 0;
+      const cost = qty * rate;
+      return `<td class="r"><input type="number" min="0" step="0.001" value="${qty||''}" placeholder="—"
+        data-v="${vd}" data-type="def" data-i="${idx}" data-rate="${rate}" onchange="onKG(this)"></td>
+        <td class="r cost-val" id="kc_${vd}_${idx}">${cost>0?fc(cost):'<span class="zero">—</span>'}</td>`;
+    }).join('');
+    return `<tr><td class="sku-name">${actName}</td><td class="r rate-cell">₹&nbsp;${displayRate.toFixed(2)}</td>${vendorCells}</tr>`;
+  }).join('');
+
+  // Custom SKU rows for unloading vendors (rare, but support it)
+  const custRows = unloadVendors.flatMap(v => {
+    return (customSKUs[v] || []).map(sku => {
+      const vd = vid(v);
+      const qty = sku.qty || 0, cost = qty * sku.rate;
+      const vendorCells = unloadVendors.map(u => {
+        if (u !== v) return '<td></td><td class="r"><span class="zero">—</span></td>';
+        return `<td class="r"><input type="number" min="0" step="0.001" value="${qty||''}" placeholder="—"
+          data-v="${vd}" data-type="cust" data-ci="${sku.id}" data-rate="${sku.rate}" onchange="onKG(this)"></td>
+          <td class="r cost-val" id="kcc_${vd}_${sku.id}">${cost>0?fc(cost):'<span class="zero">—</span>'}</td>`;
+      }).join('');
+      return `<tr class="custom-sku-row"><td class="sku-name">${sku.name} <span style="font-size:10px;color:var(--muted)">(${v})</span></td>
+        <td class="r rate-cell">₹&nbsp;${sku.rate.toFixed(2)}</td>${vendorCells}</tr>`;
+    });
+  }).join('');
+
+  const footerCells = unloadVendors.map(v =>
+    `<td colspan="2" class="r cost-val" id="kgTot_${vid(v)}">${fc(vendorKG(v))}</td>`
+  ).join('');
+
+  wrap.innerHTML = `<div class="table-wrap"><table class="unload-table">
+    <thead><tr><th>Activity</th><th class="r">₹/kg</th>${headerCols}</tr></thead>
+    <tbody>${dataRows}${custRows}</tbody>
+    <tfoot><tr class="ft"><td colspan="2">Total KG Cost</td>${footerCells}</tr></tfoot>
+  </table></div>`;
+}
+
 function renderKGTabs() {
-  document.getElementById('kgTabNav').innerHTML = KG_VENDORS.map(v => {
+  renderUnloadingTable();
+
+  const procVendors = KG_VENDORS.filter(v => !isUnloadingVendor(v));
+  if (!procVendors.includes(activeTab)) activeTab = procVendors[0] || '';
+
+  document.getElementById('kgTabNav').innerHTML = procVendors.map(v => {
     const vesc = v.replace(/'/g, "\\'");
     return `<button class="tab-btn ${v===activeTab?'active':''}" onclick="switchTab('${vesc}',this)">${v}</button>`;
   }).join('');
-  document.getElementById('kgTabPanes').innerHTML = KG_VENDORS.map(v => buildPane(v)).join('');
+  document.getElementById('kgTabPanes').innerHTML = procVendors.map(v => buildPane(v)).join('');
 }
 
 function buildPane(v) {
@@ -1285,12 +1390,8 @@ function buildPane(v) {
 
   const custRows = customSKUs[v].map((sku) => {
     const qty = sku.qty || 0, cost = qty * sku.rate;
-    const vesc = v.replace(/'/g, "\\'");
     return `<tr class="custom-sku-row" id="custrow_${vid_}_${sku.id}">
-      <td class="sku-name">${sku.name}
-        <button class="btn-edit-sku" title="Edit" onclick="startEditCustomSKU('${vesc}',${sku.id})">✎</button>
-        <button class="btn-del" title="Remove" onclick="deleteCustomSKU('${vesc}',${sku.id})">×</button>
-      </td>
+      <td class="sku-name">${sku.name}</td>
       <td class="r rate-cell">₹&nbsp;${sku.rate.toFixed(2)}</td>
       <td class="r"><input type="number" min="0" step="0.001" value="${qty||''}" placeholder="—"
         data-v="${vid_}" data-type="cust" data-ci="${sku.id}" data-rate="${sku.rate}" onchange="onKG(this)"></td>
@@ -1321,15 +1422,6 @@ function buildPane(v) {
         <span class="cost-val" id="kgUnload_${vid_}">${(unloadingCosts[v]||0)>0?fc(unloadingCosts[v]):''}</span>
       </div>
     </div>
-    <div class="add-sku-bar">
-      <div id="addSkuForm_${vid_}" class="add-sku-form" style="display:none">
-        <input id="addSkuName_${vid_}" placeholder="SKU name" style="width:180px">
-        <input id="addSkuRate_${vid_}" type="number" placeholder="Rate ₹/kg" min="0" step="0.01" style="width:110px">
-        <button class="btn-save" onclick="confirmAddSKU('${vesc}')">Save</button>
-        <button class="btn-cancel" onclick="cancelAddSKU('${vesc}')">Cancel</button>
-      </div>
-      <button class="btn-ghost" id="addSkuBtn_${vid_}" onclick="showAddSKUForm('${vesc}')">+ Add SKU</button>
-    </div>
   </div>`;
 }
 
@@ -1344,25 +1436,11 @@ function refreshPane(v) {
   pane.replaceWith(built);
 }
 
-function showAddSKUForm(v) {
-  const vid_ = vid(v);
-  document.getElementById('addSkuForm_' + vid_).style.display = 'flex';
-  document.getElementById('addSkuBtn_'  + vid_).style.display = 'none';
-  document.getElementById('addSkuName_' + vid_).focus();
-}
-
-function cancelAddSKU(v) {
-  const vid_ = vid(v);
-  document.getElementById('addSkuForm_' + vid_).style.display = 'none';
-  document.getElementById('addSkuBtn_'  + vid_).style.display = '';
-  document.getElementById('addSkuName_' + vid_).value = '';
-  document.getElementById('addSkuRate_' + vid_).value = '';
-}
-
 function switchTab(vendor, btn) {
   activeTab = vendor;
-  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-  document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+  const proc = document.getElementById('kgCatProcessing');
+  (proc || document).querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  (proc || document).querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
   btn.classList.add('active');
   const pane = document.getElementById('kgPane_' + vid(vendor));
   if (pane) pane.classList.add('active');
@@ -1469,6 +1547,7 @@ async function onCSVUpload(e) {
       const data = result.byContractor[v];
       attState[v] = { workers: data.workers, cost: r2(data.totalCost) };
     });
+    _freshCSVLoaded = true;
 
     showToast('✓ ' + file.name + ' — ' + result.totalRows + ' rows loaded', false);
 
@@ -1478,7 +1557,6 @@ async function onCSVUpload(e) {
     if (result.date) silentLoadRecord(result.date);
 
   } catch (err) {
-    st.textContent = '✗ Upload failed';
     showToast('⚠ CSV Error: ' + err.message, true);
   }
 }
@@ -1497,6 +1575,7 @@ async function tryReprocessCSV() {
       const data = result.byContractor[v];
       attState[v] = { workers: data.workers, cost: r2(data.totalCost) };
     });
+    _freshCSVLoaded = true;
     updateCSVMeta(result);
     renderAtt();
   } catch (err) {
@@ -1600,11 +1679,25 @@ async function silentLoadRecord(date) {
 }
 
 function applyRecord(record) {
-  ATT_VENDORS = (record.attendance || []).map(a => a.contractor_name);
-  ATT_VENDORS.forEach(v => {
-    const a = (record.attendance || []).find(x => x.contractor_name === v);
-    attState[v] = { workers: a ? (a.workers || 0) : 0, cost: a ? parseFloat(a.cost) || 0 : 0 };
-  });
+  if (_freshCSVLoaded) {
+    // CSV was just uploaded — keep CSV attendance data, only add contractors from saved
+    // record that aren't already in the CSV list (so nothing disappears)
+    const savedVendors = (record.attendance || []).map(a => a.contractor_name);
+    savedVendors.forEach(v => {
+      if (!ATT_VENDORS.includes(v)) {
+        ATT_VENDORS.push(v);
+        const a = record.attendance.find(x => x.contractor_name === v);
+        attState[v] = { workers: a?.workers || 0, cost: parseFloat(a?.cost) || 0 };
+      }
+    });
+  } else {
+    // Loading a saved record directly (no fresh CSV) — restore attendance from record
+    ATT_VENDORS = (record.attendance || []).map(a => a.contractor_name);
+    ATT_VENDORS.forEach(v => {
+      const a = (record.attendance || []).find(x => x.contractor_name === v);
+      attState[v] = { workers: a ? (a.workers || 0) : 0, cost: a ? parseFloat(a.cost) || 0 : 0 };
+    });
+  }
 
   KG_VENDORS.forEach(v => { kgState[v] = new Array((SKU_CFG[v] || []).length).fill(0); });
   customSKUs_resetQty();
@@ -1875,22 +1968,124 @@ function toggleVendorsPanel(force) {
   if (vendorsPanelOpen) loadVendorsList();
 }
 
+function renderVendorsList(vendors) {
+  const list = document.getElementById('vendorsList');
+  if (!vendors.length) { list.innerHTML = '<div class="hist-empty">No vendors yet.</div>'; return; }
+  list.innerHTML = vendors.map(v => {
+    const vn = v.name, ve = vn.replace(/'/g, "\\'");
+    const pvid = 'pv_' + vid(vn);
+    const skus = customSKUs[vn] || [];
+    const skuRows = skus.length
+      ? skus.map(s => `
+          <div class="panel-sku-row" id="pskurow_${pvid}_${s.id}">
+            <span class="panel-sku-name">${s.name}</span>
+            <span class="panel-sku-rate">₹${s.rate.toFixed(2)}/kg</span>
+            <button class="btn-edit-sku" onclick="startEditSKUInPanel('${ve}',${s.id})" title="Edit">✎</button>
+            <button class="btn-del"      onclick="deleteSKUFromPanel('${ve}',${s.id})"  title="Remove">×</button>
+          </div>`).join('')
+      : '<div class="no-custom-skus">No custom SKUs yet</div>';
+    return `
+      <div class="vendor-section">
+        <div class="vendor-section-header">
+          <span class="vendor-section-name">${vn}</span>
+          ${vendors.length > 1
+            ? `<button class="user-del-btn" onclick="deleteVendor(${v.id},'${ve}')">Delete vendor</button>`
+            : '<span style="font-size:11px;color:var(--muted)">last vendor</span>'}
+        </div>
+        <div class="vendor-skus">
+          <div id="pskus_${pvid}">${skuRows}</div>
+          <div id="panelAddSkuForm_${pvid}" style="display:none" class="panel-add-sku-form">
+            <input id="panelSkuName_${pvid}" placeholder="SKU name" style="flex:1;min-width:120px"
+              onkeydown="if(event.key==='Enter')addSKUFromPanel('${ve}');if(event.key==='Escape')cancelPanelAddSKU('${ve}')">
+            <input id="panelSkuRate_${pvid}" type="number" placeholder="₹/kg" min="0" step="0.01" style="width:90px"
+              onkeydown="if(event.key==='Enter')addSKUFromPanel('${ve}');if(event.key==='Escape')cancelPanelAddSKU('${ve}')">
+            <button class="btn-save"   onclick="addSKUFromPanel('${ve}')">Save</button>
+            <button class="btn-cancel" onclick="cancelPanelAddSKU('${ve}')">Cancel</button>
+          </div>
+          <button class="btn-ghost" id="panelAddSkuBtn_${pvid}"
+            onclick="showPanelAddSKUForm('${ve}')" style="margin-top:8px;font-size:12px">+ Add custom SKU</button>
+        </div>
+      </div>`;
+  }).join('');
+}
+
 async function loadVendorsList() {
   const list = document.getElementById('vendorsList');
   list.innerHTML = '<div class="hist-empty">Loading…</div>';
   try {
     const vendors = await api('GET', '/api/vendors');
-    if (!vendors.length) { list.innerHTML = '<div class="hist-empty">No vendors found.</div>'; return; }
-    list.innerHTML = vendors.map(v => `
-      <div class="user-row">
-        <span class="user-row-name">${v.name}</span>
-        ${vendors.length > 1
-          ? `<button class="user-del-btn" onclick="deleteVendor(${v.id},'${v.name.replace(/'/g,"\\'")}')">Delete</button>`
-          : '<span style="font-size:11px;color:var(--muted)">last</span>'}
-      </div>`).join('');
+    renderVendorsList(vendors);
   } catch (e) {
     list.innerHTML = '<div class="hist-empty">Failed to load vendors.</div>';
   }
+}
+
+/* ── Panel SKU management ── */
+
+function showPanelAddSKUForm(v) {
+  const pvid = 'pv_' + vid(v);
+  document.getElementById('panelAddSkuForm_' + pvid).style.display = 'flex';
+  document.getElementById('panelAddSkuBtn_'  + pvid).style.display = 'none';
+  document.getElementById('panelSkuName_'    + pvid).focus();
+}
+function cancelPanelAddSKU(v) {
+  const pvid = 'pv_' + vid(v);
+  document.getElementById('panelAddSkuForm_' + pvid).style.display = 'none';
+  document.getElementById('panelAddSkuBtn_'  + pvid).style.display = '';
+  document.getElementById('panelSkuName_'    + pvid).value = '';
+  document.getElementById('panelSkuRate_'    + pvid).value = '';
+}
+async function addSKUFromPanel(v) {
+  const pvid = 'pv_' + vid(v);
+  const name = document.getElementById('panelSkuName_' + pvid).value.trim();
+  const rate = parseFloat(document.getElementById('panelSkuRate_' + pvid).value) || 0;
+  if (!name) { showToast('⚠ Enter a SKU name.', true); return; }
+  try {
+    const result = await api('POST', '/api/sku', { vendorName: v, skuName: name, rate });
+    if (!customSKUs[v]) customSKUs[v] = [];
+    customSKUs[v].push({ id: result.id, name: result.name, rate: result.rate, qty: 0 });
+    refreshPane(v);
+    loadVendorsList();
+    showToast('✓ SKU added', false);
+  } catch (e) { showToast('⚠ ' + e.message, true); }
+}
+async function deleteSKUFromPanel(v, skuId) {
+  try {
+    await api('DELETE', '/api/sku/' + skuId);
+    customSKUs[v] = (customSKUs[v] || []).filter(s => s.id !== skuId);
+    refreshPane(v);
+    loadVendorsList();
+    showToast('✓ SKU removed', false);
+  } catch (e) { showToast('⚠ ' + e.message, true); }
+}
+function startEditSKUInPanel(v, skuId) {
+  const pvid = 'pv_' + vid(v), ve = v.replace(/'/g, "\\'");
+  const row = document.getElementById('pskurow_' + pvid + '_' + skuId);
+  if (!row) return;
+  const sku = (customSKUs[v] || []).find(s => s.id === skuId);
+  if (!sku) return;
+  row.innerHTML = `
+    <input class="sku-edit-inp" id="peSkuName_${pvid}_${skuId}" value="${sku.name.replace(/"/g,'&quot;')}"
+      style="flex:1;min-width:100px" onkeydown="if(event.key==='Enter')saveEditSKUInPanel('${ve}',${skuId})">
+    <input class="sku-edit-inp" id="peSkuRate_${pvid}_${skuId}" type="number" value="${sku.rate}" min="0" step="0.01"
+      style="width:80px" onkeydown="if(event.key==='Enter')saveEditSKUInPanel('${ve}',${skuId})">
+    <button class="btn-save"   onclick="saveEditSKUInPanel('${ve}',${skuId})">✓</button>
+    <button class="btn-cancel" onclick="loadVendorsList()">✕</button>`;
+  document.getElementById('peSkuName_' + pvid + '_' + skuId).focus();
+}
+async function saveEditSKUInPanel(v, skuId) {
+  const pvid = 'pv_' + vid(v);
+  const name = document.getElementById('peSkuName_' + pvid + '_' + skuId)?.value.trim();
+  const rate = parseFloat(document.getElementById('peSkuRate_' + pvid + '_' + skuId)?.value) || 0;
+  if (!name) { showToast('⚠ Enter a SKU name.', true); return; }
+  try {
+    const result = await api('PATCH', '/api/sku/' + skuId, { skuName: name, rate });
+    const sku = (customSKUs[v] || []).find(s => s.id === skuId);
+    if (sku) { sku.name = result.name; sku.rate = result.rate; }
+    refreshPane(v);
+    loadVendorsList();
+    showToast('✓ SKU updated', false);
+  } catch (e) { showToast('⚠ ' + e.message, true); }
 }
 
 async function addVendor() {
