@@ -870,7 +870,7 @@ const SKU_CFG = {
 
 // SKU rate overrides are loaded from DB in initApp() via loadSKURateOverrides()
 
-const ATT_VENDORS = ['Krish Enterprises', 'Sai Enterprises', 'SATENDRA SINGH Bhadoriya'];
+let ATT_VENDORS = [];  // populated dynamically from CSV or saved record
 let KG_VENDORS = [];  // populated from /api/vendors on init
 
 /* ═══════════════════════════════════════════════════════
@@ -878,7 +878,6 @@ let KG_VENDORS = [];  // populated from /api/vendors on init
 ═══════════════════════════════════════════════════════ */
 
 const attState = {};
-ATT_VENDORS.forEach(v => { attState[v] = { workers: 0, cost: 0 }; });
 
 const kgState        = {};
 const customSKUs     = {};
@@ -1465,10 +1464,10 @@ async function onCSVUpload(e) {
 
     if (result.date) document.getElementById('dateInput').value = result.date;
 
+    ATT_VENDORS = Object.keys(result.byContractor).sort();
     ATT_VENDORS.forEach(v => {
-      const data = result.byContractor[v] || { workers: 0, totalCost: 0 };
-      attState[v].workers = data.workers;
-      attState[v].cost    = r2(data.totalCost);
+      const data = result.byContractor[v];
+      attState[v] = { workers: data.workers, cost: r2(data.totalCost) };
     });
 
     showToast('✓ ' + file.name + ' — ' + result.totalRows + ' rows loaded', false);
@@ -1493,10 +1492,10 @@ async function tryReprocessCSV() {
   try {
     const result = await api('POST', '/api/upload/csv', fd);
     if (result.date) document.getElementById('dateInput').value = result.date;
+    ATT_VENDORS = Object.keys(result.byContractor).sort();
     ATT_VENDORS.forEach(v => {
-      const data = result.byContractor[v] || { workers: 0, totalCost: 0 };
-      attState[v].workers = data.workers;
-      attState[v].cost    = r2(data.totalCost);
+      const data = result.byContractor[v];
+      attState[v] = { workers: data.workers, cost: r2(data.totalCost) };
     });
     updateCSVMeta(result);
     renderAtt();
@@ -1532,8 +1531,8 @@ function updateCSVMeta(result) {
   }
 
   if (totalProcessed === 0) {
-    showToast('⚠ 0 rows matched any known contractor.\n' + (totalRows > 0
-      ? 'Check the CSV has a "Contractor Name" column with Krish / Sai / SATENDRA values.'
+    showToast('⚠ 0 workers found in CSV.\n' + (totalRows > 0
+      ? 'Check the CSV has a "Contractor Name" and "Day Count" column.'
       : 'The CSV appears empty or has an unrecognised format.'), true);
   } else {
     const dateMsg = filterDate ? ' for ' + filterDate : '';
@@ -1601,6 +1600,7 @@ async function silentLoadRecord(date) {
 }
 
 function applyRecord(record) {
+  ATT_VENDORS = (record.attendance || []).map(a => a.contractor_name);
   ATT_VENDORS.forEach(v => {
     const a = (record.attendance || []).find(x => x.contractor_name === v);
     attState[v] = { workers: a ? (a.workers || 0) : 0, cost: a ? parseFloat(a.cost) || 0 : 0 };
@@ -1738,29 +1738,17 @@ function exportExcel() {
   const total   = grandTotal();
   const mpk     = saleQty > 0 ? r2(total / saleQty) : '';
 
-  const krishCost = parseFloat(attState['Krish Enterprises'].cost)        || 0;
-  const saiCost   = parseFloat(attState['Sai Enterprises'].cost)          || 0;
-  const ssbCost   = parseFloat(attState['SATENDRA SINGH Bhadoriya'].cost) || 0;
-
-  const ashokKG = vendorKG('Ashok');
-  const mpKG    = vendorKG('MP');
-  const rjKG    = vendorKG('RJ');
-  const blKG    = vendorKG('BL Unloading');
-  const rsKG    = vendorKG('RS');
-
   // Sheet 1: Daily Summary
   const ws1 = XLSX.utils.aoa_to_sheet([
-    ['Date','Attendance Cost','KG Cost','Total Cost','Sale Qty (kg)','MPK',
-     'Krish Cost','Sai Cost','SSB Cost','Ashok KG','MP KG','RJ KG','BL KG','RS KG'],
-    [date, r2(attCost), r2(kgCost), r2(total), saleQty, mpk,
-     krishCost, saiCost, ssbCost, ashokKG, mpKG, rjKG, blKG, rsKG]
+    ['Date','Attendance Cost','KG Cost','Total Cost','Sale Qty (kg)','MPK'],
+    [date, r2(attCost), r2(kgCost), r2(total), saleQty, mpk]
   ]);
-  ws1['!cols'] = [12,16,12,12,14,10,12,10,12,10,10,10,10,10].map(w => ({ wch: w }));
+  ws1['!cols'] = [12,16,12,12,14,10].map(w => ({ wch: w }));
 
   // Sheet 2: Attendance Detail
   const attRows = [['Date','Contractor','Workers','Cost (₹)']];
   ATT_VENDORS.forEach(v => {
-    attRows.push([date, v, attState[v].workers || 0, parseFloat(attState[v].cost) || 0]);
+    attRows.push([date, v, attState[v]?.workers || 0, parseFloat(attState[v]?.cost) || 0]);
   });
   const ws2 = XLSX.utils.aoa_to_sheet(attRows);
   ws2['!cols'] = [12,32,10,12].map(w => ({ wch: w }));
@@ -1808,8 +1796,7 @@ async function exportAllRecords() {
     const records = await api('GET', '/api/records/export');
     if (!records.length) { showToast('⚠ No records found.', true); return; }
 
-    const summaryRows = [['Date','Attendance Cost','KG Cost','Total Cost','Sale Qty (kg)','MPK',
-      'Krish Cost','Sai Cost','SSB Cost','Ashok KG','MP KG','RJ KG','BL KG','RS KG']];
+    const summaryRows = [['Date','Attendance Cost','KG Cost','Total Cost','Sale Qty (kg)','MPK']];
     const attRows = [['Date','Contractor','Workers','Cost (₹)']];
     const kgRows  = [['Date','Vendor','SKU','Rate (₹/kg)','Qty (kg)','Cost (₹)']];
 
@@ -1818,15 +1805,6 @@ async function exportAllRecords() {
         ? detail.record_date.slice(0, 10)
         : detail.record_date;
 
-      const getAtt = name => {
-        const a = (detail.attendance || []).find(x => x.contractor_name === name);
-        return a ? parseFloat(a.cost) || 0 : 0;
-      };
-      const getVendorKG = vendorName =>
-        (detail.kgEntries || [])
-          .filter(e => e.vendor_name === vendorName)
-          .reduce((s, e) => s + (parseFloat(e.cost) || 0), 0);
-
       summaryRows.push([
         date,
         r2(parseFloat(detail.attendance_cost) || 0),
@@ -1834,14 +1812,6 @@ async function exportAllRecords() {
         r2(parseFloat(detail.total_cost) || 0),
         parseFloat(detail.sale_qty) || 0,
         parseFloat(detail.mpk) > 0 ? r2(parseFloat(detail.mpk)) : '',
-        getAtt('Krish Enterprises'),
-        getAtt('Sai Enterprises'),
-        getAtt('SATENDRA SINGH Bhadoriya'),
-        r2(getVendorKG('Ashok')),
-        r2(getVendorKG('MP')),
-        r2(getVendorKG('RJ')),
-        r2(getVendorKG('BL Unloading')),
-        r2(getVendorKG('RS')),
       ]);
 
       (detail.attendance || []).forEach(a => {
@@ -1859,7 +1829,7 @@ async function exportAllRecords() {
     }
 
     const ws1 = XLSX.utils.aoa_to_sheet(summaryRows);
-    ws1['!cols'] = [12,16,12,12,14,10,12,10,12,10,10,10,10,10].map(w => ({ wch: w }));
+    ws1['!cols'] = [12,16,12,12,14,10].map(w => ({ wch: w }));
     const ws2 = XLSX.utils.aoa_to_sheet(attRows);
     ws2['!cols'] = [12,32,10,12].map(w => ({ wch: w }));
     const ws3 = XLSX.utils.aoa_to_sheet(kgRows);

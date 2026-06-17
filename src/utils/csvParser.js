@@ -1,119 +1,116 @@
-// Server-side port of the browser CSV parser in organicut-mpk.html
-
-const HEADER_SIGNALS = ['contractor','employee','day count','attendance','work station','in time','out time'];
-
-function isHeaderRow(fields) {
-  const joined = fields.join(' ').toLowerCase();
-  return HEADER_SIGNALS.filter(s => joined.includes(s)).length >= 2;
-}
-
-function splitLine(line) {
-  const fields = [];
-  let cur = '', inQ = false;
-  for (const ch of line) {
-    if (ch === '"') { inQ = !inQ; }
-    else if (ch === ',' && !inQ) { fields.push(cur); cur = ''; }
-    else { cur += ch; }
-  }
-  fields.push(cur);
-  return fields;
-}
-
-function parseCSVText(text) {
-  text = text.replace(/^﻿/, ''); // strip BOM
-  const lines = text.split(/\r?\n/);
-
-  let headerIdx = -1;
-  for (let i = 0; i < Math.min(15, lines.length); i++) {
-    if (isHeaderRow(splitLine(lines[i]))) { headerIdx = i; break; }
-  }
-  if (headerIdx < 0) throw new Error('Could not find header row in CSV file');
-
-  const headers = splitLine(lines[headerIdx]).map(h => h.trim());
-  const rows = [];
-  for (let i = headerIdx + 1; i < lines.length; i++) {
-    if (!lines[i].trim()) continue;
-    const fields = splitLine(lines[i]);
-    const row = {};
-    headers.forEach((h, idx) => { row[h] = (fields[idx] || '').trim(); });
-    rows.push(row);
-  }
-  return { rows, headers };
-}
-
-function col(row, ...names) {
-  for (const name of names) {
-    if (row[name] !== undefined && row[name] !== '') return row[name];
-  }
-  const keys = Object.keys(row);
-  for (const name of names) {
-    const lo = name.toLowerCase();
-    const found = keys.find(k => k.toLowerCase() === lo);
-    if (found !== undefined && row[found] !== '') return row[found];
-  }
-  return '';
-}
-
-function mapContractor(raw) {
-  const u = (raw || '').trim().toUpperCase();
-  if (u.includes('KRISH'))    return 'Krish Enterprises';
-  if (u.includes('SAI'))      return 'Sai Enterprises';
-  if (u.includes('SATENDRA') || u.includes('BHADORIYA')) return 'SATENDRA SINGH Bhadoriya';
-  return null;
-}
-
 /**
- * Parse a CSV buffer/string and return attendance data for the given date.
- * If filterDate is null/missing, the latest date in the file is used.
+ * Processes a biometric attendance CSV and returns all contractors found,
+ * with worker count and total cost per contractor.
+ *
+ * CSV format expected:
+ *   Row 1:  Organization header (ignored)
+ *   Row 2:  Blank (ignored)
+ *   Row 3:  Column headers — must include "Contractor Name", "Work Station",
+ *           "Attendance Date", "Day Count"
+ *   Row 4+: Data rows
+ *
+ * Wage per worker = Work Station (daily rate) × Day Count
+ * Workers counted = rows where Day Count > 0 (present workers only)
  */
+
 function processCSV(text, filterDate) {
-  const { rows } = parseCSVText(text);
+  const rows = text.split(/\r?\n/).map(line => line.split(','));
 
-  const datesInCSV = new Set();
-  rows.forEach(row => {
-    const d = col(row, 'Attendance Date').trim();
-    if (d) datesInCSV.add(d);
-  });
+  // Find the header row by looking for "Employee Name" and "Contractor Name"
+  let headerIdx = -1;
+  for (let i = 0; i < rows.length; i++) {
+    const lower = rows[i].map(c => (c || '').trim().toLowerCase());
+    if (lower.includes('employee name') && lower.some(c => c.includes('contractor name'))) {
+      headerIdx = i;
+      break;
+    }
+  }
+  if (headerIdx === -1) throw new Error('Could not find header row — expected columns: Employee Name, Contractor Name, Work Station, Day Count');
 
-  const sortedDates = [...datesInCSV].sort();
-  const effectiveDate = (filterDate && datesInCSV.has(filterDate))
-    ? filterDate
-    : sortedDates[sortedDates.length - 1];
+  const headers = rows[headerIdx].map(h => (h || '').trim().toLowerCase());
+  const col = {
+    contractor: headers.findIndex(h => h.includes('contractor name')),
+    workStation: headers.findIndex(h => h.includes('work station')),
+    date:       headers.findIndex(h => h.includes('attendance date')),
+    dayCount:   headers.findIndex(h => h.includes('day count')),
+  };
 
+  if (col.contractor === -1) throw new Error('CSV missing "Contractor Name" column');
+  if (col.dayCount   === -1) throw new Error('CSV missing "Day Count" column');
+
+  // Pull all data rows that have a non-empty contractor name
+  const dataRows = rows.slice(headerIdx + 1).filter(r =>
+    r.length > col.contractor && (r[col.contractor] || '').trim()
+  );
+
+  // Collect all dates present in the file
+  const allDates = new Set();
+  if (col.date !== -1) {
+    dataRows.forEach(r => {
+      const d = (r[col.date] || '').trim();
+      if (d) allDates.add(d);
+    });
+  }
+
+  // CSV dates are DD-MM-YYYY; convert to YYYY-MM-DD for the frontend
+  const toISO = s => {
+    const p = s.split('-');
+    if (p.length === 3 && p[0].length === 2) return `${p[2]}-${p[1].padStart(2,'0')}-${p[0].padStart(2,'0')}`;
+    return s;
+  };
+  // Convert YYYY-MM-DD filterDate back to DD-MM-YYYY for matching
+  const toCSV = s => {
+    const p = s.split('-');
+    if (p.length === 3 && p[0].length === 4) return `${p[2]}-${p[1]}-${p[0]}`;
+    return s;
+  };
+
+  const sortedDates = [...allDates].sort((a, b) => {
+    const parse = s => { const p = s.split('-'); return p[0].length === 2 ? new Date(p[2],p[1]-1,p[0]) : new Date(s); };
+    return parse(a) - parse(b);
+  }).map(toISO);
+
+  // Determine which date to use
+  let activeCSVDate = null;
+  if (filterDate) {
+    const candidate = toCSV(filterDate);
+    if (allDates.has(candidate)) activeCSVDate = candidate;
+  }
+  if (!activeCSVDate && allDates.size > 0) {
+    // Default to last date in the file
+    activeCSVDate = [...allDates].sort((a, b) => {
+      const p = s => { const q = s.split('-'); return q[0].length === 2 ? new Date(q[2],q[1]-1,q[0]) : new Date(s); };
+      return p(a) - p(b);
+    }).pop();
+  }
+
+  // Filter rows to the active date
+  const filtered = activeCSVDate
+    ? dataRows.filter(r => (r[col.date] || '').trim() === activeCSVDate)
+    : dataRows;
+
+  // Group by contractor — no hardcoded map, accept everything
   const byContractor = {};
-  const unmappedNames = new Set();
-  let totalRows = 0;
+  filtered.forEach(r => {
+    const contractor = (r[col.contractor] || '').trim();
+    if (!contractor) return;
 
-  rows.forEach(row => {
-    const rowDate = col(row, 'Attendance Date').trim();
-    if (datesInCSV.size > 1 && effectiveDate && rowDate !== effectiveDate) return;
+    const wage     = col.workStation !== -1 ? (parseFloat(r[col.workStation]) || 0) : 0;
+    const dayCount = parseFloat(r[col.dayCount]) || 0;
+    const cost     = wage * dayCount;
 
-    totalRows++;
-    const contractorRaw = col(row, 'Contractor Name', 'Contractor');
-    const contractor = mapContractor(contractorRaw);
-    if (!contractor) {
-      const raw = (contractorRaw || '').trim();
-      if (raw && raw.toUpperCase() !== 'VENDOR') unmappedNames.add(raw);
-      return;
-    }
-
-    const ws = parseFloat(col(row, 'Work Station', 'workstation', 'Work station')) || 0;
-    const dc = parseFloat(col(row, 'Day Count', 'daycount', 'Day count')) || 0;
-
-    if (!byContractor[contractor]) {
-      byContractor[contractor] = { workers: 0, totalCost: 0 };
-    }
-    byContractor[contractor].workers++;
-    byContractor[contractor].totalCost += ws * dc;
+    if (!byContractor[contractor]) byContractor[contractor] = { workers: 0, totalCost: 0 };
+    if (dayCount > 0) byContractor[contractor].workers++;
+    byContractor[contractor].totalCost = Math.round((byContractor[contractor].totalCost + cost) * 100) / 100;
   });
 
   return {
-    date: effectiveDate,
-    sortedDates,
     byContractor,
-    unmapped: unmappedNames.size,
-    unmappedNames: [...unmappedNames],
-    totalRows,
+    date:        activeCSVDate ? toISO(activeCSVDate) : null,
+    sortedDates,
+    totalRows:   filtered.length,
+    unmapped:    0,
+    unmappedNames: [],
   };
 }
 
