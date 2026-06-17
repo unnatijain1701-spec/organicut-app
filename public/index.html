@@ -32,9 +32,41 @@ body {
   line-height: 1.45;
 }
 
+/* ── SIDEBAR — app section navigation ─────────────────── */
+.sidebar {
+  position: fixed; top: 0; left: 0; bottom: 0; width: 210px; z-index: 300;
+  background: var(--primary); color: #fff;
+  display: flex; flex-direction: column;
+  box-shadow: 2px 0 10px rgba(0,0,0,.14);
+}
+.sidebar-brand {
+  padding: 16px 18px; font-weight: 800; font-size: 16px; color: #fff;
+  display: flex; align-items: center; gap: 8px; letter-spacing: -.3px;
+  border-bottom: 1px solid rgba(255,255,255,.12);
+}
+.sidebar-brand .brand-icon { font-size: 19px; line-height: 1; }
+.sidebar-brand em { color: #96e0bb; font-style: normal; }
+.sidebar-nav { padding: 10px 0; display: flex; flex-direction: column; gap: 2px; }
+.nav-item {
+  display: flex; align-items: center; gap: 11px; width: 100%;
+  padding: 11px 18px; font-size: 13.5px; font-weight: 600;
+  color: rgba(255,255,255,.78); background: none; border: none; cursor: pointer;
+  text-align: left; border-left: 3px solid transparent;
+  transition: background .15s, color .15s, border-color .15s; outline: none;
+}
+.nav-item .nav-ico { font-size: 16px; width: 20px; text-align: center; flex-shrink: 0; }
+.nav-item:hover { background: rgba(255,255,255,.08); color: #fff; }
+.nav-item.active { background: rgba(255,255,255,.14); color: #fff; border-left-color: #96e0bb; }
+.sidebar-foot { margin-top: auto; padding: 12px 0; border-top: 1px solid rgba(255,255,255,.12); }
+.sidebar-user {
+  padding: 6px 18px 10px; font-size: 12.5px; font-weight: 700;
+  color: #b8dcc8; display: flex; align-items: center; gap: 8px;
+}
+.sidebar-user .nav-ico { font-size: 15px; }
+
 /* ── TOP BAR — single row ────────────────────────────── */
 .topbar {
-  position: sticky; top: 0; z-index: 200;
+  position: sticky; top: 0; z-index: 200; margin-left: 210px;
   background: var(--primary);
   box-shadow: 0 2px 10px rgba(0,0,0,.18);
 }
@@ -131,7 +163,7 @@ body {
 
 /* ── SUMMARY BAR ──────────────────────────────────────── */
 .sumbar {
-  background: var(--dark);
+  background: var(--dark); margin-left: 210px;
   display: grid; grid-template-columns: repeat(4, 1fr);
 }
 .si {
@@ -148,7 +180,7 @@ body {
 .si-value.green { color: #52c785; }
 
 /* ── MAIN ─────────────────────────────────────────────── */
-.main { padding: 20px 20px 50px; max-width: 1320px; }
+.main { padding: 20px 20px 50px; max-width: 1320px; margin-left: 210px; }
 
 .card {
   background: var(--surface); border: 1px solid var(--border);
@@ -161,8 +193,8 @@ body {
   flex-wrap: wrap;
 }
 .card-title {
-  font-size: 11px; font-weight: 700; text-transform: uppercase;
-  letter-spacing: .6px; color: var(--muted);
+  font-size: 13px; font-weight: 700;
+  letter-spacing: .1px; color: var(--text);
 }
 .unmapped-note {
   font-size: 11.5px; font-weight: 600; color: #dc2626;
@@ -396,7 +428,7 @@ td input[type="number"]:hover { border-color: #7dbf99; }
 
 /* ── DASHBOARD OVERLAY ────────────────────────────────── */
 #dashboardOverlay {
-  position: fixed; inset: 0; z-index: 400;
+  position: fixed; top: 0; right: 0; bottom: 0; left: 210px; z-index: 400;
   background: var(--bg); overflow-y: auto;
   display: flex; flex-direction: column;
 }
@@ -486,6 +518,20 @@ tr.dash-row-alt td { background: #f7fdf9; }
 
 /* ── RESPONSIVE ───────────────────────────────────────── */
 @media (max-width: 800px) {
+  /* Sidebar collapses to a horizontal scrollable bar at the top */
+  .sidebar {
+    position: static; width: 100%; flex-direction: row; align-items: center;
+    box-shadow: 0 2px 8px rgba(0,0,0,.14); overflow-x: auto;
+  }
+  .sidebar-brand { border-bottom: none; border-right: 1px solid rgba(255,255,255,.12); padding: 12px 14px; white-space: nowrap; }
+  .sidebar-nav { flex-direction: row; padding: 0; gap: 0; }
+  .nav-item { border-left: none; border-bottom: 3px solid transparent; padding: 14px 14px; white-space: nowrap; }
+  .nav-item.active { border-left: none; border-bottom-color: #96e0bb; }
+  .sidebar-foot { margin-top: 0; margin-left: auto; border-top: none; border-left: 1px solid rgba(255,255,255,.12); padding: 0; display: flex; align-items: center; }
+  .sidebar-user { display: none; }
+  .topbar, .sumbar, .main { margin-left: 0; }
+  #dashboardOverlay { left: 0; }
+
   .topbar-main { padding: 6px 12px; min-height: 48px; gap: 6px; }
   .field input[type="date"]   { min-width: 120px; }
   .field input[type="number"] { width: 90px; }
@@ -676,11 +722,25 @@ tr.dash-row-alt td { background: #f7fdf9; }
   </div>
 </div>
 
+<!-- ═══════════════════ SIDEBAR ═══════════════════ -->
+<nav class="sidebar">
+  <div class="sidebar-brand"><span class="brand-icon">🌿</span> Organicut&nbsp;<em>Fresh</em></div>
+  <div class="sidebar-nav">
+    <button class="nav-item active" id="navDaily" onclick="navTo('daily')"><span class="nav-ico">📝</span> Daily Entry</button>
+    <button class="nav-item" id="navDashboard" style="display:none" onclick="navTo('dashboard')"><span class="nav-ico">📊</span> Dashboard</button>
+    <button class="nav-item" id="navHistory" onclick="navTo('history')"><span class="nav-ico">📋</span> History</button>
+    <button class="nav-item" id="navVendors" onclick="navTo('vendors')"><span class="nav-ico">⚙</span> Vendors</button>
+    <button class="nav-item" id="navUsers" style="display:none" onclick="navTo('users')"><span class="nav-ico">👤</span> Users</button>
+  </div>
+  <div class="sidebar-foot">
+    <div class="sidebar-user"><span class="nav-ico">👤</span> <span id="userBadge"></span></div>
+    <button class="nav-item" onclick="doLogout()"><span class="nav-ico">⏏</span> Logout</button>
+  </div>
+</nav>
+
 <!-- ═══════════════════ TOP BAR ═══════════════════ -->
 <div class="topbar">
   <div class="topbar-main">
-    <div class="brand"><span class="brand-icon">🌿</span> Organicut <em>Fresh</em></div>
-    <span class="tb-sep"></span>
     <div class="topbar-fields">
       <div class="field">
         <label>Date</label>
@@ -693,8 +753,6 @@ tr.dash-row-alt td { background: #f7fdf9; }
     </div>
     <div class="spacer"></div>
     <div class="tb-actions">
-      <button class="btn btn-upload" onclick="document.getElementById('csvInput').click()" title="Upload attendance CSV">↑ CSV</button>
-      <input type="file" id="csvInput" accept=".csv,.CSV" style="display:none" onchange="onCSVUpload(event)">
       <button class="btn btn-save-rec" onclick="saveRecord()">💾 Save</button>
       <div class="export-dd" id="exportDd">
         <button class="btn btn-success" onclick="toggleExportDd()">↓ Excel ▾</button>
@@ -703,19 +761,6 @@ tr.dash-row-alt td { background: #f7fdf9; }
           <button onclick="exportAllRecords();toggleExportDd()">Export All Records</button>
           <button onclick="downloadBackup();toggleExportDd()">Download Backup (JSON)</button>
         </div>
-      </div>
-    </div>
-    <span class="tb-sep"></span>
-    <button class="btn btn-outline" onclick="toggleHistory()" title="Saved records">📋 History</button>
-    <button class="btn btn-outline" id="dashboardBtn" style="display:none" onclick="loadDashboard()" title="Admin dashboard">📊 Dashboard</button>
-    <div class="user-dd" id="userDd">
-      <button class="user-dd-btn" id="userDdBtn" onclick="toggleUserDd()">
-        <span id="userBadge"></span><span class="user-dd-caret">▾</span>
-      </button>
-      <div class="user-dd-menu" id="userDdMenu">
-        <button onclick="toggleVendorsPanel();closeUserDd()">⚙ Vendors</button>
-        <button id="manageUsersBtn" style="display:none" onclick="toggleUsersPanel();closeUserDd()">👤 Users</button>
-        <button class="dd-logout" onclick="doLogout()">⏏ Logout</button>
       </div>
     </div>
   </div>
@@ -745,9 +790,23 @@ tr.dash-row-alt td { background: #f7fdf9; }
 <div class="main">
   <div class="card">
     <div class="card-head">
-      <span class="card-title">Attendance Cost — auto-populated from Biometric CSV (editable)</span>
-      <span id="csvDateChips" style="display:none;font-size:12px;color:#4a7a5e"></span>
-      <span class="unmapped-note" id="unmappedNote" style="display:none"></span>
+      <div>
+        <div class="card-title">👥 Attendance Cost</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px">Upload biometric CSV or add contractors manually</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <span id="csvDateChips" style="display:none;font-size:12px;color:#4a7a5e"></span>
+        <span class="unmapped-note" id="unmappedNote" style="display:none"></span>
+        <button class="btn btn-upload" onclick="document.getElementById('csvInput').click()" title="Upload biometric CSV">📂 Upload CSV</button>
+        <input type="file" id="csvInput" accept=".csv,.CSV" style="display:none" onchange="onCSVUpload(event)">
+        <button class="btn btn-outline" onclick="showAddContractorForm()" id="addContractorBtn">+ Add manually</button>
+        <span id="addContractorForm" style="display:none;gap:6px;align-items:center">
+          <input id="newContractorName" type="text" placeholder="Contractor name" class="input"
+            style="width:180px" onkeydown="if(event.key==='Enter')confirmAddContractor();if(event.key==='Escape')cancelAddContractor();">
+          <button class="btn btn-save-rec" onclick="confirmAddContractor()">Add</button>
+          <button class="btn btn-outline" onclick="cancelAddContractor()">Cancel</button>
+        </span>
+      </div>
     </div>
     <div class="table-wrap">
       <table>
@@ -768,20 +827,14 @@ tr.dash-row-alt td { background: #f7fdf9; }
         </tfoot>
       </table>
     </div>
-    <div style="margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-      <button class="btn btn-outline" onclick="showAddContractorForm()" id="addContractorBtn">+ Add contractor</button>
-      <span id="addContractorForm" style="display:none;gap:6px;align-items:center">
-        <input id="newContractorName" type="text" placeholder="Contractor name" class="input"
-          style="width:200px" onkeydown="if(event.key==='Enter')confirmAddContractor();if(event.key==='Escape')cancelAddContractor();">
-        <button class="btn btn-save-rec" onclick="confirmAddContractor()">Add</button>
-        <button class="btn btn-outline" onclick="cancelAddContractor()">Cancel</button>
-      </span>
-    </div>
   </div>
 
   <div class="card">
     <div class="card-head">
-      <span class="card-title">Per KG Cost — manual entry by vendor</span>
+      <div>
+        <div class="card-title">⚖ Per KG Processing Cost</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px">Enter quantities per vendor — costs calculated automatically</div>
+      </div>
     </div>
     <div class="kg-cat-tabs">
       <button class="kg-cat-btn active" id="kgCatBtnUnloading" onclick="switchKGCat('unloading')">Loading &amp; Unloading</button>
@@ -966,8 +1019,8 @@ async function checkAuth() {
       currentUsername = user.username;
       currentRole = user.role || 'user';
       document.getElementById('userBadge').textContent = user.username;
-      document.getElementById('manageUsersBtn').style.display = '';
-      document.getElementById('dashboardBtn').style.display = currentRole === 'admin' ? '' : 'none';
+      document.getElementById('navUsers').style.display = currentRole === 'admin' ? '' : 'none';
+      document.getElementById('navDashboard').style.display = currentRole === 'admin' ? '' : 'none';
       document.getElementById('loginOverlay').style.display = 'none';
       await initApp();
     } else {
@@ -1021,8 +1074,8 @@ async function doLogin() {
     currentUsername = user.username;
     currentRole = user.role || 'user';
     document.getElementById('userBadge').textContent = user.username;
-    document.getElementById('manageUsersBtn').style.display = '';
-    document.getElementById('dashboardBtn').style.display = currentRole === 'admin' ? '' : 'none';
+    document.getElementById('navUsers').style.display = currentRole === 'admin' ? '' : 'none';
+    document.getElementById('navDashboard').style.display = currentRole === 'admin' ? '' : 'none';
     document.getElementById('loginOverlay').style.display = 'none';
     await initApp();
   } catch (e) {
@@ -1053,8 +1106,9 @@ async function doLogout() {
   await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
   currentUsername = '';
   currentRole = '';
-  document.getElementById('manageUsersBtn').style.display = 'none';
-  document.getElementById('dashboardBtn').style.display = 'none';
+  document.getElementById('navUsers').style.display = 'none';
+  document.getElementById('navDashboard').style.display = 'none';
+  setActiveNav('daily');
   closeDashboard();
   toggleUsersPanel(false);
   document.getElementById('loginUser').value = '';
@@ -1735,19 +1789,33 @@ function customSKUs_resetQty() {
 }
 
 /* ═══════════════════════════════════════════════════════
-   USER DROPDOWN
+   SIDEBAR NAVIGATION
 ═══════════════════════════════════════════════════════ */
 
-function toggleUserDd() {
-  document.getElementById('userDdMenu').classList.toggle('open');
+function setActiveNav(section) {
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  const el = document.getElementById('nav' + section.charAt(0).toUpperCase() + section.slice(1));
+  if (el) el.classList.add('active');
 }
-function closeUserDd() {
-  document.getElementById('userDdMenu').classList.remove('open');
+
+function navTo(section) {
+  // Close any open right-panel / overlay first, then open the requested one
+  closeDashboard();
+  toggleHistory(false);
+  toggleVendorsPanel(false);
+  toggleUsersPanel(false);
+  setActiveNav(section);
+  switch (section) {
+    case 'daily':     /* main is always visible — nothing to open */ break;
+    case 'dashboard': loadDashboard();          break;
+    case 'history':   toggleHistory(true);      break;
+    case 'vendors':   toggleVendorsPanel(true); break;
+    case 'users':     toggleUsersPanel(true);   break;
+  }
 }
-document.addEventListener('click', function(e) {
-  const dd = document.getElementById('userDd');
-  if (dd && !dd.contains(e.target)) closeUserDd();
-});
+
+// Legacy no-ops kept so older inline handlers don't throw (dropdown removed)
+function closeUserDd() {}
 
 /* ═══════════════════════════════════════════════════════
    HISTORY PANEL
@@ -1759,6 +1827,7 @@ function toggleHistory(force) {
   historyOpen = force !== undefined ? force : !historyOpen;
   document.getElementById('historyPanel').classList.toggle('open', historyOpen);
   if (historyOpen) loadHistory();
+  else setActiveNav('daily');
 }
 
 async function loadHistory() {
@@ -1966,6 +2035,7 @@ function toggleVendorsPanel(force) {
   vendorsPanelOpen = (force !== undefined) ? force : !vendorsPanelOpen;
   document.getElementById('vendorsPanel').classList.toggle('open', vendorsPanelOpen);
   if (vendorsPanelOpen) loadVendorsList();
+  else setActiveNav('daily');
 }
 
 function renderVendorsList(vendors) {
@@ -2138,6 +2208,7 @@ function toggleUsersPanel(force) {
   usersPanelOpen = (force !== undefined) ? force : !usersPanelOpen;
   document.getElementById('usersPanel').classList.toggle('open', usersPanelOpen);
   if (usersPanelOpen) loadUsers();
+  else setActiveNav('daily');
 }
 
 async function loadUsers() {
@@ -2218,6 +2289,7 @@ function closeDashboard() {
   document.getElementById('dashboardOverlay').style.display = 'none';
   if (_dashLine) { _dashLine.destroy(); _dashLine = null; }
   if (_dashBar)  { _dashBar.destroy();  _dashBar  = null; }
+  setActiveNav('daily');
 }
 
 function _renderDashCards(data) {
@@ -2399,7 +2471,3 @@ checkAuth();
 </script>
 </body>
 </html>
-
-
-
-Check this code once, how is it different from your old index.html
