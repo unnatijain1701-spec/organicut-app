@@ -751,7 +751,7 @@ tr.dash-row-alt td { background: #f7fdf9; }
     <div class="topbar-fields">
       <div class="field">
         <label>Date</label>
-        <input type="date" id="dateInput" onchange="_freshCSVLoaded=false; recalc(); tryReprocessCSV();">
+        <input type="date" id="dateInput" onchange="_freshCSVLoaded=false; recalc(); tryReprocessCSV(); reloadTodayData();">
       </div>
       <div class="field">
         <label>Sale&nbsp;Qty&nbsp;(kg)</label>
@@ -1387,7 +1387,7 @@ function renderUnloadingTable() {
       if (!displayRate) displayRate = rate;
       const qty  = kgState[v]?.[idx] || 0;
       const cost = qty * rate;
-      return `<td class="r"><input type="number" min="0" step="any" value="${qty||''}" placeholder="—"
+      return `<td class="r"><input type="number" min="0" step="0.001" value="${qty||''}" placeholder="—"
         data-v="${vd}" data-type="def" data-i="${idx}" data-rate="${rate}" onchange="onKG(this)"></td>
         <td class="r cost-val" id="kc_${vd}_${idx}">${cost>0?fc(cost):'<span class="zero">—</span>'}</td>`;
     }).join('');
@@ -1401,10 +1401,9 @@ function renderUnloadingTable() {
       const qty = sku.qty || 0, cost = qty * sku.rate;
       const vendorCells = unloadVendors.map(u => {
         if (u !== v) return '<td></td><td class="r"><span class="zero">—</span></td>';
-        return `<td class="r"><input type="number" min="0" step="any" value="${qty||''}" placeholder="—"
+        return `<td class="r"><input type="number" min="0" step="0.001" value="${qty||''}" placeholder="—"
           data-v="${vd}" data-type="cust" data-ci="${sku.id}" data-rate="${sku.rate}" onchange="onKG(this)"></td>
           <td class="r cost-val" id="kcc_${vd}_${sku.id}">${cost>0?fc(cost):'<span class="zero">—</span>'}</td>`;
-
       }).join('');
       return `<tr class="custom-sku-row"><td class="sku-name">${sku.name} <span style="font-size:10px;color:var(--muted)">(${v})</span></td>
         <td class="r rate-cell">₹&nbsp;${sku.rate.toFixed(2)}</td>${vendorCells}</tr>`;
@@ -1445,7 +1444,7 @@ function buildPane(v) {
         <button class="btn-edit-sku" title="Edit rate" onclick="startEditDefaultSKU('${vesc}',${i})">✎</button>
       </td>
       <td class="r rate-cell" id="defrate_${vid_}_${i}">₹&nbsp;${rate.toFixed(2)}</td>
-      <td class="r"><input type="number" min="0" step="any" value="${qty||''}" placeholder="—"
+      <td class="r"><input type="number" min="0" step="0.001" value="${qty||''}" placeholder="—"
         data-v="${vid_}" data-type="def" data-i="${i}" data-rate="${rate}" onchange="onKG(this)"></td>
       <td class="r cost-val" id="kc_${vid_}_${i}">${cost>0?fc(cost):'<span class="zero">—</span>'}</td>
     </tr>`;
@@ -1456,7 +1455,7 @@ function buildPane(v) {
     return `<tr class="custom-sku-row" id="custrow_${vid_}_${sku.id}">
       <td class="sku-name">${sku.name}</td>
       <td class="r rate-cell">₹&nbsp;${sku.rate.toFixed(2)}</td>
-      <td class="r"><input type="number" min="0" step="any" value="${qty||''}" placeholder="—"
+      <td class="r"><input type="number" min="0" step="0.001" value="${qty||''}" placeholder="—"
         data-v="${vid_}" data-type="cust" data-ci="${sku.id}" data-rate="${sku.rate}" onchange="onKG(this)"></td>
       <td class="r cost-val" id="kcc_${vid_}_${sku.id}">${cost>0?fc(cost):'<span class="zero">—</span>'}</td>
     </tr>`;
@@ -1746,7 +1745,7 @@ async function reloadTodayData() {
   if (!date) { showToast('⚠ Select a date first', true); return; }
   const btn = document.getElementById('reloadBtn');
   if (btn) { btn.textContent = '⏳'; btn.disabled = true; }
-  _freshCSVLoaded = false;
+  clearForm();
   await silentLoadRecord(date);
   if (btn) { btn.textContent = '🔄'; btn.disabled = false; }
 }
@@ -1805,6 +1804,24 @@ function customSKUs_resetQty() {
     customSKUs[v].forEach(s => { s.qty = 0; });
     unloadingCosts[v] = 0;
   });
+}
+
+function clearForm() {
+  // Reset attendance
+  ATT_VENDORS = [];
+  Object.keys(attState).forEach(k => delete attState[k]);
+  // Reset KG quantities and unloading costs
+  KG_VENDORS.forEach(v => {
+    kgState[v] = new Array((SKU_CFG[v] || []).length).fill(0);
+    customSKUs[v].forEach(s => { s.qty = 0; });
+    unloadingCosts[v] = 0;
+  });
+  // Reset sale qty
+  document.getElementById('saleQtyInput').value = '';
+  _freshCSVLoaded = false;
+  renderAtt();
+  renderKGTabs();
+  recalc();
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -2329,11 +2346,12 @@ function _renderDashCards(data) {
   const best  = valid.length ? valid.reduce((b, r) => parseFloat(r.mpk) > parseFloat(b.mpk) ? r : b) : null;
   const worst = valid.length ? valid.reduce((w, r) => parseFloat(r.mpk) < parseFloat(w.mpk) ? r : w) : null;
 
+  const fmtD = d => new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
   document.getElementById('dcAvgMPK').textContent    = avgMPK !== null ? '₹ ' + avgMPK.toFixed(2) : '—';
   document.getElementById('dcBestMPK').textContent   = best  ? '₹ ' + parseFloat(best.mpk).toFixed(2)  : '—';
-  document.getElementById('dcBestDate').textContent  = best  ? best.date  : '';
+  document.getElementById('dcBestDate').textContent  = best  ? fmtD(best.date)  : '';
   document.getElementById('dcWorstMPK').textContent  = worst ? '₹ ' + parseFloat(worst.mpk).toFixed(2) : '—';
-  document.getElementById('dcWorstDate').textContent = worst ? worst.date : '';
+  document.getElementById('dcWorstDate').textContent = worst ? fmtD(worst.date) : '';
   document.getElementById('dcDaysCount').textContent = String(thisRecs.length);
 }
 
@@ -2380,8 +2398,9 @@ function _renderLineChart() {
   if (_dashLine) { _dashLine.destroy(); _dashLine = null; }
 
   const ctx = document.getElementById('dashLineChart').getContext('2d');
+  const fmtLabel = d => new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
   const labels = _dashView === 'daily'
-    ? _dashData.daily.map(r => r.date)
+    ? _dashData.daily.map(r => fmtLabel(r.date))
     : _dashData.monthly.map(m => m.month);
   const values = _dashView === 'daily'
     ? _dashData.daily.map(r => parseFloat(r.mpk))
@@ -2462,9 +2481,10 @@ function _renderDashTable(data) {
     tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:28px">No records yet.</td></tr>';
     return;
   }
+  const fmt = d => new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
   tbody.innerHTML = rows.map((r, i) => `
     <tr class="${i % 2 === 1 ? 'dash-row-alt' : ''}">
-      <td>${r.date}</td>
+      <td>${fmt(r.date)}</td>
       <td class="r">₹ ${parseFloat(r.attendance_cost).toFixed(2)}</td>
       <td class="r">₹ ${parseFloat(r.kg_cost).toFixed(2)}</td>
       <td class="r">₹ ${parseFloat(r.total_cost).toFixed(2)}</td>
