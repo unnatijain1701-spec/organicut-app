@@ -2343,8 +2343,8 @@ function _renderDashCards(data) {
     : null;
 
   const valid = data.daily.filter(r => parseFloat(r.mpk) > 0);
-  const best  = valid.length ? valid.reduce((b, r) => parseFloat(r.mpk) > parseFloat(b.mpk) ? r : b) : null;
-  const worst = valid.length ? valid.reduce((w, r) => parseFloat(r.mpk) < parseFloat(w.mpk) ? r : w) : null;
+  const best  = valid.length ? valid.reduce((b, r) => parseFloat(r.mpk) < parseFloat(b.mpk) ? r : b) : null;
+  const worst = valid.length ? valid.reduce((w, r) => parseFloat(r.mpk) > parseFloat(w.mpk) ? r : w) : null;
 
   const fmtD = d => new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
   document.getElementById('dcAvgMPK').textContent    = avgMPK !== null ? '₹ ' + avgMPK.toFixed(2) : '—';
