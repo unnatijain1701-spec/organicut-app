@@ -1387,7 +1387,7 @@ function renderUnloadingTable() {
       if (!displayRate) displayRate = rate;
       const qty  = kgState[v]?.[idx] || 0;
       const cost = qty * rate;
-      return `<td class="r"><input type="number" min="0" step="0.001" value="${qty||''}" placeholder="—"
+      return `<td class="r"><input type="number" min="0" step="any" value="${qty||''}" placeholder="—"
         data-v="${vd}" data-type="def" data-i="${idx}" data-rate="${rate}" onchange="onKG(this)"></td>
         <td class="r cost-val" id="kc_${vd}_${idx}">${cost>0?fc(cost):'<span class="zero">—</span>'}</td>`;
     }).join('');
@@ -1401,9 +1401,10 @@ function renderUnloadingTable() {
       const qty = sku.qty || 0, cost = qty * sku.rate;
       const vendorCells = unloadVendors.map(u => {
         if (u !== v) return '<td></td><td class="r"><span class="zero">—</span></td>';
-        return `<td class="r"><input type="number" min="0" step="0.001" value="${qty||''}" placeholder="—"
+        return `<td class="r"><input type="number" min="0" step="any" value="${qty||''}" placeholder="—"
           data-v="${vd}" data-type="cust" data-ci="${sku.id}" data-rate="${sku.rate}" onchange="onKG(this)"></td>
           <td class="r cost-val" id="kcc_${vd}_${sku.id}">${cost>0?fc(cost):'<span class="zero">—</span>'}</td>`;
+
       }).join('');
       return `<tr class="custom-sku-row"><td class="sku-name">${sku.name} <span style="font-size:10px;color:var(--muted)">(${v})</span></td>
         <td class="r rate-cell">₹&nbsp;${sku.rate.toFixed(2)}</td>${vendorCells}</tr>`;
@@ -1444,7 +1445,7 @@ function buildPane(v) {
         <button class="btn-edit-sku" title="Edit rate" onclick="startEditDefaultSKU('${vesc}',${i})">✎</button>
       </td>
       <td class="r rate-cell" id="defrate_${vid_}_${i}">₹&nbsp;${rate.toFixed(2)}</td>
-      <td class="r"><input type="number" min="0" step="0.001" value="${qty||''}" placeholder="—"
+      <td class="r"><input type="number" min="0" step="any" value="${qty||''}" placeholder="—"
         data-v="${vid_}" data-type="def" data-i="${i}" data-rate="${rate}" onchange="onKG(this)"></td>
       <td class="r cost-val" id="kc_${vid_}_${i}">${cost>0?fc(cost):'<span class="zero">—</span>'}</td>
     </tr>`;
@@ -1455,7 +1456,7 @@ function buildPane(v) {
     return `<tr class="custom-sku-row" id="custrow_${vid_}_${sku.id}">
       <td class="sku-name">${sku.name}</td>
       <td class="r rate-cell">₹&nbsp;${sku.rate.toFixed(2)}</td>
-      <td class="r"><input type="number" min="0" step="0.001" value="${qty||''}" placeholder="—"
+      <td class="r"><input type="number" min="0" step="any" value="${qty||''}" placeholder="—"
         data-v="${vid_}" data-type="cust" data-ci="${sku.id}" data-rate="${sku.rate}" onchange="onKG(this)"></td>
       <td class="r cost-val" id="kcc_${vid_}_${sku.id}">${cost>0?fc(cost):'<span class="zero">—</span>'}</td>
     </tr>`;
