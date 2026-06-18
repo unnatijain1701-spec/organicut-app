@@ -77,10 +77,10 @@ router.post('/setup', async (req, res) => {
   }
 });
 
-// GET /api/auth/users — list all users (id, username)
+// GET /api/auth/users — list all users (id, username, role)
 router.get('/users', authenticateToken, async (req, res) => {
   try {
-    const { rows } = await db.query('SELECT id, username FROM users ORDER BY id');
+    const { rows } = await db.query('SELECT id, username, role FROM users ORDER BY id');
     res.json(rows);
   } catch (e) {
     console.error(e);
@@ -90,13 +90,14 @@ router.get('/users', authenticateToken, async (req, res) => {
 
 // POST /api/auth/users — create a new user
 router.post('/users', authenticateToken, async (req, res) => {
-  const { username, password } = req.body || {};
+  const { username, password, role } = req.body || {};
   if (!username || !password) {
     return res.status(400).json({ error: 'Username and password are required' });
   }
   if (password.length < 6) {
     return res.status(400).json({ error: 'Password must be at least 6 characters' });
   }
+  const assignedRole = role === 'admin' ? 'admin' : 'user';
   try {
     const exists = await db.query('SELECT id FROM users WHERE username = $1', [username.trim()]);
     if (exists.rows.length) {
@@ -104,8 +105,8 @@ router.post('/users', authenticateToken, async (req, res) => {
     }
     const hash = await bcrypt.hash(password, 12);
     const { rows } = await db.query(
-      'INSERT INTO users (username, password_hash) VALUES ($1, $2) RETURNING id, username',
-      [username.trim(), hash]
+      'INSERT INTO users (username, password_hash, role) VALUES ($1, $2, $3) RETURNING id, username, role',
+      [username.trim(), hash, assignedRole]
     );
     res.json(rows[0]);
   } catch (e) {

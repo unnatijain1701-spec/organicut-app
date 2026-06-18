@@ -617,6 +617,10 @@ tr.dash-row-alt td { background: #f7fdf9; }
     <div class="users-add-title">Add New User</div>
     <input class="users-input" id="newUsername" type="text" placeholder="Username" autocomplete="off">
     <input class="users-input" id="newPassword" type="password" placeholder="Password (min 6 chars)" autocomplete="new-password">
+    <select class="users-input" id="newUserRole" style="cursor:pointer">
+      <option value="user">Operator (can enter data)</option>
+      <option value="admin">Admin (full access)</option>
+    </select>
     <div id="usersFormErr" class="users-form-err"></div>
     <button class="users-add-btn" onclick="addUser()">Add User</button>
   </div>
@@ -2235,9 +2239,12 @@ async function loadUsers() {
       return;
     }
     list.innerHTML = users.map(u => {
-      const isYou = u.username === currentUsername;
+      const isYou  = u.username === currentUsername;
+      const isAdmin = u.role === 'admin';
+      const badge  = `<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;margin-left:6px;
+        background:${isAdmin ? '#1e6b45' : '#e4f3ea'};color:${isAdmin ? '#fff' : '#4a7a5e'}">${isAdmin ? 'ADMIN' : 'OPERATOR'}</span>`;
       return `<div class="user-row">
-        <span class="user-row-name">${u.username}${isYou ? '<span class="user-row-you">(you)</span>' : ''}</span>
+        <span class="user-row-name">${u.username}${badge}${isYou ? '<span class="user-row-you"> (you)</span>' : ''}</span>
         ${isYou ? '' : `<button class="user-del-btn" onclick="deleteUser(${u.id},'${u.username.replace(/'/g,"\\'")}')">Delete</button>`}
       </div>`;
     }).join('');
@@ -2249,15 +2256,17 @@ async function loadUsers() {
 async function addUser() {
   const username = document.getElementById('newUsername').value.trim();
   const password = document.getElementById('newPassword').value;
+  const role     = document.getElementById('newUserRole').value;
   const errEl    = document.getElementById('usersFormErr');
   errEl.textContent = '';
   if (!username || !password) { errEl.textContent = 'Both fields are required.'; return; }
   if (password.length < 6)    { errEl.textContent = 'Password must be at least 6 characters.'; return; }
   try {
-    await api('POST', '/api/auth/users', { username, password });
+    await api('POST', '/api/auth/users', { username, password, role });
     document.getElementById('newUsername').value = '';
     document.getElementById('newPassword').value = '';
-    showToast('✓ User "' + username + '" created', false);
+    document.getElementById('newUserRole').value = 'user';
+    showToast('✓ User "' + username + '" created as ' + (role === 'admin' ? 'Admin' : 'Operator'), false);
     loadUsers();
   } catch (e) {
     errEl.textContent = e.message;
