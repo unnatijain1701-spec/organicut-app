@@ -692,10 +692,20 @@ tr.dash-row-alt td { background: #f7fdf9; }
   </div>
   <div class="dash-body">
 
-    <!-- 4 summary cards -->
+    <!-- Date range filter -->
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:16px 20px 0;background:#fff;border-bottom:1px solid var(--border);margin-bottom:0">
+      <span style="font-size:12px;font-weight:700;color:var(--muted)">DATE RANGE</span>
+      <input type="date" id="dashFromDate" onchange="applyDashFilter()" style="border:1px solid var(--border);border-radius:6px;padding:5px 9px;font-size:13px;color:var(--text)">
+      <span style="font-size:13px;color:var(--muted)">to</span>
+      <input type="date" id="dashToDate" onchange="applyDashFilter()" style="border:1px solid var(--border);border-radius:6px;padding:5px 9px;font-size:13px;color:var(--text)">
+      <button onclick="resetDashFilter()" style="border:1px solid var(--border);border-radius:6px;padding:5px 12px;font-size:12px;background:#fff;cursor:pointer;color:var(--muted)">Reset</button>
+      <span id="dashDateRangeLabel" style="font-size:12px;color:var(--primary);font-weight:600;margin-left:4px"></span>
+    </div>
+
+    <!-- 6 summary cards -->
     <div class="dash-cards">
       <div class="dash-card">
-        <div class="dash-card-label">Avg MPK This Month</div>
+        <div class="dash-card-label">Avg MPK (Selected Period)</div>
         <div class="dash-card-value green" id="dcAvgMPK">—</div>
       </div>
       <div class="dash-card">
@@ -709,8 +719,16 @@ tr.dash-row-alt td { background: #f7fdf9; }
         <div class="dash-card-sub" id="dcWorstDate"></div>
       </div>
       <div class="dash-card">
-        <div class="dash-card-label">Days Recorded This Month</div>
+        <div class="dash-card-label">Days Recorded</div>
         <div class="dash-card-value" id="dcDaysCount">—</div>
+      </div>
+      <div class="dash-card">
+        <div class="dash-card-label">Total Manpower Cost</div>
+        <div class="dash-card-value" id="dcTotalAtt">—</div>
+      </div>
+      <div class="dash-card">
+        <div class="dash-card-label">Total Volume Processed</div>
+        <div class="dash-card-value" id="dcTotalVol">—</div>
       </div>
     </div>
 
@@ -747,8 +765,8 @@ tr.dash-row-alt td { background: #f7fdf9; }
           <thead>
             <tr>
               <th>Date</th>
-              <th class="r">Attendance Cost</th>
-              <th class="r">KG Cost</th>
+              <th class="r">Prod. Attendance Cost</th>
+              <th class="r">Per KG Cost</th>
               <th class="r">Total Cost</th>
               <th class="r">Sale Qty</th>
               <th class="r">MPK</th>
@@ -786,7 +804,7 @@ tr.dash-row-alt td { background: #f7fdf9; }
       <div class="field" id="plantSelectorField" style="display:none">
         <label>Plant</label>
         <select id="plantSelector" onchange="onPlantChange(this.value)" style="height:34px;border:1px solid var(--border);border-radius:6px;padding:0 8px;font-size:13px;background:#fff;color:var(--text);">
-          <option value="">— Select plant —</option>
+          <option value="">All Plants</option>
         </select>
       </div>
       <div class="field">
@@ -817,7 +835,7 @@ tr.dash-row-alt td { background: #f7fdf9; }
 <!-- ═══════════════════ SUMMARY BAR ═══════════════════ -->
 <div class="sumbar">
   <div class="si">
-    <div class="si-label">Attendance Cost</div>
+    <div class="si-label">Production Attendance Cost</div>
     <div class="si-value" id="sumAtt">₹ 0.00</div>
   </div>
   <div class="si">
@@ -849,7 +867,7 @@ tr.dash-row-alt td { background: #f7fdf9; }
   <div class="card">
     <div class="card-head">
       <div>
-        <div class="card-title">👥 Attendance Cost</div>
+        <div class="card-title">👥 Production Attendance Cost</div>
         <div style="font-size:11px;color:var(--muted);margin-top:2px">Upload biometric CSV or add contractors manually</div>
       </div>
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
@@ -872,13 +890,13 @@ tr.dash-row-alt td { background: #f7fdf9; }
           <tr>
             <th>Contractor</th>
             <th class="r">Workers Present</th>
-            <th class="r">Attendance Cost (₹)</th>
+            <th class="r">Production Attendance Cost (₹)</th>
           </tr>
         </thead>
         <tbody id="attTbody"></tbody>
         <tfoot>
           <tr class="ft">
-            <td>Total Attendance Cost</td>
+            <td>Total Production Attendance Cost</td>
             <td></td>
             <td class="r" id="attTotal">₹ 0.00</td>
           </tr>
@@ -1221,7 +1239,7 @@ async function setupPlantSelector() {
   try {
     const plants = await fetch('/api/auth/plants', { credentials: 'include' }).then(r => r.json());
     const sel = document.getElementById('plantSelector');
-    sel.innerHTML = '<option value="">— Select plant —</option>';
+    sel.innerHTML = '<option value="">All Plants</option>';
     plants.forEach(p => {
       const opt = document.createElement('option');
       opt.value = p.id;
@@ -1261,6 +1279,7 @@ async function initApp() {
   document.querySelector('.sumbar').style.display         = isAllPlants ? 'none' : '';
   document.querySelector('.btn-save-rec').style.display   = isAllPlants ? 'none' : '';
   document.getElementById('reloadBtn').style.display      = isAllPlants ? 'none' : '';
+  document.getElementById('navHistory').style.display     = isAllPlants ? 'none' : '';
 
   if (isAllPlants) {
     await loadAllPlantsView(document.getElementById('dateInput').value);
@@ -1297,7 +1316,7 @@ async function loadAllPlantsView(date) {
     const totMPK = totQty > 0 ? totTot / totQty : null;
     tableEl.innerHTML = `<table class="ap-table">
       <thead><tr>
-        <th>Plant</th><th>Att Cost</th><th>KG Cost</th><th>Total Cost</th><th>Sale Qty (kg)</th><th>MPK (₹/kg)</th>
+        <th>Plant</th><th>Prod. Att. Cost</th><th>Per KG Cost</th><th>Total Cost</th><th>Sale Qty (kg)</th><th>MPK (₹/kg)</th>
       </tr></thead>
       <tbody>
         ${rows.map(r => `<tr>
@@ -2195,9 +2214,10 @@ async function exportAllRecords() {
     const records = await api('GET', '/api/records/export');
     if (!records.length) { showToast('⚠ No records found.', true); return; }
 
-    const summaryRows = [['Date','Attendance Cost','KG Cost','Total Cost','Sale Qty (kg)','MPK']];
+    const summaryRows = [['Date','Production Attendance Cost','Per KG Cost','Total Cost','Sale Qty (kg)','MPK']];
     const attRows = [['Date','Contractor','Workers','Cost (₹)']];
     const kgRows  = [['Date','Vendor','SKU','Rate (₹/kg)','Qty (kg)','Cost (₹)']];
+    const vendorTotals = {}; // vendor → { qty, cost }
 
     for (const detail of records) {
       const date = typeof detail.record_date === 'string'
@@ -2220,24 +2240,40 @@ async function exportAllRecords() {
       (detail.kgEntries || []).forEach(e => {
         if (e.sku_name === '__UNLOADING__') {
           kgRows.push([date, e.vendor_name, 'Unloading Cost', '', '', r2(parseFloat(e.cost) || 0)]);
+          if (!vendorTotals[e.vendor_name]) vendorTotals[e.vendor_name] = { qty: 0, cost: 0 };
+          vendorTotals[e.vendor_name].cost += parseFloat(e.cost) || 0;
         } else {
           kgRows.push([date, e.vendor_name, e.sku_name,
             parseFloat(e.rate) || 0, parseFloat(e.qty) || 0, r2(parseFloat(e.cost) || 0)]);
+          if (!vendorTotals[e.vendor_name]) vendorTotals[e.vendor_name] = { qty: 0, cost: 0 };
+          vendorTotals[e.vendor_name].qty  += parseFloat(e.qty)  || 0;
+          vendorTotals[e.vendor_name].cost += parseFloat(e.cost) || 0;
         }
       });
     }
 
+    // Build vendor cost summary sheet
+    const vendorRows = [['Vendor','Total Qty Processed (kg)','Total Amount Paid (₹)']];
+    Object.entries(vendorTotals).sort((a,b) => b[1].cost - a[1].cost).forEach(([name, v]) => {
+      vendorRows.push([name, r2(v.qty), r2(v.cost)]);
+    });
+    const grandVendorCost = Object.values(vendorTotals).reduce((s, v) => s + v.cost, 0);
+    vendorRows.push(['TOTAL', '', r2(grandVendorCost)]);
+
     const ws1 = XLSX.utils.aoa_to_sheet(summaryRows);
-    ws1['!cols'] = [12,16,12,12,14,10].map(w => ({ wch: w }));
+    ws1['!cols'] = [12,22,14,12,14,10].map(w => ({ wch: w }));
     const ws2 = XLSX.utils.aoa_to_sheet(attRows);
     ws2['!cols'] = [12,32,10,12].map(w => ({ wch: w }));
     const ws3 = XLSX.utils.aoa_to_sheet(kgRows);
     ws3['!cols'] = [12,14,28,12,10,12].map(w => ({ wch: w }));
+    const ws4 = XLSX.utils.aoa_to_sheet(vendorRows);
+    ws4['!cols'] = [20,24,20].map(w => ({ wch: w }));
 
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws1, 'Daily Summary');
     XLSX.utils.book_append_sheet(wb, ws2, 'Attendance Detail');
     XLSX.utils.book_append_sheet(wb, ws3, 'KG Detail');
+    XLSX.utils.book_append_sheet(wb, ws4, 'Vendor Cost Summary');
     XLSX.writeFile(wb, 'Organicut_MPK_All_Records.xlsx');
     showToast('✓ Exported ' + records.length + ' record' + (records.length === 1 ? '' : 's'), false);
   } catch (e) {
@@ -2546,20 +2582,67 @@ let _dashLine = null;
 let _dashBar  = null;
 let _dashData = null;
 let _dashView = 'daily';
+let _dashFromDate = null;
+let _dashToDate   = null;
 
 async function loadDashboard() {
   if (currentRole !== 'admin' && currentRole !== 'superadmin') return;
   document.getElementById('dashboardOverlay').style.display = 'flex';
+  // Default to current month
+  const now = new Date();
+  const y = now.getFullYear(), m = String(now.getMonth() + 1).padStart(2, '0');
+  const lastDay = new Date(y, now.getMonth() + 1, 0).getDate();
+  _dashFromDate = `${y}-${m}-01`;
+  _dashToDate   = `${y}-${m}-${String(lastDay).padStart(2,'0')}`;
+  document.getElementById('dashFromDate').value = _dashFromDate;
+  document.getElementById('dashToDate').value   = _dashToDate;
   try {
     const data = await api('GET', '/api/records/analytics');
     _dashData = data;
-    _renderDashCards(data);
-    _renderDashTrend(data);
-    setChartView('daily');
-    _renderDashTable(data);
+    _applyDashData();
   } catch (e) {
     showToast('Failed to load dashboard: ' + e.message, true);
   }
+}
+
+function applyDashFilter() {
+  _dashFromDate = document.getElementById('dashFromDate').value || null;
+  _dashToDate   = document.getElementById('dashToDate').value   || null;
+  _applyDashData();
+}
+
+function resetDashFilter() {
+  const now = new Date();
+  const y = now.getFullYear(), m = String(now.getMonth() + 1).padStart(2, '0');
+  const lastDay = new Date(y, now.getMonth() + 1, 0).getDate();
+  _dashFromDate = `${y}-${m}-01`;
+  _dashToDate   = `${y}-${m}-${String(lastDay).padStart(2,'0')}`;
+  document.getElementById('dashFromDate').value = _dashFromDate;
+  document.getElementById('dashToDate').value   = _dashToDate;
+  _applyDashData();
+}
+
+function _applyDashData() {
+  if (!_dashData) return;
+  // Filter daily records to selected range
+  const filtered = {
+    daily: _dashData.daily.filter(r => {
+      if (_dashFromDate && r.date < _dashFromDate) return false;
+      if (_dashToDate   && r.date > _dashToDate)   return false;
+      return true;
+    }),
+    monthly: _dashData.monthly
+  };
+  // Update range label
+  const fmtD = d => new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+  const label = (_dashFromDate && _dashToDate)
+    ? `Showing: ${fmtD(_dashFromDate)} — ${fmtD(_dashToDate)}`
+    : (_dashFromDate ? `From ${fmtD(_dashFromDate)}` : '');
+  document.getElementById('dashDateRangeLabel').textContent = label;
+  _renderDashCards(filtered);
+  _renderDashTrend(filtered);
+  setChartView(_dashView);
+  _renderDashTable(filtered);
 }
 
 function closeDashboard() {
@@ -2570,15 +2653,14 @@ function closeDashboard() {
 }
 
 function _renderDashCards(data) {
-  const now = new Date();
-  const thisMonth = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
-  const thisRecs  = data.daily.filter(r => r.date.slice(0, 7) === thisMonth);
+  const recs = data.daily;
 
-  const totalCostSum = thisRecs.reduce((s, r) => s + parseFloat(r.total_cost || 0), 0);
-  const totalQtySum  = thisRecs.reduce((s, r) => s + parseFloat(r.sale_qty  || 0), 0);
+  const totalCostSum = recs.reduce((s, r) => s + parseFloat(r.total_cost || 0), 0);
+  const totalAttSum  = recs.reduce((s, r) => s + parseFloat(r.attendance_cost || 0), 0);
+  const totalQtySum  = recs.reduce((s, r) => s + parseFloat(r.sale_qty  || 0), 0);
   const avgMPK = totalQtySum > 0 ? totalCostSum / totalQtySum : null;
 
-  const valid = data.daily.filter(r => parseFloat(r.mpk) > 0);
+  const valid = recs.filter(r => parseFloat(r.mpk) > 0);
   const best  = valid.length ? valid.reduce((b, r) => parseFloat(r.mpk) < parseFloat(b.mpk) ? r : b) : null;
   const worst = valid.length ? valid.reduce((w, r) => parseFloat(r.mpk) > parseFloat(w.mpk) ? r : w) : null;
 
@@ -2588,7 +2670,9 @@ function _renderDashCards(data) {
   document.getElementById('dcBestDate').textContent  = best  ? fmtD(best.date)  : '';
   document.getElementById('dcWorstMPK').textContent  = worst ? '₹ ' + parseFloat(worst.mpk).toFixed(2) : '—';
   document.getElementById('dcWorstDate').textContent = worst ? fmtD(worst.date) : '';
-  document.getElementById('dcDaysCount').textContent = String(thisRecs.length);
+  document.getElementById('dcDaysCount').textContent = String(recs.length);
+  document.getElementById('dcTotalAtt').textContent  = '₹ ' + totalAttSum.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  document.getElementById('dcTotalVol').textContent  = totalQtySum.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' kg';
 }
 
 function _renderDashTrend(data) {
@@ -2633,13 +2717,20 @@ function _renderLineChart() {
   if (!_dashData) return;
   if (_dashLine) { _dashLine.destroy(); _dashLine = null; }
 
+  // Use filtered daily data for daily view
+  const filteredDaily = _dashData.daily.filter(r => {
+    if (_dashFromDate && r.date < _dashFromDate) return false;
+    if (_dashToDate   && r.date > _dashToDate)   return false;
+    return true;
+  });
+
   const ctx = document.getElementById('dashLineChart').getContext('2d');
   const fmtLabel = d => new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
   const labels = _dashView === 'daily'
-    ? _dashData.daily.map(r => fmtLabel(r.date))
+    ? filteredDaily.map(r => fmtLabel(r.date))
     : _dashData.monthly.map(m => m.month);
   const values = _dashView === 'daily'
-    ? _dashData.daily.map(r => parseFloat(r.mpk))
+    ? filteredDaily.map(r => parseFloat(r.mpk))
     : _dashData.monthly.map(m => parseFloat(m.avg_mpk));
 
   _dashLine = new Chart(ctx, {
@@ -2687,9 +2778,9 @@ function _renderBarChart() {
     data: {
       labels: months.map(m => m.month),
       datasets: [
-        { label: 'Attendance Cost', data: months.map(m => parseFloat(m.avg_attendance_cost)),
+        { label: 'Prod. Attendance Cost', data: months.map(m => parseFloat(m.avg_attendance_cost)),
           backgroundColor: '#1e6b45', borderRadius: 4 },
-        { label: 'KG Cost', data: months.map(m => parseFloat(m.avg_kg_cost)),
+        { label: 'Per KG Cost', data: months.map(m => parseFloat(m.avg_kg_cost)),
           backgroundColor: '#3aaa6b', borderRadius: 4 }
       ]
     },
