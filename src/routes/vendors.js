@@ -6,7 +6,7 @@ const router = express.Router();
 router.use(authenticateToken);
 
 function getPlantId(req) {
-  if (getPlantId(req) != null) return getPlantId(req);
+  if (req.user.plant_id != null) return req.user.plant_id;
   const pid = parseInt(req.query.plantId || req.body?.plantId);
   return isNaN(pid) ? null : pid;
 }
