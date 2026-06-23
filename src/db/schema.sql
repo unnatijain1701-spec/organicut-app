@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS daily_records (
 );
 
 ALTER TABLE daily_records ADD COLUMN IF NOT EXISTS plant_id INTEGER REFERENCES plants(id);
+UPDATE daily_records SET plant_id = (SELECT id FROM plants WHERE name = 'Rai') WHERE plant_id IS NULL;
 
 -- Replace single-date unique with per-plant unique
 ALTER TABLE daily_records DROP CONSTRAINT IF EXISTS daily_records_record_date_key;
@@ -72,6 +73,7 @@ CREATE TABLE IF NOT EXISTS custom_skus (
 );
 
 ALTER TABLE custom_skus ADD COLUMN IF NOT EXISTS plant_id INTEGER REFERENCES plants(id);
+UPDATE custom_skus SET plant_id = (SELECT id FROM plants WHERE name = 'Rai') WHERE plant_id IS NULL;
 
 ALTER TABLE custom_skus DROP CONSTRAINT IF EXISTS custom_skus_vendor_name_sku_name_key;
 CREATE UNIQUE INDEX IF NOT EXISTS custom_skus_plant_vendor_sku_idx ON custom_skus(plant_id, vendor_name, sku_name);
@@ -85,6 +87,7 @@ CREATE TABLE IF NOT EXISTS sku_rate_overrides (
 );
 
 ALTER TABLE sku_rate_overrides ADD COLUMN IF NOT EXISTS plant_id INTEGER REFERENCES plants(id);
+UPDATE sku_rate_overrides SET plant_id = (SELECT id FROM plants WHERE name = 'Rai') WHERE plant_id IS NULL;
 
 ALTER TABLE sku_rate_overrides DROP CONSTRAINT IF EXISTS sku_rate_overrides_pkey;
 CREATE UNIQUE INDEX IF NOT EXISTS sku_rate_overrides_plant_vendor_idx ON sku_rate_overrides(plant_id, vendor_name, sku_index);
@@ -98,11 +101,11 @@ CREATE TABLE IF NOT EXISTS kg_vendors (
 ALTER TABLE kg_vendors ADD COLUMN IF NOT EXISTS display_order INTEGER DEFAULT 0;
 ALTER TABLE kg_vendors ADD COLUMN IF NOT EXISTS plant_id      INTEGER REFERENCES plants(id);
 
--- Drop old global unique; replace with per-plant unique
+-- Drop old global unique; replace with per-plant unique (after migration so no nulls conflict)
 ALTER TABLE kg_vendors DROP CONSTRAINT IF EXISTS kg_vendors_name_key;
 CREATE UNIQUE INDEX IF NOT EXISTS kg_vendors_plant_name_idx ON kg_vendors(plant_id, name);
 
--- Seed Rai's default vendors (plant_id = 1)
+-- Seed Rai's default vendors — skips any already migrated above
 INSERT INTO kg_vendors (name, display_order, plant_id)
 SELECT v.name, v.display_order, p.id
 FROM (VALUES
@@ -114,12 +117,6 @@ FROM (VALUES
 ) AS v(name, display_order)
 CROSS JOIN (SELECT id FROM plants WHERE name = 'Rai') AS p
 ON CONFLICT DO NOTHING;
-
--- ── Migration: tag all existing rows as Rai ──────────────────────────────────
-UPDATE daily_records      SET plant_id = (SELECT id FROM plants WHERE name = 'Rai') WHERE plant_id IS NULL;
-UPDATE kg_vendors         SET plant_id = (SELECT id FROM plants WHERE name = 'Rai') WHERE plant_id IS NULL;
-UPDATE custom_skus        SET plant_id = (SELECT id FROM plants WHERE name = 'Rai') WHERE plant_id IS NULL;
-UPDATE sku_rate_overrides SET plant_id = (SELECT id FROM plants WHERE name = 'Rai') WHERE plant_id IS NULL;
 
 -- Promote any existing admin with no plant to superadmin
 UPDATE users SET role = 'superadmin' WHERE role = 'admin' AND plant_id IS NULL;
