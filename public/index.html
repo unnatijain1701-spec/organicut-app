@@ -1863,6 +1863,7 @@ function applyRecord(record) {
     }
     const idx = SKU_CFG[v]?.findIndex(([name]) => name === e.sku_name);
     if (idx >= 0) {
+      if (!kgState[v]) kgState[v] = new Array((SKU_CFG[v] || []).length).fill(0);
       kgState[v][idx] = qty;
     } else {
       const cs = customSKUs[v]?.find(s => s.name === e.sku_name);
