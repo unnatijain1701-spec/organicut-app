@@ -21,13 +21,20 @@ router.post('/login', async (req, res) => {
     const ok = await bcrypt.compare(password, rows[0].password_hash);
     if (!ok) return res.status(401).json({ error: 'Invalid username or password' });
 
+    const u = rows[0];
+    let plantName = null;
+    if (u.plant_id) {
+      const pr = await db.query('SELECT name FROM plants WHERE id = $1', [u.plant_id]);
+      plantName = pr.rows[0]?.name || null;
+    }
+
     const token = jwt.sign(
-      { id: rows[0].id, username: rows[0].username, role: rows[0].role },
+      { id: u.id, username: u.username, role: u.role, plant_id: u.plant_id, plant_name: plantName },
       process.env.JWT_SECRET,
       { expiresIn: '7d' }
     );
     res.cookie('token', token, COOKIE_OPTS);
-    res.json({ username: rows[0].username, role: rows[0].role });
+    res.json({ username: u.username, role: u.role, plant_id: u.plant_id, plant_name: plantName });
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: 'Server error' });
@@ -46,13 +53,18 @@ router.get('/me', (req, res) => {
   if (!token) return res.status(401).json({ error: 'Not logged in' });
   try {
     const user = jwt.verify(token, process.env.JWT_SECRET);
-    res.json({ username: user.username, role: user.role || 'user' });
+    res.json({
+      username:   user.username,
+      role:       user.role || 'user',
+      plant_id:   user.plant_id   || null,
+      plant_name: user.plant_name || null,
+    });
   } catch {
     res.status(401).json({ error: 'Session expired' });
   }
 });
 
-// POST /api/auth/setup  — create the very first admin user (locked once any user exists)
+// POST /api/auth/setup  — create the very first superadmin (locked once any user exists)
 router.post('/setup', async (req, res) => {
   const { username, password } = req.body || {};
   if (!username || !password) {
@@ -69,18 +81,48 @@ router.post('/setup', async (req, res) => {
     }
 
     const hash = await bcrypt.hash(password, 12);
-    await db.query('INSERT INTO users (username, password_hash, role) VALUES ($1, $2, $3)', [username.trim(), hash, 'admin']);
-    res.json({ ok: true, message: 'Admin user created. You can now log in.' });
+    await db.query(
+      'INSERT INTO users (username, password_hash, role, plant_id) VALUES ($1, $2, $3, NULL)',
+      [username.trim(), hash, 'superadmin']
+    );
+    res.json({ ok: true, message: 'Super admin created. You can now log in.' });
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: 'Server error' });
   }
 });
 
-// GET /api/auth/users — list all users (id, username, role)
+// GET /api/auth/plants — list all plants (used by superadmin when creating users)
+router.get('/plants', authenticateToken, async (req, res) => {
+  try {
+    const { rows } = await db.query('SELECT id, name FROM plants ORDER BY display_order');
+    res.json(rows);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// GET /api/auth/users — list users
 router.get('/users', authenticateToken, async (req, res) => {
   try {
-    const { rows } = await db.query('SELECT id, username, role FROM users ORDER BY id');
+    let rows;
+    if (req.user.role === 'superadmin') {
+      ({ rows } = await db.query(`
+        SELECT u.id, u.username, u.role, u.plant_id, p.name AS plant_name
+        FROM users u
+        LEFT JOIN plants p ON p.id = u.plant_id
+        ORDER BY u.plant_id NULLS FIRST, u.id
+      `));
+    } else {
+      ({ rows } = await db.query(`
+        SELECT u.id, u.username, u.role, u.plant_id, p.name AS plant_name
+        FROM users u
+        LEFT JOIN plants p ON p.id = u.plant_id
+        WHERE u.plant_id = $1
+        ORDER BY u.id
+      `, [req.user.plant_id]));
+    }
     res.json(rows);
   } catch (e) {
     console.error(e);
@@ -90,14 +132,26 @@ router.get('/users', authenticateToken, async (req, res) => {
 
 // POST /api/auth/users — create a new user
 router.post('/users', authenticateToken, async (req, res) => {
-  const { username, password, role } = req.body || {};
+  const { username, password, role, plantId } = req.body || {};
   if (!username || !password) {
     return res.status(400).json({ error: 'Username and password are required' });
   }
   if (password.length < 6) {
     return res.status(400).json({ error: 'Password must be at least 6 characters' });
   }
+
   const assignedRole = role === 'admin' ? 'admin' : 'user';
+
+  let assignedPlantId;
+  if (req.user.role === 'superadmin') {
+    if (!plantId) return res.status(400).json({ error: 'plantId is required' });
+    const plantCheck = await db.query('SELECT id FROM plants WHERE id = $1', [plantId]);
+    if (!plantCheck.rows.length) return res.status(400).json({ error: 'Invalid plant' });
+    assignedPlantId = parseInt(plantId, 10);
+  } else {
+    assignedPlantId = req.user.plant_id;
+  }
+
   try {
     const exists = await db.query('SELECT id FROM users WHERE username = $1', [username.trim()]);
     if (exists.rows.length) {
@@ -105,8 +159,8 @@ router.post('/users', authenticateToken, async (req, res) => {
     }
     const hash = await bcrypt.hash(password, 12);
     const { rows } = await db.query(
-      'INSERT INTO users (username, password_hash, role) VALUES ($1, $2, $3) RETURNING id, username, role',
-      [username.trim(), hash, assignedRole]
+      'INSERT INTO users (username, password_hash, role, plant_id) VALUES ($1, $2, $3, $4) RETURNING id, username, role, plant_id',
+      [username.trim(), hash, assignedRole, assignedPlantId]
     );
     res.json(rows[0]);
   } catch (e) {
@@ -115,18 +169,27 @@ router.post('/users', authenticateToken, async (req, res) => {
   }
 });
 
-// PATCH /api/auth/users/:id — change a user's role (admin only, cannot change own role)
+// PATCH /api/auth/users/:id — change role (admin/superadmin only, cannot change own role)
 router.patch('/users/:id', authenticateToken, async (req, res) => {
-  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+  const isSuperadmin = req.user.role === 'superadmin';
+  const isAdmin      = req.user.role === 'admin';
+  if (!isSuperadmin && !isAdmin) return res.status(403).json({ error: 'Admin only' });
+
   const targetId = parseInt(req.params.id, 10);
   if (isNaN(targetId)) return res.status(400).json({ error: 'Invalid user id' });
   if (targetId === req.user.id) return res.status(400).json({ error: 'You cannot change your own role' });
+
   const { role } = req.body || {};
   const newRole = role === 'admin' ? 'admin' : 'user';
+
   try {
+    const whereClause = isAdmin ? 'WHERE id = $2 AND plant_id = $3' : 'WHERE id = $2';
+    const params = isAdmin
+      ? [newRole, targetId, req.user.plant_id]
+      : [newRole, targetId];
     const result = await db.query(
-      'UPDATE users SET role = $1 WHERE id = $2 RETURNING id, username, role',
-      [newRole, targetId]
+      `UPDATE users SET role = $1 ${whereClause} RETURNING id, username, role`,
+      params
     );
     if (result.rowCount === 0) return res.status(404).json({ error: 'User not found' });
     res.json(result.rows[0]);
@@ -138,13 +201,20 @@ router.patch('/users/:id', authenticateToken, async (req, res) => {
 
 // DELETE /api/auth/users/:id — delete a user (cannot delete yourself)
 router.delete('/users/:id', authenticateToken, async (req, res) => {
+  const isSuperadmin = req.user.role === 'superadmin';
+  const isAdmin      = req.user.role === 'admin';
+  if (!isSuperadmin && !isAdmin) return res.status(403).json({ error: 'Admin only' });
+
   const targetId = parseInt(req.params.id, 10);
   if (isNaN(targetId)) return res.status(400).json({ error: 'Invalid user id' });
   if (targetId === req.user.id) {
     return res.status(400).json({ error: 'You cannot delete your own account' });
   }
+
   try {
-    const result = await db.query('DELETE FROM users WHERE id = $1', [targetId]);
+    const whereClause = isAdmin ? 'WHERE id = $1 AND plant_id = $2' : 'WHERE id = $1';
+    const params = isAdmin ? [targetId, req.user.plant_id] : [targetId];
+    const result = await db.query(`DELETE FROM users ${whereClause}`, params);
     if (result.rowCount === 0) return res.status(404).json({ error: 'User not found' });
     res.json({ ok: true });
   } catch (e) {

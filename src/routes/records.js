@@ -1,16 +1,19 @@
 const express = require('express');
 const db = require('../db');
+const { authenticateToken } = require('../middleware/auth');
 
 const router = express.Router();
+router.use(authenticateToken);
 
-// GET /api/records  — list all records (summary only)
+// GET /api/records  — list all records for this plant (summary only)
 router.get('/', async (req, res) => {
   try {
     const { rows } = await db.query(`
       SELECT id, record_date, attendance_cost, kg_cost, total_cost, sale_qty, mpk, updated_at
       FROM daily_records
+      WHERE plant_id = $1
       ORDER BY record_date DESC
-    `);
+    `, [req.user.plant_id]);
     res.json(rows);
   } catch (e) {
     console.error(e);
@@ -20,18 +23,23 @@ router.get('/', async (req, res) => {
 
 // GET /api/records/export  — ALL records with full detail in 3 queries (no N+1)
 router.get('/export', async (req, res) => {
+  const pid = req.user.plant_id;
   try {
     const { rows: records } = await db.query(
-      'SELECT * FROM daily_records ORDER BY record_date ASC'
+      'SELECT * FROM daily_records WHERE plant_id = $1 ORDER BY record_date ASC', [pid]
     );
     const { rows: attendance } = await db.query(`
       SELECT ca.record_id, ca.contractor_name, ca.workers, ca.cost
       FROM contractor_attendance ca
-    `);
+      JOIN daily_records dr ON dr.id = ca.record_id
+      WHERE dr.plant_id = $1
+    `, [pid]);
     const { rows: kgEntries } = await db.query(`
       SELECT vke.record_id, vke.vendor_name, vke.sku_name, vke.rate, vke.qty, vke.cost
       FROM vendor_kg_entries vke
-    `);
+      JOIN daily_records dr ON dr.id = vke.record_id
+      WHERE dr.plant_id = $1
+    `, [pid]);
 
     const attMap = {};
     attendance.forEach(a => {
@@ -59,11 +67,12 @@ router.get('/export', async (req, res) => {
 
 // GET /api/records/analytics  — monthly + daily aggregates for dashboard
 router.get('/analytics', async (req, res) => {
+  const pid = req.user.plant_id;
   try {
     const { rows: daily } = await db.query(`
       SELECT record_date AS date, attendance_cost, kg_cost, total_cost, sale_qty, mpk
-      FROM daily_records ORDER BY record_date ASC
-    `);
+      FROM daily_records WHERE plant_id = $1 ORDER BY record_date ASC
+    `, [pid]);
     const { rows: monthly } = await db.query(`
       SELECT
         TO_CHAR(record_date, 'YYYY-MM') AS month,
@@ -72,9 +81,10 @@ router.get('/analytics', async (req, res) => {
         AVG(kg_cost)::NUMERIC(12,2)         AS avg_kg_cost,
         COUNT(*)                            AS days
       FROM daily_records
+      WHERE plant_id = $1
       GROUP BY TO_CHAR(record_date, 'YYYY-MM')
       ORDER BY month ASC
-    `);
+    `, [pid]);
     res.json({ daily, monthly });
   } catch (e) {
     console.error(e);
@@ -84,9 +94,11 @@ router.get('/analytics', async (req, res) => {
 
 // GET /api/records/:date  — full record with attendance + KG breakdown
 router.get('/:date', async (req, res) => {
+  const pid = req.user.plant_id;
   try {
     const { rows: records } = await db.query(
-      'SELECT * FROM daily_records WHERE record_date = $1', [req.params.date]
+      'SELECT * FROM daily_records WHERE plant_id = $1 AND record_date = $2',
+      [pid, req.params.date]
     );
     if (!records.length) return res.status(404).json({ error: 'No record found for this date' });
 
@@ -107,9 +119,10 @@ router.get('/:date', async (req, res) => {
   }
 });
 
-// POST /api/records  — create or update (upsert by date)
+// POST /api/records  — create or update (upsert by plant + date)
 router.post('/', async (req, res) => {
   const { date, attendanceCost, kgCost, totalCost, saleQty, mpk, notes, attendance, kgEntries } = req.body || {};
+  const pid = req.user.plant_id;
 
   if (!date) return res.status(400).json({ error: '"date" is required (YYYY-MM-DD)' });
 
@@ -119,9 +132,9 @@ router.post('/', async (req, res) => {
 
     const { rows } = await client.query(`
       INSERT INTO daily_records
-        (record_date, attendance_cost, kg_cost, total_cost, sale_qty, mpk, notes, updated_at)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
-      ON CONFLICT (record_date) DO UPDATE SET
+        (plant_id, record_date, attendance_cost, kg_cost, total_cost, sale_qty, mpk, notes, updated_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+      ON CONFLICT (plant_id, record_date) DO UPDATE SET
         attendance_cost = EXCLUDED.attendance_cost,
         kg_cost         = EXCLUDED.kg_cost,
         total_cost      = EXCLUDED.total_cost,
@@ -130,7 +143,7 @@ router.post('/', async (req, res) => {
         notes           = EXCLUDED.notes,
         updated_at      = NOW()
       RETURNING id
-    `, [date, attendanceCost ?? 0, kgCost ?? 0, totalCost ?? 0, saleQty ?? 0, mpk ?? 0, notes ?? null]);
+    `, [pid, date, attendanceCost ?? 0, kgCost ?? 0, totalCost ?? 0, saleQty ?? 0, mpk ?? 0, notes ?? null]);
 
     const recordId = rows[0].id;
 
@@ -164,9 +177,11 @@ router.post('/', async (req, res) => {
 
 // DELETE /api/records/:date
 router.delete('/:date', async (req, res) => {
+  const pid = req.user.plant_id;
   try {
     const { rowCount } = await db.query(
-      'DELETE FROM daily_records WHERE record_date = $1', [req.params.date]
+      'DELETE FROM daily_records WHERE plant_id = $1 AND record_date = $2',
+      [pid, req.params.date]
     );
     if (!rowCount) return res.status(404).json({ error: 'Record not found' });
     res.json({ ok: true });

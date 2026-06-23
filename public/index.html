@@ -639,6 +639,9 @@ tr.dash-row-alt td { background: #f7fdf9; }
       <option value="user">Operator (can enter data)</option>
       <option value="admin">Admin (full access)</option>
     </select>
+    <select class="users-input" id="newUserPlant" style="cursor:pointer;display:none">
+      <option value="">— Select Plant —</option>
+    </select>
     <div id="usersFormErr" class="users-form-err"></div>
     <button class="users-add-btn" onclick="addUser()">Add User</button>
   </div>
@@ -879,6 +882,8 @@ tr.dash-row-alt td { background: #f7fdf9; }
 <script>
 let currentUsername = '';
 let currentRole = '';
+let currentPlantId   = null;
+let currentPlantName = null;
 
 /* ═══════════════════════════════════════════════════════
    SKU CONFIGURATION
@@ -1042,11 +1047,15 @@ async function checkAuth() {
   try {
     const user = await fetch('/api/auth/me', { credentials: 'include' }).then(r => r.json());
     if (user.username) {
-      currentUsername = user.username;
-      currentRole = user.role || 'user';
-      document.getElementById('userBadge').textContent = user.username;
-      document.getElementById('navUsers').style.display = currentRole === 'admin' ? '' : 'none';
-      document.getElementById('navDashboard').style.display = currentRole === 'admin' ? '' : 'none';
+      currentUsername  = user.username;
+      currentRole      = user.role || 'user';
+      currentPlantId   = user.plant_id   || null;
+      currentPlantName = user.plant_name || null;
+      const plantLabel = currentPlantName ? ` • ${currentPlantName}` : ' • All Plants';
+      document.getElementById('userBadge').textContent = user.username + plantLabel;
+      const isPrivileged = currentRole === 'admin' || currentRole === 'superadmin';
+      document.getElementById('navUsers').style.display = isPrivileged ? '' : 'none';
+      document.getElementById('navDashboard').style.display = isPrivileged ? '' : 'none';
       document.getElementById('loginOverlay').style.display = 'none';
       await initApp();
     } else {
@@ -1097,11 +1106,15 @@ async function doLogin() {
   if (!username || !password) { errEl.textContent = 'Please enter username and password.'; return; }
   try {
     const user = await api('POST', '/api/auth/login', { username, password });
-    currentUsername = user.username;
-    currentRole = user.role || 'user';
-    document.getElementById('userBadge').textContent = user.username;
-    document.getElementById('navUsers').style.display = currentRole === 'admin' ? '' : 'none';
-    document.getElementById('navDashboard').style.display = currentRole === 'admin' ? '' : 'none';
+    currentUsername  = user.username;
+    currentRole      = user.role || 'user';
+    currentPlantId   = user.plant_id   || null;
+    currentPlantName = user.plant_name || null;
+    const plantLabel = currentPlantName ? ` • ${currentPlantName}` : ' • All Plants';
+    document.getElementById('userBadge').textContent = user.username + plantLabel;
+    const isPrivileged = currentRole === 'admin' || currentRole === 'superadmin';
+    document.getElementById('navUsers').style.display = isPrivileged ? '' : 'none';
+    document.getElementById('navDashboard').style.display = isPrivileged ? '' : 'none';
     document.getElementById('loginOverlay').style.display = 'none';
     await initApp();
   } catch (e) {
@@ -1130,8 +1143,10 @@ async function doSetup() {
 async function doLogout() {
   closeUserDd();
   await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
-  currentUsername = '';
-  currentRole = '';
+  currentUsername  = '';
+  currentRole      = '';
+  currentPlantId   = null;
+  currentPlantName = null;
   document.getElementById('navUsers').style.display = 'none';
   document.getElementById('navDashboard').style.display = 'none';
   setActiveNav('daily');
@@ -2293,8 +2308,30 @@ let usersPanelOpen = false;
 function toggleUsersPanel(force) {
   usersPanelOpen = (force !== undefined) ? force : !usersPanelOpen;
   document.getElementById('usersPanel').classList.toggle('open', usersPanelOpen);
-  if (usersPanelOpen) loadUsers();
+  if (usersPanelOpen) loadUsersPanel();
   else setActiveNav('daily');
+}
+
+async function loadUsersPanel() {
+  // Show/hide plant dropdown based on role
+  const plantSel = document.getElementById('newUserPlant');
+  if (currentRole === 'superadmin') {
+    plantSel.style.display = '';
+    if (plantSel.options.length <= 1) {
+      try {
+        const plants = await api('GET', '/api/auth/plants');
+        plants.forEach(p => {
+          const opt = document.createElement('option');
+          opt.value = p.id;
+          opt.textContent = p.name;
+          plantSel.appendChild(opt);
+        });
+      } catch {}
+    }
+  } else {
+    plantSel.style.display = 'none';
+  }
+  loadUsers();
 }
 
 async function loadUsers() {
@@ -2307,12 +2344,16 @@ async function loadUsers() {
       return;
     }
     list.innerHTML = users.map(u => {
-      const isYou  = u.username === currentUsername;
+      const isYou   = u.username === currentUsername;
       const isAdmin = u.role === 'admin';
-      const badge  = `<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;margin-left:6px;
-        background:${isAdmin ? '#1e6b45' : '#e4f3ea'};color:${isAdmin ? '#fff' : '#4a7a5e'}">${isAdmin ? 'ADMIN' : 'OPERATOR'}</span>`;
+      const roleLbl = isAdmin ? 'ADMIN' : 'OPERATOR';
+      const badge   = `<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;margin-left:6px;
+        background:${isAdmin ? '#1e6b45' : '#e4f3ea'};color:${isAdmin ? '#fff' : '#4a7a5e'}">${roleLbl}</span>`;
+      const plantBadge = u.plant_name
+        ? `<span style="font-size:10px;padding:2px 7px;border-radius:10px;margin-left:4px;background:#f0f7f4;color:#4a7a5e">${u.plant_name}</span>`
+        : `<span style="font-size:10px;padding:2px 7px;border-radius:10px;margin-left:4px;background:#fff3cd;color:#856404">All Plants</span>`;
       return `<div class="user-row">
-        <span class="user-row-name">${u.username}${badge}${isYou ? '<span class="user-row-you"> (you)</span>' : ''}</span>
+        <span class="user-row-name">${u.username}${badge}${plantBadge}${isYou ? '<span class="user-row-you"> (you)</span>' : ''}</span>
         ${isYou ? '' : `<button class="user-del-btn" onclick="deleteUser(${u.id},'${u.username.replace(/'/g,"\\'")}')">Delete</button>`}
       </div>`;
     }).join('');
@@ -2325,15 +2366,20 @@ async function addUser() {
   const username = document.getElementById('newUsername').value.trim();
   const password = document.getElementById('newPassword').value;
   const role     = document.getElementById('newUserRole').value;
+  const plantId  = document.getElementById('newUserPlant').value;
   const errEl    = document.getElementById('usersFormErr');
   errEl.textContent = '';
   if (!username || !password) { errEl.textContent = 'Both fields are required.'; return; }
   if (password.length < 6)    { errEl.textContent = 'Password must be at least 6 characters.'; return; }
+  if (currentRole === 'superadmin' && !plantId) { errEl.textContent = 'Please select a plant.'; return; }
   try {
-    await api('POST', '/api/auth/users', { username, password, role });
+    const body = { username, password, role };
+    if (currentRole === 'superadmin') body.plantId = parseInt(plantId, 10);
+    await api('POST', '/api/auth/users', body);
     document.getElementById('newUsername').value = '';
     document.getElementById('newPassword').value = '';
     document.getElementById('newUserRole').value = 'user';
+    document.getElementById('newUserPlant').value = '';
     showToast('✓ User "' + username + '" created as ' + (role === 'admin' ? 'Admin' : 'Operator'), false);
     loadUsers();
   } catch (e) {
