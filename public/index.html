@@ -2233,9 +2233,13 @@ async function loadVendorsList() {
   list.innerHTML = '<div class="hist-empty">Loading…</div>';
   try {
     const vendors = await api('GET', '/api/vendors');
-    renderVendorsList(vendors);
+    try {
+      renderVendorsList(vendors);
+    } catch (re) {
+      list.innerHTML = `<div class="hist-empty">Render error: ${re.message}</div>`;
+    }
   } catch (e) {
-    list.innerHTML = `<div class="hist-empty">Failed to load vendors: ${e.message}</div>`;
+    list.innerHTML = `<div class="hist-empty">API error: ${e.message}</div>`;
   }
 }
 
