@@ -5,15 +5,23 @@ const { authenticateToken } = require('../middleware/auth');
 const router = express.Router();
 router.use(authenticateToken);
 
+function getPlantId(req) {
+  if (req.user.plant_id != null) return req.user.plant_id;
+  const pid = parseInt(req.query.plantId || req.body?.plantId);
+  return isNaN(pid) ? null : pid;
+}
+
 // GET /api/records  — list all records for this plant (summary only)
 router.get('/', async (req, res) => {
+  const pid = getPlantId(req);
+  if (!pid) return res.json([]);
   try {
     const { rows } = await db.query(`
       SELECT id, record_date, attendance_cost, kg_cost, total_cost, sale_qty, mpk, updated_at
       FROM daily_records
       WHERE plant_id = $1
       ORDER BY record_date DESC
-    `, [req.user.plant_id]);
+    `, [pid]);
     res.json(rows);
   } catch (e) {
     console.error(e);
@@ -23,7 +31,8 @@ router.get('/', async (req, res) => {
 
 // GET /api/records/export  — ALL records with full detail in 3 queries (no N+1)
 router.get('/export', async (req, res) => {
-  const pid = req.user.plant_id;
+  const pid = getPlantId(req);
+  if (!pid) return res.json([]);
   try {
     const { rows: records } = await db.query(
       'SELECT * FROM daily_records WHERE plant_id = $1 ORDER BY record_date ASC', [pid]
@@ -67,7 +76,8 @@ router.get('/export', async (req, res) => {
 
 // GET /api/records/analytics  — monthly + daily aggregates for dashboard
 router.get('/analytics', async (req, res) => {
-  const pid = req.user.plant_id;
+  const pid = getPlantId(req);
+  if (!pid) return res.json({ daily: [], monthly: [] });
   try {
     const { rows: daily } = await db.query(`
       SELECT record_date AS date, attendance_cost, kg_cost, total_cost, sale_qty, mpk
@@ -94,7 +104,7 @@ router.get('/analytics', async (req, res) => {
 
 // GET /api/records/:date  — full record with attendance + KG breakdown
 router.get('/:date', async (req, res) => {
-  const pid = req.user.plant_id;
+  const pid = getPlantId(req);
   try {
     const { rows: records } = await db.query(
       'SELECT * FROM daily_records WHERE plant_id = $1 AND record_date = $2',
@@ -122,7 +132,7 @@ router.get('/:date', async (req, res) => {
 // POST /api/records  — create or update (upsert by plant + date)
 router.post('/', async (req, res) => {
   const { date, attendanceCost, kgCost, totalCost, saleQty, mpk, notes, attendance, kgEntries } = req.body || {};
-  const pid = req.user.plant_id;
+  const pid = getPlantId(req);
 
   if (!date) return res.status(400).json({ error: '"date" is required (YYYY-MM-DD)' });
 
@@ -177,7 +187,7 @@ router.post('/', async (req, res) => {
 
 // DELETE /api/records/:date
 router.delete('/:date', async (req, res) => {
-  const pid = req.user.plant_id;
+  const pid = getPlantId(req);
   try {
     const { rowCount } = await db.query(
       'DELETE FROM daily_records WHERE plant_id = $1 AND record_date = $2',

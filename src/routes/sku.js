@@ -5,12 +5,18 @@ const { authenticateToken } = require('../middleware/auth');
 const router = express.Router();
 router.use(authenticateToken);
 
+function getPlantId(req) {
+  if (getPlantId(req) != null) return getPlantId(req);
+  const pid = parseInt(req.query.plantId || req.body?.plantId);
+  return isNaN(pid) ? null : pid;
+}
+
 // GET /api/sku  — all custom SKUs for this plant grouped by vendor
 router.get('/', async (req, res) => {
   try {
     const { rows } = await db.query(
       'SELECT * FROM custom_skus WHERE plant_id = $1 ORDER BY vendor_name, display_order, id',
-      [req.user.plant_id]
+      [getPlantId(req)]
     );
     const grouped = {};
     rows.forEach(r => {
@@ -29,7 +35,7 @@ router.get('/rates', async (req, res) => {
   try {
     const { rows } = await db.query(
       'SELECT vendor_name, sku_index, rate FROM sku_rate_overrides WHERE plant_id = $1',
-      [req.user.plant_id]
+      [getPlantId(req)]
     );
     res.json(rows);
   } catch (e) {
@@ -41,7 +47,7 @@ router.get('/rates', async (req, res) => {
 // POST /api/sku/rates  — save a default SKU rate override
 router.post('/rates', async (req, res) => {
   const { vendorName, skuIndex, rate } = req.body || {};
-  const pid = req.user.plant_id;
+  const pid = getPlantId(req);
   if (!vendorName || skuIndex == null || rate == null)
     return res.status(400).json({ error: 'vendorName, skuIndex, and rate are required' });
   try {
@@ -60,7 +66,7 @@ router.post('/rates', async (req, res) => {
 // POST /api/sku  — add a custom SKU
 router.post('/', async (req, res) => {
   const { vendorName, skuName, rate } = req.body || {};
-  const pid = req.user.plant_id;
+  const pid = getPlantId(req);
   if (!vendorName || !skuName || rate == null)
     return res.status(400).json({ error: 'vendorName, skuName, and rate are required' });
 
@@ -86,7 +92,7 @@ router.patch('/:id', async (req, res) => {
     const { rows } = await db.query(`
       UPDATE custom_skus SET sku_name = $1, rate = $2 WHERE id = $3 AND plant_id = $4
       RETURNING id, sku_name, rate
-    `, [skuName.trim(), parseFloat(rate), req.params.id, req.user.plant_id]);
+    `, [skuName.trim(), parseFloat(rate), req.params.id, getPlantId(req)]);
     if (!rows.length) return res.status(404).json({ error: 'SKU not found' });
     res.json({ id: rows[0].id, name: rows[0].sku_name, rate: parseFloat(rows[0].rate) });
   } catch (e) {
@@ -100,7 +106,7 @@ router.delete('/:id', async (req, res) => {
   try {
     const { rowCount } = await db.query(
       'DELETE FROM custom_skus WHERE id = $1 AND plant_id = $2',
-      [req.params.id, req.user.plant_id]
+      [req.params.id, getPlantId(req)]
     );
     if (!rowCount) return res.status(404).json({ error: 'SKU not found' });
     res.json({ ok: true });

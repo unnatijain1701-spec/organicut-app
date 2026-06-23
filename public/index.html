@@ -770,6 +770,12 @@ tr.dash-row-alt td { background: #f7fdf9; }
 <div class="topbar">
   <div class="topbar-main">
     <div class="topbar-fields">
+      <div class="field" id="plantSelectorField" style="display:none">
+        <label>Plant</label>
+        <select id="plantSelector" onchange="onPlantChange(this.value)" style="height:34px;border:1px solid var(--border);border-radius:6px;padding:0 8px;font-size:13px;background:#fff;color:var(--text);">
+          <option value="">— Select plant —</option>
+        </select>
+      </div>
       <div class="field">
         <label>Date</label>
         <input type="date" id="dateInput" onchange="_freshCSVLoaded=false; recalc(); tryReprocessCSV(); reloadTodayData();">
@@ -884,6 +890,7 @@ let currentUsername = '';
 let currentRole = '';
 let currentPlantId   = null;
 let currentPlantName = null;
+let activePlantId    = null;  // null for superadmin until a plant is selected
 
 /* ═══════════════════════════════════════════════════════
    SKU CONFIGURATION
@@ -1022,6 +1029,14 @@ let _freshCSVLoaded = false;  // true immediately after CSV upload; prevents sav
 ═══════════════════════════════════════════════════════ */
 
 async function api(method, url, body) {
+  // Superadmin: inject activePlantId so backend knows which plant to query
+  if (currentRole === 'superadmin' && activePlantId) {
+    if (method === 'GET' || method === 'DELETE') {
+      url += (url.includes('?') ? '&' : '?') + 'plantId=' + activePlantId;
+    } else if (body && !(body instanceof FormData)) {
+      body = { ...body, plantId: activePlantId };
+    }
+  }
   const opts = { method, credentials: 'include' };
   if (body instanceof FormData) {
     opts.body = body;
@@ -1051,12 +1066,14 @@ async function checkAuth() {
       currentRole      = user.role || 'user';
       currentPlantId   = user.plant_id   || null;
       currentPlantName = user.plant_name || null;
+      activePlantId    = currentPlantId;
       const plantLabel = currentPlantName ? ` • ${currentPlantName}` : ' • All Plants';
       document.getElementById('userBadge').textContent = user.username + plantLabel;
       const isPrivileged = currentRole === 'admin' || currentRole === 'superadmin';
       document.getElementById('navUsers').style.display = isPrivileged ? '' : 'none';
       document.getElementById('navDashboard').style.display = isPrivileged ? '' : 'none';
       document.getElementById('loginOverlay').style.display = 'none';
+      if (currentRole === 'superadmin') await setupPlantSelector();
       await initApp();
     } else {
       await checkIfSetupNeeded();
@@ -1110,12 +1127,14 @@ async function doLogin() {
     currentRole      = user.role || 'user';
     currentPlantId   = user.plant_id   || null;
     currentPlantName = user.plant_name || null;
+    activePlantId    = currentPlantId;
     const plantLabel = currentPlantName ? ` • ${currentPlantName}` : ' • All Plants';
     document.getElementById('userBadge').textContent = user.username + plantLabel;
     const isPrivileged = currentRole === 'admin' || currentRole === 'superadmin';
     document.getElementById('navUsers').style.display = isPrivileged ? '' : 'none';
     document.getElementById('navDashboard').style.display = isPrivileged ? '' : 'none';
     document.getElementById('loginOverlay').style.display = 'none';
+    if (currentRole === 'superadmin') await setupPlantSelector();
     await initApp();
   } catch (e) {
     errEl.textContent = e.message;
@@ -1172,6 +1191,34 @@ async function loadSKURateOverrides() {
   } catch (e) {
     console.error('Failed to load SKU rate overrides:', e.message);
   }
+}
+
+async function setupPlantSelector() {
+  try {
+    const plants = await fetch('/api/auth/plants', { credentials: 'include' }).then(r => r.json());
+    const sel = document.getElementById('plantSelector');
+    sel.innerHTML = '<option value="">— Select plant —</option>';
+    plants.forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p.id;
+      opt.textContent = p.name;
+      if (p.id === activePlantId) opt.selected = true;
+      sel.appendChild(opt);
+    });
+    document.getElementById('plantSelectorField').style.display = '';
+  } catch (e) {
+    console.error('Failed to load plants:', e.message);
+  }
+}
+
+async function onPlantChange(val) {
+  activePlantId = val ? parseInt(val) : null;
+  // Update sidebar badge to reflect selected plant
+  const sel = document.getElementById('plantSelector');
+  const plantName = sel.options[sel.selectedIndex]?.text;
+  const plantLabel = activePlantId ? ` • ${plantName}` : ' • All Plants';
+  document.getElementById('userBadge').textContent = currentUsername + plantLabel;
+  await initApp();
 }
 
 async function initApp() {

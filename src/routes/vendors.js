@@ -5,11 +5,17 @@ const { authenticateToken } = require('../middleware/auth');
 const router = express.Router();
 router.use(authenticateToken);
 
+function getPlantId(req) {
+  if (getPlantId(req) != null) return getPlantId(req);
+  const pid = parseInt(req.query.plantId || req.body?.plantId);
+  return isNaN(pid) ? null : pid;
+}
+
 router.get('/', async (req, res) => {
   try {
     const { rows } = await db.query(
       'SELECT id, name FROM kg_vendors WHERE plant_id = $1 ORDER BY display_order, id',
-      [req.user.plant_id]
+      [getPlantId(req)]
     );
     res.json(rows);
   } catch (e) {
@@ -24,7 +30,7 @@ router.post('/', async (req, res) => {
   try {
     const { rows } = await db.query(
       'INSERT INTO kg_vendors (name, plant_id) VALUES ($1, $2) RETURNING id, name',
-      [name.trim(), req.user.plant_id]
+      [name.trim(), getPlantId(req)]
     );
     res.json(rows[0]);
   } catch (e) {
@@ -38,7 +44,7 @@ router.delete('/:id', async (req, res) => {
   try {
     const { rowCount } = await db.query(
       'DELETE FROM kg_vendors WHERE id = $1 AND plant_id = $2',
-      [req.params.id, req.user.plant_id]
+      [req.params.id, getPlantId(req)]
     );
     if (!rowCount) return res.status(404).json({ error: 'Vendor not found' });
     res.json({ ok: true });
