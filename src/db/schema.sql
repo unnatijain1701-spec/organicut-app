@@ -102,7 +102,7 @@ ALTER TABLE kg_vendors ADD COLUMN IF NOT EXISTS plant_id      INTEGER REFERENCES
 ALTER TABLE kg_vendors DROP CONSTRAINT IF EXISTS kg_vendors_name_key;
 CREATE UNIQUE INDEX IF NOT EXISTS kg_vendors_plant_name_idx ON kg_vendors(plant_id, name);
 
--- Seed Rai's default vendors (plant_id = 1) — only if they don't exist yet
+-- Seed Rai's default vendors (plant_id = 1)
 INSERT INTO kg_vendors (name, display_order, plant_id)
 SELECT v.name, v.display_order, p.id
 FROM (VALUES
@@ -113,9 +113,7 @@ FROM (VALUES
   ('BL Unloading', 5)
 ) AS v(name, display_order)
 CROSS JOIN (SELECT id FROM plants WHERE name = 'Rai') AS p
-WHERE NOT EXISTS (
-  SELECT 1 FROM kg_vendors kv WHERE kv.plant_id = p.id AND kv.name = v.name
-);
+ON CONFLICT DO NOTHING;
 
 -- ── Migration: tag all existing rows as Rai ──────────────────────────────────
 UPDATE daily_records      SET plant_id = (SELECT id FROM plants WHERE name = 'Rai') WHERE plant_id IS NULL;
