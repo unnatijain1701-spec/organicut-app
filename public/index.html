@@ -447,6 +447,19 @@ td input[type="number"]:hover { border-color: #7dbf99; }
 .hist-del-btn:hover { background: #fef2f2; color: #ef4444; opacity: 1; }
 .hist-empty { padding: 24px; text-align: center; color: var(--muted); font-size: 13px; }
 
+/* ── ALL-PLANTS AGGREGATE VIEW ───────────────────────── */
+#allPlantsView { display:none; }
+.ap-card { background:#fff; border:1px solid var(--border); border-radius:12px; padding:20px 22px; margin-bottom:18px; }
+.ap-card-title { font-weight:700; font-size:14px; color:var(--primary); margin-bottom:14px; }
+.ap-table { width:100%; border-collapse:collapse; font-size:13px; }
+.ap-table th { text-align:right; padding:7px 10px; font-size:11px; font-weight:700; color:var(--muted); border-bottom:2px solid var(--border); }
+.ap-table th:first-child { text-align:left; }
+.ap-table td { padding:8px 10px; text-align:right; border-bottom:1px solid #edf7f1; }
+.ap-table td:first-child { text-align:left; font-weight:600; }
+.ap-table tr.ap-total { background:#edf7f1; font-weight:700; }
+.ap-table tr.ap-total td { border-top:2px solid var(--border); border-bottom:none; }
+.ap-empty { color:var(--muted); font-size:13px; text-align:center; padding:20px 0; }
+
 /* ── DASHBOARD OVERLAY ────────────────────────────────── */
 #dashboardOverlay {
   position: fixed; top: 0; right: 0; bottom: 0; left: 210px; z-index: 400;
@@ -778,7 +791,7 @@ tr.dash-row-alt td { background: #f7fdf9; }
       </div>
       <div class="field">
         <label>Date</label>
-        <input type="date" id="dateInput" onchange="_freshCSVLoaded=false; recalc(); tryReprocessCSV(); reloadTodayData();">
+        <input type="date" id="dateInput" onchange="if(currentRole==='superadmin'&&!activePlantId){loadAllPlantsView(this.value);}else{_freshCSVLoaded=false;recalc();tryReprocessCSV();reloadTodayData();}">
       </div>
       <div class="field">
         <label>Sale&nbsp;Qty&nbsp;(kg)</label>
@@ -823,6 +836,16 @@ tr.dash-row-alt td { background: #f7fdf9; }
 
 <!-- ═══════════════════ MAIN ═══════════════════ -->
 <div class="main">
+
+<!-- ALL-PLANTS AGGREGATE VIEW (superadmin, no plant selected) -->
+<div id="allPlantsView">
+  <div class="ap-card">
+    <div class="ap-card-title" id="allPlantsTitle">All Plants — Daily Summary</div>
+    <div id="allPlantsTable"></div>
+  </div>
+</div>
+
+  <div id="entryCards">
   <div class="card">
     <div class="card-head">
       <div>
@@ -883,7 +906,8 @@ tr.dash-row-alt td { background: #f7fdf9; }
       <div id="kgTabPanes"></div>
     </div>
   </div>
-</div>
+  </div><!-- /entryCards -->
+</div><!-- /main -->
 
 <script>
 let currentUsername = '';
@@ -1213,12 +1237,16 @@ async function setupPlantSelector() {
 
 async function onPlantChange(val) {
   activePlantId = val ? parseInt(val) : null;
-  // Update sidebar badge to reflect selected plant
   const sel = document.getElementById('plantSelector');
   const plantName = sel.options[sel.selectedIndex]?.text;
   const plantLabel = activePlantId ? ` • ${plantName}` : ' • All Plants';
   document.getElementById('userBadge').textContent = currentUsername + plantLabel;
+  clearForm();
   await initApp();
+  if (activePlantId) {
+    const date = document.getElementById('dateInput').value;
+    if (date) await silentLoadRecord(date);
+  }
 }
 
 async function initApp() {
@@ -1227,6 +1255,19 @@ async function initApp() {
   document.getElementById('dateInput').value =
     d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
 
+  const isAllPlants = currentRole === 'superadmin' && !activePlantId;
+  document.getElementById('allPlantsView').style.display  = isAllPlants ? '' : 'none';
+  document.getElementById('entryCards').style.display     = isAllPlants ? 'none' : '';
+  document.querySelector('.sumbar').style.display         = isAllPlants ? 'none' : '';
+  document.querySelector('.btn-save-rec').style.display   = isAllPlants ? 'none' : '';
+  document.getElementById('reloadBtn').style.display      = isAllPlants ? 'none' : '';
+
+  if (isAllPlants) {
+    await loadAllPlantsView(document.getElementById('dateInput').value);
+    loadHistory();
+    return;
+  }
+
   await loadSKURateOverrides();
   await loadKGVendors();
   await loadCustomSKUs();
@@ -1234,6 +1275,52 @@ async function initApp() {
   renderKGTabs();
   recalc();
   loadHistory();
+}
+
+async function loadAllPlantsView(date) {
+  const tableEl = document.getElementById('allPlantsTable');
+  const titleEl = document.getElementById('allPlantsTitle');
+  if (!date) { tableEl.innerHTML = '<div class="ap-empty">Select a date to view the summary.</div>'; return; }
+  const d = new Date(date);
+  const dateStr = d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  titleEl.textContent = `All Plants — Summary for ${dateStr}`;
+  tableEl.innerHTML = '<div class="ap-empty">Loading…</div>';
+  try {
+    const rows = await fetch('/api/records/allplants/' + date, { credentials: 'include' }).then(r => r.json());
+    if (!rows.length) { tableEl.innerHTML = '<div class="ap-empty">No data saved for this date across any plant.</div>'; return; }
+    const fc = v => '₹ ' + parseFloat(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const fn2 = v => parseFloat(v || 0) > 0 ? '₹ ' + parseFloat(v).toFixed(2) : '—';
+    const totAtt = rows.reduce((s, r) => s + parseFloat(r.attendance_cost || 0), 0);
+    const totKG  = rows.reduce((s, r) => s + parseFloat(r.kg_cost || 0), 0);
+    const totTot = rows.reduce((s, r) => s + parseFloat(r.total_cost || 0), 0);
+    const totQty = rows.reduce((s, r) => s + parseFloat(r.sale_qty || 0), 0);
+    const totMPK = totQty > 0 ? totTot / totQty : null;
+    tableEl.innerHTML = `<table class="ap-table">
+      <thead><tr>
+        <th>Plant</th><th>Att Cost</th><th>KG Cost</th><th>Total Cost</th><th>Sale Qty (kg)</th><th>MPK (₹/kg)</th>
+      </tr></thead>
+      <tbody>
+        ${rows.map(r => `<tr>
+          <td>${r.plant_name}</td>
+          <td>${fc(r.attendance_cost)}</td>
+          <td>${fc(r.kg_cost)}</td>
+          <td>${fc(r.total_cost)}</td>
+          <td>${parseFloat(r.sale_qty || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+          <td>${fn2(r.mpk)}</td>
+        </tr>`).join('')}
+      </tbody>
+      <tfoot><tr class="ap-total">
+        <td>Total</td>
+        <td>${fc(totAtt)}</td>
+        <td>${fc(totKG)}</td>
+        <td>${fc(totTot)}</td>
+        <td>${totQty.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+        <td>${totMPK ? '₹ ' + totMPK.toFixed(2) : '—'}</td>
+      </tr></tfoot>
+    </table>`;
+  } catch (e) {
+    tableEl.innerHTML = `<div class="ap-empty">Failed to load: ${e.message}</div>`;
+  }
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -1974,15 +2061,16 @@ async function loadHistory() {
         const d = new Date(r.record_date);
         const dateStr = d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
         const cleanDate = (r.record_date + '').slice(0, 10);
+        const plantTag = r.plant_name ? `<span style="font-size:11px;background:#e8f5ee;color:var(--primary);border-radius:4px;padding:1px 6px;font-weight:700">${r.plant_name}</span>` : '';
         return `<div class="hist-item">
-          <div class="hist-item-body" onclick="loadHistoryRecord('${cleanDate}')">
-            <div class="hist-date">${dateStr}</div>
+          <div class="hist-item-body" onclick="${r.plant_name ? `loadAllPlantsView('${cleanDate}');toggleHistory(false)` : `loadHistoryRecord('${cleanDate}')`}">
+            <div class="hist-date" style="display:flex;align-items:center;gap:6px">${dateStr}${plantTag}</div>
             <div class="hist-meta">
               <span>Total: ${fc(parseFloat(r.total_cost))}</span>
               <span>MPK: ${parseFloat(r.mpk) > 0 ? fn(parseFloat(r.mpk)) : '—'}</span>
             </div>
           </div>
-          <button class="hist-del-btn" title="Delete this record" onclick="deleteHistoryRecord('${cleanDate}')">🗑</button>
+          ${r.plant_name ? '' : `<button class="hist-del-btn" title="Delete this record" onclick="deleteHistoryRecord('${cleanDate}')">🗑</button>`}
         </div>`;
       }).join('');
 

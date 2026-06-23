@@ -14,8 +14,16 @@ function getPlantId(req) {
 // GET /api/records  — list all records for this plant (summary only)
 router.get('/', async (req, res) => {
   const pid = getPlantId(req);
-  if (!pid) return res.json([]);
   try {
+    if (!pid) {
+      // Superadmin "All Plants" — aggregate per date across all plants, include per-plant rows
+      const { rows } = await db.query(`
+        SELECT dr.id, dr.record_date, dr.attendance_cost, dr.kg_cost, dr.total_cost, dr.sale_qty, dr.mpk, dr.updated_at, p.name AS plant_name
+        FROM daily_records dr JOIN plants p ON p.id = dr.plant_id
+        ORDER BY dr.record_date DESC, p.display_order
+      `);
+      return res.json(rows);
+    }
     const { rows } = await db.query(`
       SELECT id, record_date, attendance_cost, kg_cost, total_cost, sale_qty, mpk, updated_at
       FROM daily_records
@@ -77,8 +85,30 @@ router.get('/export', async (req, res) => {
 // GET /api/records/analytics  — monthly + daily aggregates for dashboard
 router.get('/analytics', async (req, res) => {
   const pid = getPlantId(req);
-  if (!pid) return res.json({ daily: [], monthly: [] });
   try {
+    if (!pid) {
+      // Superadmin "All Plants" — aggregate across all plants
+      const { rows: daily } = await db.query(`
+        SELECT record_date AS date,
+          SUM(attendance_cost)::NUMERIC(12,2) AS attendance_cost,
+          SUM(kg_cost)::NUMERIC(12,2)         AS kg_cost,
+          SUM(total_cost)::NUMERIC(12,2)      AS total_cost,
+          SUM(sale_qty)::NUMERIC(12,2)        AS sale_qty,
+          CASE WHEN SUM(sale_qty) > 0 THEN (SUM(total_cost)/SUM(sale_qty))::NUMERIC(10,4) ELSE 0 END AS mpk
+        FROM daily_records GROUP BY record_date ORDER BY record_date ASC
+      `);
+      const { rows: monthly } = await db.query(`
+        SELECT TO_CHAR(record_date, 'YYYY-MM') AS month,
+          CASE WHEN SUM(sale_qty) > 0 THEN (SUM(total_cost)/SUM(sale_qty))::NUMERIC(10,4) ELSE 0 END AS avg_mpk,
+          AVG(attendance_cost)::NUMERIC(12,2) AS avg_attendance_cost,
+          AVG(kg_cost)::NUMERIC(12,2)         AS avg_kg_cost,
+          COUNT(DISTINCT record_date)         AS days
+        FROM daily_records
+        GROUP BY TO_CHAR(record_date, 'YYYY-MM')
+        ORDER BY month ASC
+      `);
+      return res.json({ daily, monthly });
+    }
     const { rows: daily } = await db.query(`
       SELECT record_date AS date, attendance_cost, kg_cost, total_cost, sale_qty, mpk
       FROM daily_records WHERE plant_id = $1 ORDER BY record_date ASC
@@ -96,6 +126,22 @@ router.get('/analytics', async (req, res) => {
       ORDER BY month ASC
     `, [pid]);
     res.json({ daily, monthly });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// GET /api/records/allplants/:date  — per-plant summary for a date (superadmin All Plants view)
+router.get('/allplants/:date', async (req, res) => {
+  try {
+    const { rows } = await db.query(`
+      SELECT dr.attendance_cost, dr.kg_cost, dr.total_cost, dr.sale_qty, dr.mpk, p.name AS plant_name, p.display_order
+      FROM daily_records dr JOIN plants p ON p.id = dr.plant_id
+      WHERE dr.record_date = $1
+      ORDER BY p.display_order
+    `, [req.params.date]);
+    res.json(rows);
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: 'Server error' });
