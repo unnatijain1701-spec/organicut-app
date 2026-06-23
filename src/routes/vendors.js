@@ -20,7 +20,7 @@ router.get('/', async (req, res) => {
     res.json(rows);
   } catch (e) {
     console.error(e);
-    res.status(500).json({ error: 'Server error' });
+    res.status(500).json({ error: e.message });
   }
 });
 

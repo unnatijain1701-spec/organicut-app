@@ -28,7 +28,11 @@ app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.ht
 
 async function start() {
   const schema = fs.readFileSync(path.join(__dirname, 'src/db/schema.sql'), 'utf8');
-  await db.query(schema);
+  const statements = schema.split(/;\s*\n/).map(s => s.trim()).filter(s => s && !s.startsWith('--'));
+  for (const stmt of statements) {
+    try { await db.query(stmt); }
+    catch (e) { console.error('Schema stmt failed:', e.message, '\n', stmt.slice(0, 100)); }
+  }
   console.log('Database schema verified.');
 
   const PORT = process.env.PORT || 3000;
