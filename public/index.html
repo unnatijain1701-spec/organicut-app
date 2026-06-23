@@ -2460,7 +2460,7 @@ let _dashData = null;
 let _dashView = 'daily';
 
 async function loadDashboard() {
-  if (currentRole !== 'admin') return;
+  if (currentRole !== 'admin' && currentRole !== 'superadmin') return;
   document.getElementById('dashboardOverlay').style.display = 'flex';
   try {
     const data = await api('GET', '/api/records/analytics');
