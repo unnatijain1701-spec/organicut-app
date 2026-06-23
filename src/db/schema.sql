@@ -39,6 +39,14 @@ CREATE TABLE IF NOT EXISTS daily_records (
 );
 
 ALTER TABLE daily_records ADD COLUMN IF NOT EXISTS plant_id INTEGER REFERENCES plants(id);
+
+-- Drop index first so duplicate cleanup doesn't hit constraint violations
+DROP INDEX IF EXISTS daily_records_plant_date_idx;
+DELETE FROM daily_records a
+USING daily_records b
+WHERE a.plant_id IS NULL
+  AND b.plant_id = (SELECT id FROM plants WHERE name = 'Rai')
+  AND a.record_date = b.record_date;
 UPDATE daily_records SET plant_id = (SELECT id FROM plants WHERE name = 'Rai') WHERE plant_id IS NULL;
 
 -- Replace single-date unique with per-plant unique
@@ -101,7 +109,20 @@ CREATE TABLE IF NOT EXISTS kg_vendors (
 ALTER TABLE kg_vendors ADD COLUMN IF NOT EXISTS display_order INTEGER DEFAULT 0;
 ALTER TABLE kg_vendors ADD COLUMN IF NOT EXISTS plant_id      INTEGER REFERENCES plants(id);
 
--- Drop old global unique; replace with per-plant unique (after migration so no nulls conflict)
+-- Drop unique index so we can safely clean up any duplicate rows left by previous failed migrations
+DROP INDEX IF EXISTS kg_vendors_plant_name_idx;
+
+-- Remove NULL-plant rows that already have a Rai duplicate (left by previous crash)
+DELETE FROM kg_vendors a
+USING kg_vendors b
+WHERE a.plant_id IS NULL
+  AND b.plant_id = (SELECT id FROM plants WHERE name = 'Rai')
+  AND a.name = b.name;
+
+-- Migrate remaining NULL rows to Rai
+UPDATE kg_vendors SET plant_id = (SELECT id FROM plants WHERE name = 'Rai') WHERE plant_id IS NULL;
+
+-- Drop old global unique; recreate as per-plant unique
 ALTER TABLE kg_vendors DROP CONSTRAINT IF EXISTS kg_vendors_name_key;
 CREATE UNIQUE INDEX IF NOT EXISTS kg_vendors_plant_name_idx ON kg_vendors(plant_id, name);
 
