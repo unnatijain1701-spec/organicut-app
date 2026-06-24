@@ -1268,6 +1268,8 @@ async function onPlantChange(val) {
   clearForm();
   await initApp();
   if (vendorsPanelOpen) loadVendorsList();
+  const dashOpen = document.getElementById('dashboardOverlay').style.display !== 'none';
+  if (dashOpen) await loadDashboard();
   if (activePlantId) {
     const date = document.getElementById('dateInput').value;
     if (date) await silentLoadRecord(date);
