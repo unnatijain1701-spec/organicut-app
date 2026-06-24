@@ -649,9 +649,10 @@ tr.dash-row-alt td { background: #f7fdf9; }
     <div class="users-add-title">Add New User</div>
     <input class="users-input" id="newUsername" type="text" placeholder="Username" autocomplete="off">
     <input class="users-input" id="newPassword" type="password" placeholder="Password (min 6 chars)" autocomplete="new-password">
-    <select class="users-input" id="newUserRole" style="cursor:pointer">
+    <select class="users-input" id="newUserRole" style="cursor:pointer" onchange="onNewUserRoleChange(this.value)">
       <option value="user">Operator (can enter data)</option>
       <option value="admin">Admin (full access)</option>
+      <option value="superadmin">Super Admin (all plants)</option>
     </select>
     <select class="users-input" id="newUserPlant" style="cursor:pointer;display:none">
       <option value="">— Select Plant —</option>
@@ -1116,7 +1117,7 @@ async function checkAuth() {
       document.getElementById('navUsers').style.display = isPrivileged ? '' : 'none';
       document.getElementById('navDashboard').style.display = isPrivileged ? '' : 'none';
       document.getElementById('loginOverlay').style.display = 'none';
-      if (currentRole === 'superadmin') await setupPlantSelector();
+      if (!currentPlantId) await setupPlantSelector();
       await initApp();
     } else {
       await checkIfSetupNeeded();
@@ -1177,7 +1178,7 @@ async function doLogin() {
     document.getElementById('navUsers').style.display = isPrivileged ? '' : 'none';
     document.getElementById('navDashboard').style.display = isPrivileged ? '' : 'none';
     document.getElementById('loginOverlay').style.display = 'none';
-    if (currentRole === 'superadmin') await setupPlantSelector();
+    if (!currentPlantId) await setupPlantSelector();
     await initApp();
   } catch (e) {
     errEl.textContent = e.message;
@@ -1274,7 +1275,7 @@ async function initApp() {
   document.getElementById('dateInput').value =
     d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
 
-  const isAllPlants = currentRole === 'superadmin' && !activePlantId;
+  const isAllPlants = !currentPlantId && !activePlantId;
   document.getElementById('allPlantsView').style.display  = isAllPlants ? '' : 'none';
   document.getElementById('entryCards').style.display     = isAllPlants ? 'none' : '';
   document.querySelector('.sumbar').style.display         = isAllPlants ? 'none' : '';
@@ -2578,6 +2579,12 @@ async function loadUsers() {
   } catch (e) {
     list.innerHTML = '<div class="hist-empty">Failed to load users.</div>';
   }
+}
+
+function onNewUserRoleChange(role) {
+  const plantSel = document.getElementById('newUserPlant');
+  // Show plant selector when creating non-superadmin users and current user has no plant (all-plants access)
+  plantSel.style.display = (!currentPlantId && role !== 'superadmin') ? '' : 'none';
 }
 
 async function addUser() {

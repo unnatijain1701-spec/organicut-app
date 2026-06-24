@@ -140,10 +140,12 @@ router.post('/users', authenticateToken, async (req, res) => {
     return res.status(400).json({ error: 'Password must be at least 6 characters' });
   }
 
-  const assignedRole = role === 'admin' ? 'admin' : 'user';
+  const assignedRole = role === 'superadmin' ? 'superadmin' : role === 'admin' ? 'admin' : 'user';
 
   let assignedPlantId;
-  if (req.user.role === 'superadmin') {
+  if (assignedRole === 'superadmin') {
+    assignedPlantId = null; // superadmin has no plant
+  } else if (req.user.role === 'superadmin' || !req.user.plant_id) {
     if (!plantId) return res.status(400).json({ error: 'plantId is required' });
     const plantCheck = await db.query('SELECT id FROM plants WHERE id = $1', [plantId]);
     if (!plantCheck.rows.length) return res.status(400).json({ error: 'Invalid plant' });
