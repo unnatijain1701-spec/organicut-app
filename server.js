@@ -28,7 +28,9 @@ app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.ht
 
 async function start() {
   const schema = fs.readFileSync(path.join(__dirname, 'src/db/schema.sql'), 'utf8');
-  const statements = schema.split(/;\s*\n/).map(s => s.trim()).filter(s => s && !s.startsWith('--'));
+  const statements = schema.split(/;\s*\n/)
+    .map(s => s.replace(/--.*$/gm, '').trim())
+    .filter(s => s.length > 0);
   for (const stmt of statements) {
     try { await db.query(stmt); }
     catch (e) { console.error('Schema stmt failed:', e.message, '\n', stmt.slice(0, 100)); }
