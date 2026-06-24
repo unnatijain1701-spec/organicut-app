@@ -3,7 +3,6 @@ const db = require('../db');
 const { authenticateToken } = require('../middleware/auth');
 
 const router = express.Router();
-router.use(authenticateToken);
 
 function getPlantId(req) {
   if (req.user.plant_id != null) return req.user.plant_id;

@@ -182,7 +182,10 @@ router.patch('/users/:id', authenticateToken, async (req, res) => {
   if (targetId === req.user.id) return res.status(400).json({ error: 'You cannot change your own role' });
 
   const { role } = req.body || {};
-  const newRole = role === 'admin' ? 'admin' : 'user';
+  let newRole;
+  if (isSuperadmin && role === 'superadmin') newRole = 'superadmin';
+  else if (role === 'admin') newRole = 'admin';
+  else newRole = 'user';
 
   try {
     const whereClause = isAdmin ? 'WHERE id = $2 AND plant_id = $3' : 'WHERE id = $2';

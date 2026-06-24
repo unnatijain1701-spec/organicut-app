@@ -3,7 +3,6 @@ const db = require('../db');
 const { authenticateToken } = require('../middleware/auth');
 
 const router = express.Router();
-router.use(authenticateToken);
 
 function getPlantId(req) {
   if (req.user.plant_id != null) return req.user.plant_id;
@@ -132,8 +131,9 @@ router.get('/analytics', async (req, res) => {
   }
 });
 
-// GET /api/records/allplants/:date  — per-plant summary for a date (superadmin All Plants view)
+// GET /api/records/allplants/:date  — per-plant summary for a date (all-plants users only)
 router.get('/allplants/:date', async (req, res) => {
+  if (req.user.plant_id != null) return res.status(403).json({ error: 'Forbidden' });
   try {
     const { rows } = await db.query(`
       SELECT dr.attendance_cost, dr.kg_cost, dr.total_cost, dr.sale_qty, dr.mpk, p.name AS plant_name, p.display_order
@@ -180,6 +180,7 @@ router.post('/', async (req, res) => {
   const { date, attendanceCost, kgCost, totalCost, saleQty, mpk, notes, attendance, kgEntries } = req.body || {};
   const pid = getPlantId(req);
 
+  if (!pid) return res.status(400).json({ error: 'No plant selected — please select a plant before saving' });
   if (!date) return res.status(400).json({ error: '"date" is required (YYYY-MM-DD)' });
 
   const client = await db.connect();
@@ -234,6 +235,7 @@ router.post('/', async (req, res) => {
 // DELETE /api/records/:date
 router.delete('/:date', async (req, res) => {
   const pid = getPlantId(req);
+  if (!pid) return res.status(400).json({ error: 'No plant selected' });
   try {
     const { rowCount } = await db.query(
       'DELETE FROM daily_records WHERE plant_id = $1 AND record_date = $2',
