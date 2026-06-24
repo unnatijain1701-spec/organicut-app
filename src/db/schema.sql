@@ -139,5 +139,56 @@ FROM (VALUES
 CROSS JOIN (SELECT id FROM plants WHERE name = 'Rai') AS p
 ON CONFLICT DO NOTHING;
 
+-- Seed Mumbai vendor
+INSERT INTO kg_vendors (name, display_order, plant_id)
+SELECT 'Daksh enterprises', 1, p.id FROM plants p WHERE p.name = 'Mumbai'
+ON CONFLICT DO NOTHING;
+
+-- Seed Hyderabad vendor
+INSERT INTO kg_vendors (name, display_order, plant_id)
+SELECT 'Daksh enterprises', 1, p.id FROM plants p WHERE p.name = 'Hyderabad'
+ON CONFLICT DO NOTHING;
+
+-- Seed Mumbai custom SKUs (Daksh enterprises)
+INSERT INTO custom_skus (plant_id, vendor_name, sku_name, rate, display_order)
+SELECT p.id, 'Daksh enterprises', v.sku_name, v.rate, v.ord
+FROM (VALUES
+  ('Capsicum Dipling',   2.80,  1),
+  ('Capsicum Shorting',  1.20,  2),
+  ('Onion Shorting',     1.20,  3),
+  ('Onion Peeling',      3.20,  4),
+  ('Onion Cutting',      3.25,  5),
+  ('Packing',            1.20,  6),
+  ('Punnet Packing',     0.50,  7),
+  ('Tomato Dipling',     3.50,  8),
+  ('Tomato Cutting',     3.50,  9),
+  ('Potato Peeling',     5.25, 10),
+  ('Potato Cutting',     4.00, 11),
+  ('Onion 1kg Packing',  1.00, 12),
+  ('Onion 3kg Packing',  3.00, 13),
+  ('Drumstick Cutting',  3.00, 14),
+  ('Pumpkin Cutting',    6.00, 15),
+  ('Cauliflower Cutting',4.00, 16),
+  ('Pineapple Peeling',  7.00, 17)
+) AS v(sku_name, rate, ord)
+CROSS JOIN (SELECT id FROM plants WHERE name = 'Mumbai') AS p
+ON CONFLICT (plant_id, vendor_name, sku_name) DO NOTHING;
+
+-- Seed Hyderabad custom SKUs (Daksh enterprises)
+INSERT INTO custom_skus (plant_id, vendor_name, sku_name, rate, display_order)
+SELECT p.id, 'Daksh enterprises', v.sku_name, v.rate, v.ord
+FROM (VALUES
+  ('Capsicum Decoring',           3.10, 1),
+  ('Onion & Capsicum Shorting',   1.20, 2),
+  ('Packing',                     1.20, 3),
+  ('W. Onion Cutting',            3.10, 4),
+  ('Tecobell/PH/KFC Onion Cutting', 6.00, 5),
+  ('Carrot Cut',                  4.00, 6),
+  ('Potato Cut',                  6.00, 7),
+  ('Mushroom Cut',                3.00, 8)
+) AS v(sku_name, rate, ord)
+CROSS JOIN (SELECT id FROM plants WHERE name = 'Hyderabad') AS p
+ON CONFLICT (plant_id, vendor_name, sku_name) DO NOTHING;
+
 -- Promote any existing admin with no plant to superadmin
 UPDATE users SET role = 'superadmin' WHERE role = 'admin' AND plant_id IS NULL;

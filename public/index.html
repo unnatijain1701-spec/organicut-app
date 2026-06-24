@@ -907,7 +907,7 @@ tr.dash-row-alt td { background: #f7fdf9; }
     </div>
   </div>
 
-  <div class="card">
+  <div class="card" id="kgProcessingCard">
     <div class="card-head">
       <div>
         <div class="card-title">⚖ Per KG Processing Cost</div>
@@ -935,6 +935,7 @@ let currentRole = '';
 let currentPlantId   = null;
 let currentPlantName = null;
 let activePlantId    = null;  // null for superadmin until a plant is selected
+let activePlantName  = null;
 
 /* ═══════════════════════════════════════════════════════
    SKU CONFIGURATION
@@ -1111,6 +1112,7 @@ async function checkAuth() {
       currentPlantId   = user.plant_id   || null;
       currentPlantName = user.plant_name || null;
       activePlantId    = currentPlantId;
+      activePlantName  = currentPlantName;
       const plantLabel = currentPlantName ? ` • ${currentPlantName}` : ' • All Plants';
       document.getElementById('userBadge').textContent = user.username + plantLabel;
       const isPrivileged = currentRole === 'admin' || currentRole === 'superadmin';
@@ -1260,6 +1262,7 @@ async function onPlantChange(val) {
   activePlantId = val ? parseInt(val) : null;
   const sel = document.getElementById('plantSelector');
   const plantName = sel.options[sel.selectedIndex]?.text;
+  activePlantName = activePlantId ? plantName : null;
   const plantLabel = activePlantId ? ` • ${plantName}` : ' • All Plants';
   document.getElementById('userBadge').textContent = currentUsername + plantLabel;
   clearForm();
@@ -1277,12 +1280,15 @@ async function initApp() {
     d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
 
   const isAllPlants = !currentPlantId && !activePlantId;
+  const effectivePlantName = currentPlantName || activePlantName;
+  const isJaipur = effectivePlantName === 'Jaipur';
   document.getElementById('allPlantsView').style.display  = isAllPlants ? '' : 'none';
   document.getElementById('entryCards').style.display     = isAllPlants ? 'none' : '';
   document.querySelector('.sumbar').style.display         = isAllPlants ? 'none' : '';
   document.querySelector('.btn-save-rec').style.display   = isAllPlants ? 'none' : '';
   document.getElementById('reloadBtn').style.display      = isAllPlants ? 'none' : '';
   document.getElementById('navDaily').style.display       = isAllPlants ? 'none' : '';
+  document.getElementById('kgProcessingCard').style.display = isJaipur ? 'none' : '';
 
   if (isAllPlants) {
     loadHistory();
@@ -2065,6 +2071,101 @@ function toggleHistory(force) {
 }
 
 async function loadHistory() {
+  const isAllPlants = !currentPlantId && !activePlantId;
+  if (isAllPlants) {
+    loadHistoryPlantPicker();
+    return;
+  }
+  await loadHistoryRecords();
+}
+
+async function loadHistoryPlantPicker() {
+  const list = document.getElementById('historyList');
+  list.innerHTML = '<div class="hist-empty">Loading plants…</div>';
+  try {
+    const plants = await fetch('/api/auth/plants', { credentials: 'include' }).then(r => r.json());
+    list.innerHTML = `
+      <div style="padding:12px 14px 6px;font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.5px">SELECT A PLANT</div>
+      ${plants.map(p => `
+        <div class="hist-item" style="cursor:pointer" onclick="loadHistoryForPlant(${p.id},'${p.name}')">
+          <div class="hist-item-body" style="flex:1">
+            <div class="hist-date">${p.name}</div>
+            <div class="hist-meta"><span>Tap to view records</span></div>
+          </div>
+          <span style="color:var(--muted);font-size:18px;padding-right:4px">›</span>
+        </div>`).join('')}`;
+  } catch (e) {
+    list.innerHTML = `<div class="hist-empty">Failed to load plants: ${e.message}</div>`;
+  }
+}
+
+async function loadHistoryForPlant(plantId, plantName) {
+  const list = document.getElementById('historyList');
+  list.innerHTML = '<div class="hist-empty">Loading…</div>';
+  try {
+    const records = await fetch(`/api/records?plantId=${plantId}`, { credentials: 'include' }).then(r => r.json());
+    const backBtn = `<div style="padding:10px 14px;border-bottom:1px solid var(--border)">
+      <button onclick="loadHistoryPlantPicker()" style="background:none;border:none;color:var(--primary);font-weight:700;cursor:pointer;font-size:13px">‹ All Plants</button>
+      <span style="font-weight:700;font-size:13px;margin-left:8px">${plantName}</span>
+    </div>`;
+    if (!records.length) {
+      list.innerHTML = backBtn + '<div class="hist-empty">No records for this plant yet.</div>';
+      return;
+    }
+    const nowKey = new Date().toISOString().slice(0, 7);
+    const groups = {};
+    records.forEach(r => {
+      const key = (r.record_date + '').slice(0, 7);
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(r);
+    });
+    const monthsHTML = Object.keys(groups).sort((a, b) => b.localeCompare(a)).map(key => {
+      const [yr, mo] = key.split('-');
+      const monthName = new Date(yr, mo - 1, 1).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+      const isCurrentMonth = key === nowKey;
+      const rowsHTML = groups[key].map(r => {
+        const d = new Date(r.record_date);
+        const dateStr = d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+        const cleanDate = (r.record_date + '').slice(0, 10);
+        return `<div class="hist-item">
+          <div class="hist-item-body" onclick="loadHistoryRecordForPlant('${cleanDate}',${plantId})">
+            <div class="hist-date">${dateStr}</div>
+            <div class="hist-meta">
+              <span>Total: ${fc(parseFloat(r.total_cost))}</span>
+              <span>MPK: ${parseFloat(r.mpk) > 0 ? fn(parseFloat(r.mpk)) : '—'}</span>
+            </div>
+          </div>
+        </div>`;
+      }).join('');
+      return `<div class="hist-month">
+        <div class="hist-month-hdr ${isCurrentMonth ? 'open' : ''}" onclick="toggleHistMonth(this)">
+          <span>${monthName}</span>
+          <span style="display:flex;align-items:center;gap:8px">
+            <span class="hist-month-count">${groups[key].length} day${groups[key].length > 1 ? 's' : ''}</span>
+            <span class="hist-month-arrow">▼</span>
+          </span>
+        </div>
+        <div class="hist-month-body ${isCurrentMonth ? 'open' : ''}">${rowsHTML}</div>
+      </div>`;
+    }).join('');
+    list.innerHTML = backBtn + monthsHTML;
+  } catch (e) {
+    list.innerHTML = `<div class="hist-empty">Failed to load: ${e.message}</div>`;
+  }
+}
+
+async function loadHistoryRecordForPlant(date, plantId) {
+  try {
+    const record = await fetch(`/api/records/${date}?plantId=${plantId}`, { credentials: 'include' }).then(r => r.json());
+    applyRecord(record);
+    toggleHistory(false);
+    showToast('✓ Loaded record for ' + date, false);
+  } catch {
+    showToast('⚠ No record found for this date', true);
+  }
+}
+
+async function loadHistoryRecords() {
   const list = document.getElementById('historyList');
   try {
     const records = await api('GET', '/api/records');
@@ -2072,17 +2173,13 @@ async function loadHistory() {
       list.innerHTML = '<div class="hist-empty">No records saved yet.</div>';
       return;
     }
-
-    // Group by YYYY-MM
+    const nowKey = new Date().toISOString().slice(0, 7);
     const groups = {};
     records.forEach(r => {
       const key = (r.record_date + '').slice(0, 7);
       if (!groups[key]) groups[key] = [];
       groups[key].push(r);
     });
-
-    const nowKey = new Date().toISOString().slice(0, 7);
-
     list.innerHTML = Object.keys(groups).sort((a, b) => b.localeCompare(a)).map(key => {
       const [yr, mo] = key.split('-');
       const monthName = new Date(yr, mo - 1, 1).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
@@ -2091,19 +2188,17 @@ async function loadHistory() {
         const d = new Date(r.record_date);
         const dateStr = d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
         const cleanDate = (r.record_date + '').slice(0, 10);
-        const plantTag = r.plant_name ? `<span style="font-size:11px;background:#e8f5ee;color:var(--primary);border-radius:4px;padding:1px 6px;font-weight:700">${r.plant_name}</span>` : '';
         return `<div class="hist-item">
-          <div class="hist-item-body" onclick="${r.plant_name ? `loadAllPlantsView('${cleanDate}');toggleHistory(false)` : `loadHistoryRecord('${cleanDate}')`}">
-            <div class="hist-date" style="display:flex;align-items:center;gap:6px">${dateStr}${plantTag}</div>
+          <div class="hist-item-body" onclick="loadHistoryRecord('${cleanDate}')">
+            <div class="hist-date">${dateStr}</div>
             <div class="hist-meta">
               <span>Total: ${fc(parseFloat(r.total_cost))}</span>
               <span>MPK: ${parseFloat(r.mpk) > 0 ? fn(parseFloat(r.mpk)) : '—'}</span>
             </div>
           </div>
-          ${r.plant_name ? '' : `<button class="hist-del-btn" title="Delete this record" onclick="deleteHistoryRecord('${cleanDate}')">🗑</button>`}
+          <button class="hist-del-btn" title="Delete this record" onclick="deleteHistoryRecord('${cleanDate}')">🗑</button>
         </div>`;
       }).join('');
-
       return `<div class="hist-month">
         <div class="hist-month-hdr ${isCurrentMonth ? 'open' : ''}" onclick="toggleHistMonth(this)">
           <span>${monthName}</span>
