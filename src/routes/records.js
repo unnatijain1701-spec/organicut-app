@@ -189,8 +189,8 @@ router.post('/', async (req, res) => {
 
     const { rows } = await client.query(`
       INSERT INTO daily_records
-        (plant_id, record_date, attendance_cost, kg_cost, total_cost, sale_qty, mpk, notes, updated_at)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+        (plant_id, record_date, attendance_cost, kg_cost, total_cost, sale_qty, mpk, notes, updated_at, updated_by)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), $9)
       ON CONFLICT (plant_id, record_date) DO UPDATE SET
         attendance_cost = EXCLUDED.attendance_cost,
         kg_cost         = EXCLUDED.kg_cost,
@@ -198,9 +198,10 @@ router.post('/', async (req, res) => {
         sale_qty        = EXCLUDED.sale_qty,
         mpk             = EXCLUDED.mpk,
         notes           = EXCLUDED.notes,
-        updated_at      = NOW()
+        updated_at      = NOW(),
+        updated_by      = EXCLUDED.updated_by
       RETURNING id
-    `, [pid, date, attendanceCost ?? 0, kgCost ?? 0, totalCost ?? 0, saleQty ?? 0, mpk ?? 0, notes ?? null]);
+    `, [pid, date, attendanceCost ?? 0, kgCost ?? 0, totalCost ?? 0, saleQty ?? 0, mpk ?? 0, notes ?? null, req.user.username]);
 
     const recordId = rows[0].id;
 

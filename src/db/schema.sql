@@ -190,5 +190,7 @@ FROM (VALUES
 CROSS JOIN (SELECT id FROM plants WHERE name = 'Hyderabad') AS p
 ON CONFLICT (plant_id, vendor_name, sku_name) DO NOTHING;
 
+ALTER TABLE daily_records ADD COLUMN IF NOT EXISTS updated_by VARCHAR(100);
+
 -- Promote any existing admin with no plant to superadmin
 UPDATE users SET role = 'superadmin' WHERE role = 'admin' AND plant_id IS NULL;

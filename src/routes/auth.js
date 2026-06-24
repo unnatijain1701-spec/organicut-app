@@ -228,4 +228,33 @@ router.delete('/users/:id', authenticateToken, async (req, res) => {
   }
 });
 
+// PATCH /api/auth/users/:id/password — reset a user's password (admin/superadmin only)
+router.patch('/users/:id/password', authenticateToken, async (req, res) => {
+  const isSuperadmin = req.user.role === 'superadmin';
+  const isAdmin      = req.user.role === 'admin';
+  if (!isSuperadmin && !isAdmin) return res.status(403).json({ error: 'Admin only' });
+
+  const targetId = parseInt(req.params.id, 10);
+  if (isNaN(targetId)) return res.status(400).json({ error: 'Invalid user id' });
+
+  const { password } = req.body || {};
+  if (!password || password.length < 6)
+    return res.status(400).json({ error: 'Password must be at least 6 characters' });
+
+  try {
+    const whereClause = isAdmin ? 'WHERE id = $2 AND plant_id = $3' : 'WHERE id = $2';
+    const hash = await bcrypt.hash(password, 12);
+    const params = isAdmin ? [hash, targetId, req.user.plant_id] : [hash, targetId];
+    const result = await db.query(
+      `UPDATE users SET password_hash = $1 ${whereClause} RETURNING id`,
+      params
+    );
+    if (result.rowCount === 0) return res.status(404).json({ error: 'User not found' });
+    res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 module.exports = router;

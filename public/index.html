@@ -603,6 +603,27 @@ tr.dash-row-alt td { background: #f7fdf9; }
 .panel-add-sku-form input { border: 1px solid var(--line,#e6efe9); border-radius: 6px; padding: 5px 9px; font-size: 12px; outline: none; }
 .panel-add-sku-form input:focus { border-color: var(--primary,#1e6b45); }
 .no-custom-skus { font-size: 12px; color: var(--muted,#6c8175); padding: 4px 0 6px; }
+
+@media (max-width: 700px) {
+  .sidebar { width: 100%; height: auto; position: relative; flex-direction: row; flex-wrap: wrap; padding: 8px; }
+  .sidebar-nav { display: flex; flex-direction: row; flex-wrap: wrap; gap: 4px; width: 100%; }
+  .nav-item { flex: 1; min-width: 70px; padding: 6px 4px; font-size: 11px; text-align: center; }
+  .nav-ico { display: none; }
+  .sidebar-brand { display: none; }
+  .sidebar-user { flex-direction: row; justify-content: space-between; padding: 6px 8px; width: 100%; }
+  #plantSelectorField { width: 100%; padding: 6px 8px; }
+  .main { margin-left: 0; padding: 8px; }
+  .topbar { flex-wrap: wrap; gap: 6px; padding: 8px; }
+  .tb-actions { flex-wrap: wrap; gap: 4px; }
+  .sumbar { flex-wrap: wrap; gap: 0; }
+  .si { flex: 1 1 50%; border-right: none; border-bottom: 1px solid var(--border); }
+  .card { padding: 12px; }
+  .att-table th, .att-table td { padding: 6px 4px; font-size: 12px; }
+  .kg-cat-tabs { flex-wrap: wrap; }
+  .hist-panel, #vendorsPanel, #usersPanel { width: 100%; }
+  .dashboardOverlay, #dashboardOverlay { padding: 8px; }
+  .ap-table th, .ap-table td { font-size: 11px; padding: 5px 4px; }
+}
 </style>
 </head>
 <body>
@@ -826,6 +847,7 @@ tr.dash-row-alt td { background: #f7fdf9; }
         <button class="btn btn-success" onclick="toggleExportDd()">↓ Excel ▾</button>
         <div class="export-dd-menu" id="exportDdMenu">
           <button onclick="exportExcel();toggleExportDd()">Export Today</button>
+          <button onclick="exportMonthRecords();toggleExportDd()">Export This Month</button>
           <button onclick="exportAllRecords();toggleExportDd()">Export All Records</button>
           <button onclick="downloadBackup();toggleExportDd()">Download Backup (JSON)</button>
         </div>
@@ -1900,6 +1922,15 @@ async function saveRecord() {
   const date    = document.getElementById('dateInput').value;
   if (!date) { showToast('⚠ Please select a date before saving.', true); return; }
 
+  // Date validation
+  const today = new Date(); today.setHours(0,0,0,0);
+  const selected = new Date(date + 'T00:00:00');
+  if (selected > today) { showToast('⚠ Cannot save a record for a future date.', true); return; }
+  const diffDays = Math.floor((today - selected) / 86400000);
+  if (diffDays > 7) {
+    if (!confirm(`You are saving data for ${date}, which is ${diffDays} days ago. Continue?`)) return;
+  }
+
   const saleQty = parseFloat(document.getElementById('saleQtyInput').value) || 0;
   const att     = totalAtt(), kg = totalKG(), total = att + kg;
   const mpk     = saleQty > 0 ? r2(total / saleQty) : null;
@@ -2197,6 +2228,7 @@ async function loadHistoryRecords() {
             <div class="hist-meta">
               <span>Total: ${fc(parseFloat(r.total_cost))}</span>
               <span>MPK: ${parseFloat(r.mpk) > 0 ? fn(parseFloat(r.mpk)) : '—'}</span>
+              ${r.updated_by ? `<span style="color:var(--muted);font-size:10px">by ${r.updated_by}</span>` : ''}
             </div>
           </div>
           <button class="hist-del-btn" title="Delete this record" onclick="deleteHistoryRecord('${cleanDate}')">🗑</button>
@@ -2326,6 +2358,53 @@ document.addEventListener('click', function(e) {
   }
 });
 
+async function exportMonthRecords() {
+  if (typeof XLSX === 'undefined') {
+    alert('SheetJS library not loaded — check your internet connection and reload the page.');
+    return;
+  }
+  const d = new Date();
+  const ym = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+  const month = prompt('Enter month to export (YYYY-MM):', ym);
+  if (!month || !/^\d{4}-\d{2}$/.test(month)) { showToast('⚠ Invalid month format. Use YYYY-MM.', true); return; }
+  showToast('⏳ Fetching records for ' + month + '…', false);
+  try {
+    const all = await api('GET', '/api/records/export');
+    const records = all.filter(r => {
+      const rd = typeof r.record_date === 'string' ? r.record_date.slice(0, 7) : '';
+      return rd === month;
+    });
+    if (!records.length) { showToast('⚠ No records found for ' + month, true); return; }
+
+    const summaryRows = [['Date','Production Attendance Cost','Per KG Cost','Total Cost','Sale Qty (kg)','MPK','Last Saved By']];
+    const vendorRows  = [['Date','Type','Name','Workers','SKU','Rate (₹/kg)','Qty (kg)','Cost (₹)']];
+    for (const detail of records) {
+      const date = typeof detail.record_date === 'string' ? detail.record_date.slice(0, 10) : detail.record_date;
+      summaryRows.push([date,
+        r2(parseFloat(detail.attendance_cost)||0), r2(parseFloat(detail.kg_cost)||0),
+        r2(parseFloat(detail.total_cost)||0), parseFloat(detail.sale_qty)||0,
+        parseFloat(detail.mpk)>0 ? r2(parseFloat(detail.mpk)) : '',
+        detail.updated_by || '']);
+      (detail.attendance||[]).forEach(a => {
+        vendorRows.push([date,'Attendance',a.contractor_name,a.workers||0,'','','',parseFloat(a.cost)||0]);
+      });
+      (detail.kgEntries||[]).forEach(e => {
+        if (e.sku_name==='__UNLOADING__') vendorRows.push([date,'Per KG',e.vendor_name,'','Unloading Cost','','',r2(parseFloat(e.cost)||0)]);
+        else vendorRows.push([date,'Per KG',e.vendor_name,'',e.sku_name,parseFloat(e.rate)||0,parseFloat(e.qty)||0,r2(parseFloat(e.cost)||0)]);
+      });
+    }
+    const ws1 = XLSX.utils.aoa_to_sheet(summaryRows); ws1['!cols']=[12,22,14,12,14,10,16].map(w=>({wch:w}));
+    const ws2 = XLSX.utils.aoa_to_sheet(vendorRows);  ws2['!cols']=[12,12,28,10,28,12,10,12].map(w=>({wch:w}));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws1, 'Summary');
+    XLSX.utils.book_append_sheet(wb, ws2, 'Vendor Details');
+    XLSX.writeFile(wb, 'Organicut_MPK_' + month + '.xlsx');
+    showToast('✓ Exported ' + records.length + ' record(s) for ' + month, false);
+  } catch (e) {
+    showToast('⚠ Export failed: ' + e.message, true);
+  }
+}
+
 async function exportAllRecords() {
   if (typeof XLSX === 'undefined') {
     alert('SheetJS library not loaded — check your internet connection and reload the page.');
@@ -2336,7 +2415,7 @@ async function exportAllRecords() {
     const records = await api('GET', '/api/records/export');
     if (!records.length) { showToast('⚠ No records found.', true); return; }
 
-    const summaryRows = [['Date','Production Attendance Cost','Per KG Cost','Total Cost','Sale Qty (kg)','MPK']];
+    const summaryRows = [['Date','Production Attendance Cost','Per KG Cost','Total Cost','Sale Qty (kg)','MPK','Last Saved By']];
     // Combined vendor details: Type = Attendance or Per KG
     const vendorRows = [['Date','Type','Name','Workers','SKU','Rate (₹/kg)','Qty (kg)','Cost (₹)']];
     const vendorTotals = {}; // vendor → { qty, cost }
@@ -2353,6 +2432,7 @@ async function exportAllRecords() {
         r2(parseFloat(detail.total_cost) || 0),
         parseFloat(detail.sale_qty) || 0,
         parseFloat(detail.mpk) > 0 ? r2(parseFloat(detail.mpk)) : '',
+        detail.updated_by || '',
       ]);
 
       (detail.attendance || []).forEach(a => {
@@ -2400,7 +2480,7 @@ async function exportAllRecords() {
     kgSumRows.push(['TOTAL', '', r2(grandVendorCost)]);
 
     const ws1 = XLSX.utils.aoa_to_sheet(summaryRows);
-    ws1['!cols'] = [12,22,14,12,14,10].map(w => ({ wch: w }));
+    ws1['!cols'] = [12,22,14,12,14,10,16].map(w => ({ wch: w }));
     const wsAS = XLSX.utils.aoa_to_sheet(attSumRows);
     wsAS['!cols'] = [32,12,14,26].map(w => ({ wch: w }));
     const wsVD = XLSX.utils.aoa_to_sheet(vendorRows);
@@ -2667,9 +2747,13 @@ async function loadUsers() {
       const plantBadge = u.plant_name
         ? `<span style="font-size:10px;padding:2px 7px;border-radius:10px;margin-left:4px;background:#f0f7f4;color:#4a7a5e">${u.plant_name}</span>`
         : `<span style="font-size:10px;padding:2px 7px;border-radius:10px;margin-left:4px;background:#fff3cd;color:#856404">All Plants</span>`;
+      const safeName = u.username.replace(/'/g,"\\'");
       return `<div class="user-row">
         <span class="user-row-name">${u.username}${badge}${plantBadge}${isYou ? '<span class="user-row-you"> (you)</span>' : ''}</span>
-        ${isYou ? '' : `<button class="user-del-btn" onclick="deleteUser(${u.id},'${u.username.replace(/'/g,"\\'")}')">Delete</button>`}
+        <span style="display:flex;gap:4px">
+          ${isYou ? '' : `<button class="user-del-btn" style="background:#e8f4ed;color:#1e6b45;border:none" onclick="resetUserPassword(${u.id},'${safeName}')">🔑</button>`}
+          ${isYou ? '' : `<button class="user-del-btn" onclick="deleteUser(${u.id},'${safeName}')">Delete</button>`}
+        </span>
       </div>`;
     }).join('');
   } catch (e) {
@@ -2714,6 +2798,18 @@ async function deleteUser(id, username) {
     await api('DELETE', '/api/auth/users/' + id);
     showToast('✓ User "' + username + '" deleted', false);
     loadUsers();
+  } catch (e) {
+    showToast('⚠ ' + e.message, true);
+  }
+}
+
+async function resetUserPassword(id, username) {
+  const newPass = prompt('Enter new password for "' + username + '" (min 6 characters):');
+  if (!newPass) return;
+  if (newPass.length < 6) { showToast('⚠ Password must be at least 6 characters.', true); return; }
+  try {
+    await api('PATCH', '/api/auth/users/' + id + '/password', { password: newPass });
+    showToast('✓ Password reset for "' + username + '"', false);
   } catch (e) {
     showToast('⚠ ' + e.message, true);
   }
