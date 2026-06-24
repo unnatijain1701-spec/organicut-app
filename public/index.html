@@ -39,6 +39,7 @@ body {
   display: flex; flex-direction: column;
   box-shadow: 2px 0 10px rgba(0,0,0,.14);
 }
+#plantSelector option { background: #1e6b45; color: #fff; }
 .sidebar-brand {
   padding: 16px 18px; font-weight: 800; font-size: 16px; color: #fff;
   display: flex; align-items: center; gap: 8px; letter-spacing: -.3px;
@@ -791,6 +792,12 @@ tr.dash-row-alt td { background: #f7fdf9; }
     <button class="nav-item" id="navVendors" onclick="navTo('vendors')"><span class="nav-ico">⚙</span> Vendors</button>
     <button class="nav-item" id="navUsers" style="display:none" onclick="navTo('users')"><span class="nav-ico">👤</span> Users</button>
   </div>
+  <div id="plantSelectorField" style="display:none;padding:10px 14px;border-top:1px solid rgba(255,255,255,.12)">
+    <div style="font-size:10px;font-weight:700;color:rgba(255,255,255,.5);letter-spacing:.6px;margin-bottom:6px">SELECT PLANT</div>
+    <select id="plantSelector" onchange="onPlantChange(this.value)" style="width:100%;height:34px;border:1px solid rgba(255,255,255,.25);border-radius:7px;padding:0 8px;font-size:13px;font-weight:600;background:rgba(255,255,255,.12);color:#fff;outline:none;cursor:pointer;">
+      <option value="">All Plants</option>
+    </select>
+  </div>
   <div class="sidebar-foot">
     <div class="sidebar-user"><span class="nav-ico">👤</span> <span id="userBadge"></span></div>
     <button class="nav-item" onclick="doLogout()"><span class="nav-ico">⏏</span> Logout</button>
@@ -801,12 +808,6 @@ tr.dash-row-alt td { background: #f7fdf9; }
 <div class="topbar">
   <div class="topbar-main">
     <div class="topbar-fields">
-      <div class="field" id="plantSelectorField" style="display:none">
-        <label>Plant</label>
-        <select id="plantSelector" onchange="onPlantChange(this.value)" style="height:34px;border:1px solid var(--border);border-radius:6px;padding:0 8px;font-size:13px;background:#fff;color:var(--text);">
-          <option value="">All Plants</option>
-        </select>
-      </div>
       <div class="field">
         <label>Date</label>
         <input type="date" id="dateInput" onchange="if(currentRole==='superadmin'&&!activePlantId){loadAllPlantsView(this.value);}else{_freshCSVLoaded=false;recalc();tryReprocessCSV();reloadTodayData();}">
@@ -2712,8 +2713,10 @@ function _renderDashCards(data) {
   document.getElementById('dcWorstMPK').textContent  = worst ? '₹ ' + parseFloat(worst.mpk).toFixed(2) : '—';
   document.getElementById('dcWorstDate').textContent = worst ? fmtD(worst.date) : '';
   document.getElementById('dcDaysCount').textContent = String(recs.length);
-  document.getElementById('dcTotalAtt').textContent  = '₹ ' + totalAttSum.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  document.getElementById('dcTotalVol').textContent  = totalQtySum.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' kg';
+  document.getElementById('dcTotalAtt').textContent  = fcShort(totalAttSum);
+  document.getElementById('dcTotalVol').textContent  = totalQtySum >= 1e5
+    ? (totalQtySum / 1e5).toFixed(2) + ' L kg'
+    : totalQtySum.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' kg';
 }
 
 function _renderDashTrend(data) {
