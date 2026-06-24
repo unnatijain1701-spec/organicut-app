@@ -1114,8 +1114,9 @@ async function checkAuth() {
       const plantLabel = currentPlantName ? ` • ${currentPlantName}` : ' • All Plants';
       document.getElementById('userBadge').textContent = user.username + plantLabel;
       const isPrivileged = currentRole === 'admin' || currentRole === 'superadmin';
+      const canSeeDashboard = isPrivileged || !user.plant_id;
       document.getElementById('navUsers').style.display = isPrivileged ? '' : 'none';
-      document.getElementById('navDashboard').style.display = isPrivileged ? '' : 'none';
+      document.getElementById('navDashboard').style.display = canSeeDashboard ? '' : 'none';
       document.getElementById('loginOverlay').style.display = 'none';
       if (!currentPlantId) await setupPlantSelector();
       await initApp();
@@ -1282,7 +1283,6 @@ async function initApp() {
   document.querySelector('.btn-save-rec').style.display   = isAllPlants ? 'none' : '';
   document.getElementById('reloadBtn').style.display      = isAllPlants ? 'none' : '';
   document.getElementById('navDaily').style.display       = isAllPlants ? 'none' : '';
-  document.getElementById('navHistory').style.display     = isAllPlants ? 'none' : '';
 
   if (isAllPlants) {
     await loadAllPlantsView(document.getElementById('dateInput').value);
