@@ -811,7 +811,7 @@ tr.dash-row-alt td { background: #f7fdf9; }
     <div class="topbar-fields">
       <div class="field">
         <label>Date</label>
-        <input type="date" id="dateInput" onchange="if(currentRole==='superadmin'&&!activePlantId){loadAllPlantsView(this.value);}else{_freshCSVLoaded=false;recalc();tryReprocessCSV();reloadTodayData();}">
+        <input type="date" id="dateInput" onchange="if(!currentPlantId&&!activePlantId){loadAllPlantsView(this.value);}else{_freshCSVLoaded=false;recalc();tryReprocessCSV();reloadTodayData();}">
       </div>
       <div class="field">
         <label>Sale&nbsp;Qty&nbsp;(kg)</label>
@@ -1073,8 +1073,8 @@ let _freshCSVLoaded = false;  // true immediately after CSV upload; prevents sav
 ═══════════════════════════════════════════════════════ */
 
 async function api(method, url, body) {
-  // Superadmin: inject activePlantId so backend knows which plant to query
-  if (currentRole === 'superadmin' && activePlantId) {
+  // All-plants users: inject activePlantId so backend knows which plant to query
+  if (!currentPlantId && activePlantId) {
     if (method === 'GET' || method === 'DELETE') {
       url += (url.includes('?') ? '&' : '?') + 'plantId=' + activePlantId;
     } else if (body && !(body instanceof FormData)) {
