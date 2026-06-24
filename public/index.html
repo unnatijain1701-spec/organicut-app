@@ -1035,6 +1035,7 @@ async function checkAuth() {
       const canSeeDashboard = isPrivileged || !user.plant_id;
       document.getElementById('navUsers').style.display = isPrivileged ? '' : 'none';
       document.getElementById('navDashboard').style.display = canSeeDashboard ? '' : 'none';
+      document.getElementById('navVendors').style.display = isPrivileged ? '' : 'none';
       document.getElementById('loginOverlay').style.display = 'none';
       if (!currentPlantId) await setupPlantSelector();
       await initApp();
@@ -1094,8 +1095,10 @@ async function doLogin() {
     const plantLabel = currentPlantName ? ` • ${currentPlantName}` : ' • All Plants';
     document.getElementById('userBadge').textContent = user.username + plantLabel;
     const isPrivileged = currentRole === 'admin' || currentRole === 'superadmin';
+    const canSeeDashboard = isPrivileged || !user.plant_id;
     document.getElementById('navUsers').style.display = isPrivileged ? '' : 'none';
-    document.getElementById('navDashboard').style.display = isPrivileged ? '' : 'none';
+    document.getElementById('navDashboard').style.display = canSeeDashboard ? '' : 'none';
+    document.getElementById('navVendors').style.display = isPrivileged ? '' : 'none';
     document.getElementById('loginOverlay').style.display = 'none';
     if (!currentPlantId) await setupPlantSelector();
     await initApp();
@@ -1131,6 +1134,7 @@ async function doLogout() {
   currentPlantName = null;
   document.getElementById('navUsers').style.display = 'none';
   document.getElementById('navDashboard').style.display = 'none';
+  document.getElementById('navVendors').style.display = 'none';
   setActiveNav('daily');
   closeDashboard();
   toggleUsersPanel(false);
@@ -2125,7 +2129,7 @@ async function loadHistoryRecords() {
               ${r.updated_by ? `<span style="color:var(--muted);font-size:10px">by ${r.updated_by}</span>` : ''}
             </div>
           </div>
-          <button class="hist-del-btn" title="Delete this record" onclick="deleteHistoryRecord('${cleanDate}')">🗑</button>
+          ${(currentRole === 'admin' || currentRole === 'superadmin') ? `<button class="hist-del-btn" title="Delete this record" onclick="deleteHistoryRecord('${cleanDate}')">🗑</button>` : ''}
         </div>`;
       }).join('');
       return `<div class="hist-month">
@@ -2642,9 +2646,17 @@ async function loadUsers() {
         ? `<span style="font-size:10px;padding:2px 7px;border-radius:10px;margin-left:4px;background:#f0f7f4;color:#4a7a5e">${u.plant_name}</span>`
         : `<span style="font-size:10px;padding:2px 7px;border-radius:10px;margin-left:4px;background:#fff3cd;color:#856404">All Plants</span>`;
       const safeName = u.username.replace(/'/g,"\\'");
+      const roleOpts = currentRole === 'superadmin'
+        ? [['user','Operator'],['admin','Admin'],['superadmin','Superadmin']]
+        : [['user','Operator'],['admin','Admin']];
+      const roleSelect = isYou ? '' : `<select onchange="changeUserRole(${u.id},'${safeName}',this.value)"
+        style="font-size:11px;padding:2px 4px;border-radius:6px;border:1px solid var(--border);cursor:pointer;margin-right:2px">
+        ${roleOpts.map(([v,l]) => `<option value="${v}"${u.role===v?' selected':''}>${l}</option>`).join('')}
+      </select>`;
       return `<div class="user-row">
         <span class="user-row-name">${u.username}${badge}${plantBadge}${isYou ? '<span class="user-row-you"> (you)</span>' : ''}</span>
-        <span style="display:flex;gap:4px">
+        <span style="display:flex;align-items:center;gap:4px">
+          ${roleSelect}
           ${isYou ? '' : `<button class="user-del-btn" style="background:#e8f4ed;color:#1e6b45;border:none" onclick="resetUserPassword(${u.id},'${safeName}')">🔑</button>`}
           ${isYou ? '' : `<button class="user-del-btn" onclick="deleteUser(${u.id},'${safeName}')">Delete</button>`}
         </span>
@@ -2694,6 +2706,19 @@ async function deleteUser(id, username) {
     loadUsers();
   } catch (e) {
     showToast('⚠ ' + e.message, true);
+  }
+}
+
+async function changeUserRole(id, username, newRole) {
+  const label = newRole === 'superadmin' ? 'Superadmin' : newRole === 'admin' ? 'Admin' : 'Operator';
+  if (!confirm(`Change "${username}" role to ${label}?`)) { loadUsers(); return; }
+  try {
+    await api('PATCH', '/api/auth/users/' + id, { role: newRole });
+    showToast(`✓ "${username}" is now ${label}`, false);
+    loadUsers();
+  } catch (e) {
+    showToast('⚠ ' + e.message, true);
+    loadUsers();
   }
 }
 
@@ -2955,7 +2980,7 @@ function _renderDashTable(data) {
       <td class="r">${parseFloat(r.sale_qty || 0).toFixed(0)} kg</td>
       <td class="r">₹ ${parseFloat(r.mpk).toFixed(2)}</td>
       <td class="r">
-        <button class="dash-row-del" onclick="dashDeleteRecord('${r.date}')">🗑 Delete</button>
+        ${(currentRole === 'admin' || currentRole === 'superadmin') ? `<button class="dash-row-del" onclick="dashDeleteRecord('${r.date}')">🗑 Delete</button>` : ''}
       </td>
     </tr>`).join('');
 }
