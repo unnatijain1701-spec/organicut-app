@@ -1285,8 +1285,9 @@ async function initApp() {
   document.getElementById('navDaily').style.display       = isAllPlants ? 'none' : '';
 
   if (isAllPlants) {
-    await loadAllPlantsView(document.getElementById('dateInput').value);
     loadHistory();
+    await loadDashboard();
+    setActiveNav('dashboard');
     return;
   }
 
@@ -2635,7 +2636,7 @@ let _dashFromDate = null;
 let _dashToDate   = null;
 
 async function loadDashboard() {
-  if (currentRole !== 'admin' && currentRole !== 'superadmin') return;
+  if (currentRole !== 'admin' && currentRole !== 'superadmin' && currentPlantId) return;
   document.getElementById('dashboardOverlay').style.display = 'flex';
   // Default to current month
   const now = new Date();
