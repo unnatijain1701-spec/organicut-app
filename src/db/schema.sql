@@ -190,6 +190,142 @@ FROM (VALUES
 CROSS JOIN (SELECT id FROM plants WHERE name = 'Hyderabad') AS p
 ON CONFLICT (plant_id, vendor_name, sku_name) DO NOTHING;
 
+-- Seed Rai custom SKUs — MP vendor
+INSERT INTO custom_skus (plant_id, vendor_name, sku_name, rate, display_order)
+SELECT p.id, 'MP', v.sku_name, v.rate, v.ord
+FROM (VALUES
+  ('TOMATO DECORING',                   4.25,  1),
+  ('TOMATO CUTTING',                    4.30,  2),
+  ('TOMATO CUTTING 10x10',              7.50,  3),
+  ('TOMATO SHORTING',                   1.50,  4),
+  ('TOMATO SORTING',                    1.50,  5),
+  ('ONION CHOPPED',                     9.00,  6),
+  ('RED ONION SLICE CUTTING',           6.00,  7),
+  ('RED ONION PIZZA HUT CUTTING',       6.00,  8),
+  ('ONION SHORTING (ARVIND)',            1.50,  9),
+  ('ONION PEELED',                      3.25, 10),
+  ('LETTUCE SHORTING',                  5.00, 11),
+  ('GREEN CAPSICUM DEPLING',            4.20, 12),
+  ('GREEN CAPSICUM SHORTING (ARVIND)',  1.50, 13),
+  ('CORIANDER SHORTING (ARVIND)',       5.00, 14),
+  ('CORIANDER PACKING',                 0.80, 15),
+  ('PALAK SHORTING',                    5.00, 16),
+  ('CAPSICUM CUTTING',                  4.20, 17),
+  ('CAPSICUM DEPLING (RAVI)',            4.20, 18),
+  ('W. ONION CUTTING',                  3.80, 19),
+  ('GREEN CAPSICUM SHORTING (RAVI)',    1.83, 20),
+  ('ONION SHORTING (RAVI)',             1.60, 21),
+  ('GREEN CHILLI SHORTING',             1.60, 22),
+  ('RED ONION PEELED SHORTING',         1.50, 23),
+  ('PACKING',                           1.15, 24),
+  ('MUSHOOM CUTTING',                   5.00, 25),
+  ('CAPSICUM RM SHORTING',              1.50, 26),
+  ('RED ONION (PEELED)',                3.25, 27),
+  ('CAULIFLOWER CUTTING',               4.00, 28),
+  ('CAPSICUM DICED (BVEG)',             6.00, 29),
+  ('FROZEN CORIANDER (BOX)',            2.00, 30),
+  ('CORIANDER SHORTING FINAL',         10.00, 31),
+  ('ASH GUARD',                         6.50, 32),
+  ('ONION SLICE PIZZA HUT',             6.00, 33),
+  ('R.ONION (RAMAKANT)',                3.25, 34),
+  ('R.ONION (SURAJ)',                   3.25, 35),
+  ('R. ONION (RAMBABU)',                3.25, 36),
+  ('W.ONION (RAMAKANT)',                3.25, 37),
+  ('W.ONION (SURAJ)',                   3.25, 38),
+  ('W. ONION (RAMBABU)',                3.25, 39),
+  ('SHYAM RED ONION',                   3.25, 40),
+  ('SHYAM WHITE ONION',                 3.25, 41),
+  ('SHAKER RED ONION',                  3.25, 42),
+  ('ARVIND RED ONION',                  3.25, 43),
+  ('RAJNATH RED ONION',                 3.25, 44)
+) AS v(sku_name, rate, ord)
+CROSS JOIN (SELECT id FROM plants WHERE name = 'Rai') AS p
+ON CONFLICT (plant_id, vendor_name, sku_name) DO NOTHING;
+
+-- Seed Rai custom SKUs — Ashok vendor
+INSERT INTO custom_skus (plant_id, vendor_name, sku_name, rate, display_order)
+SELECT p.id, 'Ashok', v.sku_name, v.rate, v.ord
+FROM (VALUES
+  ('RM UNLoading',            0.20, 1),
+  ('RM Loading',              0.20, 2),
+  ('RM Shifting to Crates',   0.20, 3),
+  ('RM Shifting To Coldroom', 0.20, 4),
+  ('FG Loading',              0.20, 5),
+  ('FG UNloading',            0.20, 6),
+  ('Punnet Box',              0.20, 7),
+  ('Bardana',                 0.20, 8),
+  ('Pallet Shifting',         0.20, 9)
+) AS v(sku_name, rate, ord)
+CROSS JOIN (SELECT id FROM plants WHERE name = 'Rai') AS p
+ON CONFLICT (plant_id, vendor_name, sku_name) DO NOTHING;
+
+-- Seed Rai custom SKUs — RS vendor
+INSERT INTO custom_skus (plant_id, vendor_name, sku_name, rate, display_order)
+SELECT p.id, 'RS', v.sku_name, v.rate, v.ord
+FROM (VALUES
+  ('CARROT PEELED 522',            4.50,  1),
+  ('GREEN CHILLI DE-STEMMED 522',  7.50,  2),
+  ('ACHARI MIRCH DE-STEMMED 522',  2.80,  3),
+  ('FRENCH BEANS 522',             6.00,  4),
+  ('GINGER 522',                   9.00,  5),
+  ('POTATO PEELED 576',            5.50,  6),
+  ('BHINDI TOP/BOTTEM',            8.00,  7),
+  ('Sirka Onion',                  7.00,  8),
+  ('GREEN CHILI SHORTING',         1.50,  9),
+  ('CARROT LACCHA (GAJAR HALWA)',  6.00, 10),
+  ('RED ONION PEELING 522',        3.25, 11),
+  ('WHITE ONION PEELING 522',      3.25, 12),
+  ('POMEGRANATE PEELING 576',     20.00, 13),
+  ('GREEN PEAS PEELING',          18.00, 14),
+  ('BEETROOT PEELING',             8.00, 15),
+  ('Rebel Food Packing',           2.50, 16),
+  ('HALDIRAM RTU PACKING',         2.50, 17),
+  ('HALDIRAM WHOLE PACKING',       2.50, 18),
+  ('SUBWAY PACKING',               2.50, 19),
+  ('RED POTATO PACKING',           2.50, 20)
+) AS v(sku_name, rate, ord)
+CROSS JOIN (SELECT id FROM plants WHERE name = 'Rai') AS p
+ON CONFLICT (plant_id, vendor_name, sku_name) DO NOTHING;
+
+-- Seed Rai custom SKUs — RJ vendor
+INSERT INTO custom_skus (plant_id, vendor_name, sku_name, rate, display_order)
+SELECT p.id, 'RJ', v.sku_name, v.rate, v.ord
+FROM (VALUES
+  ('RED PUMPKIN',            7.50,  1),
+  ('ASH GOURD',              6.50,  2),
+  ('CARROT DICED',           6.75,  3),
+  ('POTATO CUT',             2.70,  4),
+  ('PUMPKIN DICE CUT',       7.50,  5),
+  ('RTE BIRYANI BEANS CUT',  6.75,  6),
+  ('ONION CUT 10x10',        9.00,  7),
+  ('ONION CUT 14x14',        9.00,  8),
+  ('ONION SLICE',            6.00,  9),
+  ('BEANS DIMOND CUT',       7.25, 10),
+  ('MUSHROOM',               5.00, 11),
+  ('TOMATO CUTTING',         4.30, 12),
+  ('JACKFRUIT CUT',         10.00, 13),
+  ('PACKING',                1.15, 14)
+) AS v(sku_name, rate, ord)
+CROSS JOIN (SELECT id FROM plants WHERE name = 'Rai') AS p
+ON CONFLICT (plant_id, vendor_name, sku_name) DO NOTHING;
+
+-- Seed Rai custom SKUs — BL Unloading vendor
+INSERT INTO custom_skus (plant_id, vendor_name, sku_name, rate, display_order)
+SELECT p.id, 'BL Unloading', v.sku_name, v.rate, v.ord
+FROM (VALUES
+  ('RM UNLoading',            0.20, 1),
+  ('RM Loading',              0.20, 2),
+  ('RM Shifting to Crates',   0.20, 3),
+  ('RM Shifting To Coldroom', 0.20, 4),
+  ('FG Loading',              0.20, 5),
+  ('FG UNloading',            0.20, 6),
+  ('Punnet Box',              0.20, 7),
+  ('Bardana',                 0.20, 8),
+  ('Pallet Shifting',         0.20, 9)
+) AS v(sku_name, rate, ord)
+CROSS JOIN (SELECT id FROM plants WHERE name = 'Rai') AS p
+ON CONFLICT (plant_id, vendor_name, sku_name) DO NOTHING;
+
 ALTER TABLE daily_records ADD COLUMN IF NOT EXISTS updated_by VARCHAR(100);
 
 -- Promote any existing admin with no plant to superadmin
