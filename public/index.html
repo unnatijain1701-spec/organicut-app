@@ -1267,6 +1267,7 @@ async function onPlantChange(val) {
   document.getElementById('userBadge').textContent = currentUsername + plantLabel;
   clearForm();
   await initApp();
+  if (vendorsPanelOpen) loadVendorsList();
   if (activePlantId) {
     const date = document.getElementById('dateInput').value;
     if (date) await silentLoadRecord(date);
@@ -2334,8 +2335,8 @@ async function exportAllRecords() {
     if (!records.length) { showToast('⚠ No records found.', true); return; }
 
     const summaryRows = [['Date','Production Attendance Cost','Per KG Cost','Total Cost','Sale Qty (kg)','MPK']];
-    const attRows = [['Date','Contractor','Workers','Cost (₹)']];
-    const kgRows  = [['Date','Vendor','SKU','Rate (₹/kg)','Qty (kg)','Cost (₹)']];
+    // Combined vendor details: Type = Attendance or Per KG
+    const vendorRows = [['Date','Type','Name','Workers','SKU','Rate (₹/kg)','Qty (kg)','Cost (₹)']];
     const vendorTotals = {}; // vendor → { qty, cost }
 
     for (const detail of records) {
@@ -2353,17 +2354,17 @@ async function exportAllRecords() {
       ]);
 
       (detail.attendance || []).forEach(a => {
-        attRows.push([date, a.contractor_name, a.workers || 0, parseFloat(a.cost) || 0]);
+        vendorRows.push([date, 'Attendance', a.contractor_name, a.workers || 0, '', '', '', parseFloat(a.cost) || 0]);
       });
 
       (detail.kgEntries || []).forEach(e => {
         if (e.sku_name === '__UNLOADING__') {
-          kgRows.push([date, e.vendor_name, 'Unloading Cost', '', '', r2(parseFloat(e.cost) || 0)]);
+          vendorRows.push([date, 'Per KG', e.vendor_name, '', 'Unloading Cost', '', '', r2(parseFloat(e.cost) || 0)]);
           if (!vendorTotals[e.vendor_name]) vendorTotals[e.vendor_name] = { qty: 0, cost: 0 };
           vendorTotals[e.vendor_name].cost += parseFloat(e.cost) || 0;
         } else {
-          kgRows.push([date, e.vendor_name, e.sku_name,
-            parseFloat(e.rate) || 0, parseFloat(e.qty) || 0, r2(parseFloat(e.cost) || 0)]);
+          vendorRows.push([date, 'Per KG', e.vendor_name, '',
+            e.sku_name, parseFloat(e.rate) || 0, parseFloat(e.qty) || 0, r2(parseFloat(e.cost) || 0)]);
           if (!vendorTotals[e.vendor_name]) vendorTotals[e.vendor_name] = { qty: 0, cost: 0 };
           vendorTotals[e.vendor_name].qty  += parseFloat(e.qty)  || 0;
           vendorTotals[e.vendor_name].cost += parseFloat(e.cost) || 0;
@@ -2388,31 +2389,28 @@ async function exportAllRecords() {
     const grandAttCost = Object.values(attTotals).reduce((s, v) => s + v.cost, 0);
     attSumRows.push(['TOTAL', '', '', r2(grandAttCost)]);
 
-    // Build vendor cost summary sheet
-    const vendorRows = [['Vendor','Total Qty Processed (kg)','Total Amount Paid (₹)']];
+    // Build KG vendor cost summary sheet
+    const kgSumRows = [['Vendor','Total Qty Processed (kg)','Total Amount Paid (₹)']];
     Object.entries(vendorTotals).sort((a,b) => b[1].cost - a[1].cost).forEach(([name, v]) => {
-      vendorRows.push([name, r2(v.qty), r2(v.cost)]);
+      kgSumRows.push([name, r2(v.qty), r2(v.cost)]);
     });
     const grandVendorCost = Object.values(vendorTotals).reduce((s, v) => s + v.cost, 0);
-    vendorRows.push(['TOTAL', '', r2(grandVendorCost)]);
+    kgSumRows.push(['TOTAL', '', r2(grandVendorCost)]);
 
     const ws1 = XLSX.utils.aoa_to_sheet(summaryRows);
     ws1['!cols'] = [12,22,14,12,14,10].map(w => ({ wch: w }));
     const wsAS = XLSX.utils.aoa_to_sheet(attSumRows);
     wsAS['!cols'] = [32,12,14,26].map(w => ({ wch: w }));
-    const ws2 = XLSX.utils.aoa_to_sheet(attRows);
-    ws2['!cols'] = [12,32,10,12].map(w => ({ wch: w }));
-    const ws3 = XLSX.utils.aoa_to_sheet(kgRows);
-    ws3['!cols'] = [12,14,28,12,10,12].map(w => ({ wch: w }));
-    const ws4 = XLSX.utils.aoa_to_sheet(vendorRows);
-    ws4['!cols'] = [20,24,20].map(w => ({ wch: w }));
+    const wsVD = XLSX.utils.aoa_to_sheet(vendorRows);
+    wsVD['!cols'] = [12,12,28,10,28,12,10,12].map(w => ({ wch: w }));
+    const wsKS = XLSX.utils.aoa_to_sheet(kgSumRows);
+    wsKS['!cols'] = [20,24,20].map(w => ({ wch: w }));
 
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws1, 'Daily Summary');
     XLSX.utils.book_append_sheet(wb, wsAS, 'Attendance Summary');
-    XLSX.utils.book_append_sheet(wb, ws2, 'Attendance Detail');
-    XLSX.utils.book_append_sheet(wb, ws3, 'KG Detail');
-    XLSX.utils.book_append_sheet(wb, ws4, 'Vendor Cost Summary');
+    XLSX.utils.book_append_sheet(wb, wsVD, 'Vendor Details');
+    XLSX.utils.book_append_sheet(wb, wsKS, 'KG Vendor Summary');
     XLSX.writeFile(wb, 'Organicut_MPK_All_Records.xlsx');
     showToast('✓ Exported ' + records.length + ' record' + (records.length === 1 ? '' : 's'), false);
   } catch (e) {
