@@ -1279,6 +1279,7 @@ async function initApp() {
   document.querySelector('.sumbar').style.display         = isAllPlants ? 'none' : '';
   document.querySelector('.btn-save-rec').style.display   = isAllPlants ? 'none' : '';
   document.getElementById('reloadBtn').style.display      = isAllPlants ? 'none' : '';
+  document.getElementById('navDaily').style.display       = isAllPlants ? 'none' : '';
   document.getElementById('navHistory').style.display     = isAllPlants ? 'none' : '';
 
   if (isAllPlants) {
@@ -1468,6 +1469,13 @@ function fc(n) {
   if (n == null || isNaN(n)) return '—';
   return '₹ ' + n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
+function fcShort(n) {
+  if (n == null || isNaN(n)) return '—';
+  const abs = Math.abs(n);
+  if (abs >= 1e7) return '₹ ' + (n / 1e7).toFixed(2) + ' Cr';
+  if (abs >= 1e5) return '₹ ' + (n / 1e5).toFixed(2) + ' L';
+  return '₹ ' + n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
 function fn(n, d = 2) {
   if (n == null || isNaN(n)) return '—';
   return n.toLocaleString('en-IN', { minimumFractionDigits: d, maximumFractionDigits: d });
@@ -1480,9 +1488,9 @@ function vid(v) { return v.replace(/[^a-zA-Z0-9]/g, '_'); }
 
 function recalc() {
   const att = totalAtt(), kg = totalKG(), total = att + kg, mpk = getMPK();
-  document.getElementById('sumAtt').textContent   = fc(att);
-  document.getElementById('sumKG').textContent    = fc(kg);
-  document.getElementById('sumTotal').textContent = fc(total);
+  document.getElementById('sumAtt').textContent   = fcShort(att);
+  document.getElementById('sumKG').textContent    = fcShort(kg);
+  document.getElementById('sumTotal').textContent = fcShort(total);
   document.getElementById('sumMPK').textContent   = mpk != null ? fn(mpk) : '—';
   document.getElementById('attTotal').textContent = fc(att);
   KG_VENDORS.forEach(v => {
@@ -2187,8 +2195,21 @@ function exportExcel() {
   const ws3 = XLSX.utils.aoa_to_sheet(kgRows);
   ws3['!cols'] = [12,14,28,12,10,12].map(w => ({ wch: w }));
 
+  // Sheet 4: Attendance Summary (one row per contractor)
+  const attSumRows = [['Contractor','Workers Present','Attendance Cost (₹)','% of Total Att Cost']];
+  const totalAttCost = ATT_VENDORS.reduce((s, v) => s + (parseFloat(attState[v]?.cost) || 0), 0);
+  ATT_VENDORS.forEach(v => {
+    const cost = parseFloat(attState[v]?.cost) || 0;
+    const pct = totalAttCost > 0 ? r2((cost / totalAttCost) * 100) : 0;
+    attSumRows.push([v, attState[v]?.workers || 0, r2(cost), pct]);
+  });
+  attSumRows.push(['TOTAL', ATT_VENDORS.reduce((s,v) => s + (attState[v]?.workers||0), 0), r2(totalAttCost), 100]);
+  const ws4 = XLSX.utils.aoa_to_sheet(attSumRows);
+  ws4['!cols'] = [32,16,20,18].map(w => ({ wch: w }));
+
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws1, 'Daily Summary');
+  XLSX.utils.book_append_sheet(wb, ws4, 'Attendance Summary');
   XLSX.utils.book_append_sheet(wb, ws2, 'Attendance Detail');
   XLSX.utils.book_append_sheet(wb, ws3, 'KG Detail');
   XLSX.writeFile(wb, 'Organicut_MPK_' + date + '.xlsx');
@@ -2252,6 +2273,23 @@ async function exportAllRecords() {
       });
     }
 
+    // Build attendance summary sheet (aggregated by contractor across all dates)
+    const attTotals = {};
+    for (const detail of records) {
+      (detail.attendance || []).forEach(a => {
+        if (!attTotals[a.contractor_name]) attTotals[a.contractor_name] = { days: 0, workers: 0, cost: 0 };
+        attTotals[a.contractor_name].days    += 1;
+        attTotals[a.contractor_name].workers += a.workers || 0;
+        attTotals[a.contractor_name].cost    += parseFloat(a.cost) || 0;
+      });
+    }
+    const attSumRows = [['Contractor','No. of Days','Total Workers','Total Attendance Cost (₹)']];
+    Object.entries(attTotals).sort((a,b) => b[1].cost - a[1].cost).forEach(([name, v]) => {
+      attSumRows.push([name, v.days, v.workers, r2(v.cost)]);
+    });
+    const grandAttCost = Object.values(attTotals).reduce((s, v) => s + v.cost, 0);
+    attSumRows.push(['TOTAL', '', '', r2(grandAttCost)]);
+
     // Build vendor cost summary sheet
     const vendorRows = [['Vendor','Total Qty Processed (kg)','Total Amount Paid (₹)']];
     Object.entries(vendorTotals).sort((a,b) => b[1].cost - a[1].cost).forEach(([name, v]) => {
@@ -2262,6 +2300,8 @@ async function exportAllRecords() {
 
     const ws1 = XLSX.utils.aoa_to_sheet(summaryRows);
     ws1['!cols'] = [12,22,14,12,14,10].map(w => ({ wch: w }));
+    const wsAS = XLSX.utils.aoa_to_sheet(attSumRows);
+    wsAS['!cols'] = [32,12,14,26].map(w => ({ wch: w }));
     const ws2 = XLSX.utils.aoa_to_sheet(attRows);
     ws2['!cols'] = [12,32,10,12].map(w => ({ wch: w }));
     const ws3 = XLSX.utils.aoa_to_sheet(kgRows);
@@ -2271,6 +2311,7 @@ async function exportAllRecords() {
 
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws1, 'Daily Summary');
+    XLSX.utils.book_append_sheet(wb, wsAS, 'Attendance Summary');
     XLSX.utils.book_append_sheet(wb, ws2, 'Attendance Detail');
     XLSX.utils.book_append_sheet(wb, ws3, 'KG Detail');
     XLSX.utils.book_append_sheet(wb, ws4, 'Vendor Cost Summary');
