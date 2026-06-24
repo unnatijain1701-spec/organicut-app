@@ -352,9 +352,12 @@ td input[type="number"]:hover { border-color: #7dbf99; }
 }
 #usersPanel.open { transform: translateX(0); }
 .user-row {
-  display: flex; align-items: center; justify-content: space-between;
+  display: flex; flex-direction: column; gap: 6px;
   padding: 10px 14px; border-radius: 9px; margin-bottom: 4px;
   border: 1px solid var(--border); background: #fff;
+}
+.user-row-actions {
+  display: flex; align-items: center; justify-content: space-between; gap: 4px;
 }
 .user-row-name { font-size: 13px; font-weight: 600; color: var(--text); }
 .user-row-you  { font-size: 11px; color: var(--muted); margin-left: 6px; font-weight: 400; }
@@ -1211,6 +1214,9 @@ async function initApp() {
   document.querySelector('.btn-save-rec').style.display   = isAllPlants ? 'none' : '';
   document.getElementById('reloadBtn').style.display      = isAllPlants ? 'none' : '';
   document.getElementById('navDaily').style.display       = isAllPlants ? 'none' : '';
+  // Vendors are plant-specific — hide the tab whenever no single plant is in context
+  const isPrivileged = currentRole === 'admin' || currentRole === 'superadmin';
+  document.getElementById('navVendors').style.display = (!isAllPlants && isPrivileged) ? '' : 'none';
   document.getElementById('kgProcessingCard').style.display = isJaipur ? 'none' : '';
 
   if (isAllPlants) {
@@ -1466,9 +1472,9 @@ function renderAtt() {
 ═══════════════════════════════════════════════════════ */
 
 function isUnloadingVendor(v) {
-  const skus = SKU_CFG[v] || [];
+  const skus = customSKUs[v] || [];
   if (skus.length === 0) return false;
-  return skus.every(([name]) => /load|unload|shift|pallet|bardana|punnet|crate|coldroom/i.test(name));
+  return skus.every(s => /load|unload|shift|pallet|bardana|punnet|crate|coldroom/i.test(s.name));
 }
 
 function switchKGCat(cat) {
@@ -1496,7 +1502,7 @@ function renderUnloadingTable() {
   const allActivities = [];
   const seen = new Set();
   unloadVendors.forEach(v => {
-    (SKU_CFG[v] || []).forEach(([name]) => { if (!seen.has(name)) { seen.add(name); allActivities.push(name); } });
+    (customSKUs[v] || []).forEach(s => { if (!seen.has(s.name)) { seen.add(s.name); allActivities.push(s.name); } });
   });
 
   // Header: Activity | Rate/kg | [VendorA qty | VendorA cost] | [VendorB qty | VendorB cost] ...
@@ -1506,34 +1512,18 @@ function renderUnloadingTable() {
     // Rate from first vendor that has this activity
     let displayRate = 0;
     const vendorCells = unloadVendors.map(v => {
-      const vd = vid(v);
-      const idx = (SKU_CFG[v] || []).findIndex(([n]) => n === actName);
-      if (idx === -1) return '<td></td><td class="r"><span class="zero">—</span></td>';
-      const rate = (SKU_CFG[v][idx])?.[1] ?? 0;
+      const vd  = vid(v);
+      const sku = (customSKUs[v] || []).find(s => s.name === actName);
+      if (!sku) return '<td></td><td class="r"><span class="zero">—</span></td>';
+      const rate = sku.rate ?? 0;
       if (!displayRate) displayRate = rate;
-      const qty  = kgState[v]?.[idx] || 0;
+      const qty  = sku.qty || 0;
       const cost = qty * rate;
       return `<td class="r"><input type="number" min="0" step="0.001" value="${qty||''}" placeholder="—"
-        data-v="${vd}" data-type="def" data-i="${idx}" data-rate="${rate}" onchange="onKG(this)"></td>
-        <td class="r cost-val" id="kc_${vd}_${idx}">${cost>0?fc(cost):'<span class="zero">—</span>'}</td>`;
+        data-v="${vd}" data-type="cust" data-ci="${sku.id}" data-rate="${rate}" onchange="onKG(this)"></td>
+        <td class="r cost-val" id="kcc_${vd}_${sku.id}">${cost>0?fc(cost):'<span class="zero">—</span>'}</td>`;
     }).join('');
     return `<tr><td class="sku-name">${actName}</td><td class="r rate-cell">₹&nbsp;${displayRate.toFixed(2)}</td>${vendorCells}</tr>`;
-  }).join('');
-
-  // Custom SKU rows for unloading vendors (rare, but support it)
-  const custRows = unloadVendors.flatMap(v => {
-    return (customSKUs[v] || []).map(sku => {
-      const vd = vid(v);
-      const qty = sku.qty || 0, cost = qty * sku.rate;
-      const vendorCells = unloadVendors.map(u => {
-        if (u !== v) return '<td></td><td class="r"><span class="zero">—</span></td>';
-        return `<td class="r"><input type="number" min="0" step="0.001" value="${qty||''}" placeholder="—"
-          data-v="${vd}" data-type="cust" data-ci="${sku.id}" data-rate="${sku.rate}" onchange="onKG(this)"></td>
-          <td class="r cost-val" id="kcc_${vd}_${sku.id}">${cost>0?fc(cost):'<span class="zero">—</span>'}</td>`;
-      }).join('');
-      return `<tr class="custom-sku-row"><td class="sku-name">${sku.name} <span style="font-size:10px;color:var(--muted)">(${v})</span></td>
-        <td class="r rate-cell">₹&nbsp;${sku.rate.toFixed(2)}</td>${vendorCells}</tr>`;
-    });
   }).join('');
 
   const footerCells = unloadVendors.map(v =>
@@ -1542,7 +1532,7 @@ function renderUnloadingTable() {
 
   wrap.innerHTML = `<div class="table-wrap"><table class="unload-table">
     <thead><tr><th>Activity</th><th class="r">₹/kg</th>${headerCols}</tr></thead>
-    <tbody>${dataRows}${custRows}</tbody>
+    <tbody>${dataRows}</tbody>
     <tfoot><tr class="ft"><td colspan="2">Total KG Cost</td>${footerCells}</tr></tfoot>
   </table></div>`;
 }
@@ -2653,13 +2643,16 @@ async function loadUsers() {
         style="font-size:11px;padding:2px 4px;border-radius:6px;border:1px solid var(--border);cursor:pointer;margin-right:2px">
         ${roleOpts.map(([v,l]) => `<option value="${v}"${u.role===v?' selected':''}>${l}</option>`).join('')}
       </select>`;
-      return `<div class="user-row">
-        <span class="user-row-name">${u.username}${badge}${plantBadge}${isYou ? '<span class="user-row-you"> (you)</span>' : ''}</span>
-        <span style="display:flex;align-items:center;gap:4px">
-          ${roleSelect}
-          ${isYou ? '' : `<button class="user-del-btn" style="background:#e8f4ed;color:#1e6b45;border:none" onclick="resetUserPassword(${u.id},'${safeName}')">🔑</button>`}
-          ${isYou ? '' : `<button class="user-del-btn" onclick="deleteUser(${u.id},'${safeName}')">Delete</button>`}
+      const actionsRow = isYou ? '' : `<div class="user-row-actions">
+        ${roleSelect}
+        <span style="display:flex;gap:4px">
+          <button class="user-del-btn" style="background:#e8f4ed;color:#1e6b45;border:none" onclick="resetUserPassword(${u.id},'${safeName}')">🔑</button>
+          <button class="user-del-btn" onclick="deleteUser(${u.id},'${safeName}')">Delete</button>
         </span>
+      </div>`;
+      return `<div class="user-row">
+        <div class="user-row-name">${u.username}${badge}${plantBadge}${isYou ? '<span class="user-row-you"> (you)</span>' : ''}</div>
+        ${actionsRow}
       </div>`;
     }).join('');
   } catch (e) {
