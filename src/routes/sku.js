@@ -44,7 +44,10 @@ router.get('/rates', async (req, res) => {
 });
 
 // POST /api/sku/rates  — save a default SKU rate override
-router.post('/rates', async (req, res) => {
+router.post('/rates', (req, res, next) => {
+  if (req.user.role !== 'superadmin') return res.status(403).json({ error: 'Superadmin only' });
+  next();
+}, async (req, res) => {
   const { vendorName, skuIndex, rate } = req.body || {};
   const pid = getPlantId(req);
   if (!vendorName || skuIndex == null || rate == null)
@@ -63,7 +66,10 @@ router.post('/rates', async (req, res) => {
 });
 
 // POST /api/sku  — add a custom SKU
-router.post('/', async (req, res) => {
+router.post('/', (req, res, next) => {
+  if (req.user.role !== 'superadmin') return res.status(403).json({ error: 'Superadmin only' });
+  next();
+}, async (req, res) => {
   const { vendorName, skuName, rate } = req.body || {};
   const pid = getPlantId(req);
   if (!vendorName || !skuName || rate == null)
@@ -85,7 +91,10 @@ router.post('/', async (req, res) => {
 });
 
 // PATCH /api/sku/:id  — edit a custom SKU
-router.patch('/:id', async (req, res) => {
+router.patch('/:id', (req, res, next) => {
+  if (req.user.role !== 'superadmin') return res.status(403).json({ error: 'Superadmin only' });
+  next();
+}, async (req, res) => {
   const { skuName, rate } = req.body || {};
   try {
     const { rows } = await db.query(`
@@ -101,7 +110,10 @@ router.patch('/:id', async (req, res) => {
 });
 
 // DELETE /api/sku/:id
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', (req, res, next) => {
+  if (req.user.role !== 'superadmin') return res.status(403).json({ error: 'Superadmin only' });
+  next();
+}, async (req, res) => {
   try {
     const { rowCount } = await db.query(
       'DELETE FROM custom_skus WHERE id = $1 AND plant_id = $2',

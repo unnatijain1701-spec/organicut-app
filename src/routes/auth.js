@@ -132,6 +132,7 @@ router.get('/users', authenticateToken, async (req, res) => {
 
 // POST /api/auth/users — create a new user
 router.post('/users', authenticateToken, async (req, res) => {
+  if (req.user.role !== 'superadmin') return res.status(403).json({ error: 'Superadmin only' });
   const { username, password, role, plantId } = req.body || {};
   if (!username || !password) {
     return res.status(400).json({ error: 'Username and password are required' });
@@ -174,8 +175,8 @@ router.post('/users', authenticateToken, async (req, res) => {
 // PATCH /api/auth/users/:id — change role (admin/superadmin only, cannot change own role)
 router.patch('/users/:id', authenticateToken, async (req, res) => {
   const isSuperadmin = req.user.role === 'superadmin';
-  const isAdmin      = req.user.role === 'admin';
-  if (!isSuperadmin && !isAdmin) return res.status(403).json({ error: 'Admin only' });
+  const isAdmin      = false; // user management locked to superadmin during trial
+  if (!isSuperadmin) return res.status(403).json({ error: 'Superadmin only' });
 
   const targetId = parseInt(req.params.id, 10);
   if (isNaN(targetId)) return res.status(400).json({ error: 'Invalid user id' });
@@ -207,8 +208,8 @@ router.patch('/users/:id', authenticateToken, async (req, res) => {
 // DELETE /api/auth/users/:id — delete a user (cannot delete yourself)
 router.delete('/users/:id', authenticateToken, async (req, res) => {
   const isSuperadmin = req.user.role === 'superadmin';
-  const isAdmin      = req.user.role === 'admin';
-  if (!isSuperadmin && !isAdmin) return res.status(403).json({ error: 'Admin only' });
+  const isAdmin      = false; // user management locked to superadmin during trial
+  if (!isSuperadmin) return res.status(403).json({ error: 'Superadmin only' });
 
   const targetId = parseInt(req.params.id, 10);
   if (isNaN(targetId)) return res.status(400).json({ error: 'Invalid user id' });
@@ -231,8 +232,8 @@ router.delete('/users/:id', authenticateToken, async (req, res) => {
 // PATCH /api/auth/users/:id/password — reset a user's password (admin/superadmin only)
 router.patch('/users/:id/password', authenticateToken, async (req, res) => {
   const isSuperadmin = req.user.role === 'superadmin';
-  const isAdmin      = req.user.role === 'admin';
-  if (!isSuperadmin && !isAdmin) return res.status(403).json({ error: 'Admin only' });
+  const isAdmin      = false; // user management locked to superadmin during trial
+  if (!isSuperadmin) return res.status(403).json({ error: 'Superadmin only' });
 
   const targetId = parseInt(req.params.id, 10);
   if (isNaN(targetId)) return res.status(400).json({ error: 'Invalid user id' });

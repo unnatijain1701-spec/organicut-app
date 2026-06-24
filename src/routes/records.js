@@ -235,6 +235,8 @@ router.post('/', async (req, res) => {
 
 // DELETE /api/records/:date
 router.delete('/:date', async (req, res) => {
+  if (req.user.role !== 'superadmin')
+    return res.status(403).json({ error: 'Superadmin only' });
   const pid = getPlantId(req);
   if (!pid) return res.status(400).json({ error: 'No plant selected' });
   try {

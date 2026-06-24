@@ -23,7 +23,10 @@ router.get('/', async (req, res) => {
   }
 });
 
-router.post('/', async (req, res) => {
+router.post('/', (req, res, next) => {
+  if (req.user.role !== 'superadmin') return res.status(403).json({ error: 'Superadmin only' });
+  next();
+}, async (req, res) => {
   const { name } = req.body || {};
   if (!name || !name.trim()) return res.status(400).json({ error: 'Vendor name is required' });
   try {
@@ -39,7 +42,10 @@ router.post('/', async (req, res) => {
   }
 });
 
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', (req, res, next) => {
+  if (req.user.role !== 'superadmin') return res.status(403).json({ error: 'Superadmin only' });
+  next();
+}, async (req, res) => {
   try {
     const { rowCount } = await db.query(
       'DELETE FROM kg_vendors WHERE id = $1 AND plant_id = $2',

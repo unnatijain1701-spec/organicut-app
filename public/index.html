@@ -1035,10 +1035,11 @@ async function checkAuth() {
       const plantLabel = currentPlantName ? ` • ${currentPlantName}` : ' • All Plants';
       document.getElementById('userBadge').textContent = user.username + plantLabel;
       const isPrivileged = currentRole === 'admin' || currentRole === 'superadmin';
+      const isSuperadmin = currentRole === 'superadmin';
       const canSeeDashboard = isPrivileged || !user.plant_id;
-      document.getElementById('navUsers').style.display = isPrivileged ? '' : 'none';
+      document.getElementById('navUsers').style.display = isSuperadmin ? '' : 'none';
       document.getElementById('navDashboard').style.display = canSeeDashboard ? '' : 'none';
-      document.getElementById('navVendors').style.display = isPrivileged ? '' : 'none';
+      document.getElementById('navVendors').style.display = isSuperadmin ? '' : 'none';
       document.getElementById('loginOverlay').style.display = 'none';
       if (!currentPlantId) await setupPlantSelector();
       await initApp();
@@ -1098,10 +1099,11 @@ async function doLogin() {
     const plantLabel = currentPlantName ? ` • ${currentPlantName}` : ' • All Plants';
     document.getElementById('userBadge').textContent = user.username + plantLabel;
     const isPrivileged = currentRole === 'admin' || currentRole === 'superadmin';
+    const isSuperadmin = currentRole === 'superadmin';
     const canSeeDashboard = isPrivileged || !user.plant_id;
-    document.getElementById('navUsers').style.display = isPrivileged ? '' : 'none';
+    document.getElementById('navUsers').style.display = isSuperadmin ? '' : 'none';
     document.getElementById('navDashboard').style.display = canSeeDashboard ? '' : 'none';
-    document.getElementById('navVendors').style.display = isPrivileged ? '' : 'none';
+    document.getElementById('navVendors').style.display = isSuperadmin ? '' : 'none';
     document.getElementById('loginOverlay').style.display = 'none';
     if (!currentPlantId) await setupPlantSelector();
     await initApp();
@@ -1215,8 +1217,8 @@ async function initApp() {
   document.getElementById('reloadBtn').style.display      = isAllPlants ? 'none' : '';
   document.getElementById('navDaily').style.display       = isAllPlants ? 'none' : '';
   // Vendors are plant-specific — hide the tab whenever no single plant is in context
-  const isPrivileged = currentRole === 'admin' || currentRole === 'superadmin';
-  document.getElementById('navVendors').style.display = (!isAllPlants && isPrivileged) ? '' : 'none';
+  const isSuperadmin = currentRole === 'superadmin';
+  document.getElementById('navVendors').style.display = (!isAllPlants && isSuperadmin) ? '' : 'none';
   document.getElementById('kgProcessingCard').style.display = isJaipur ? 'none' : '';
 
   if (isAllPlants) {
@@ -2119,7 +2121,7 @@ async function loadHistoryRecords() {
               ${r.updated_by ? `<span style="color:var(--muted);font-size:10px">by ${r.updated_by}</span>` : ''}
             </div>
           </div>
-          ${(currentRole === 'admin' || currentRole === 'superadmin') ? `<button class="hist-del-btn" title="Delete this record" onclick="deleteHistoryRecord('${cleanDate}')">🗑</button>` : ''}
+          ${currentRole === 'superadmin' ? `<button class="hist-del-btn" title="Delete this record" onclick="deleteHistoryRecord('${cleanDate}')">🗑</button>` : ''}
         </div>`;
       }).join('');
       return `<div class="hist-month">
@@ -2973,7 +2975,7 @@ function _renderDashTable(data) {
       <td class="r">${parseFloat(r.sale_qty || 0).toFixed(0)} kg</td>
       <td class="r">₹ ${parseFloat(r.mpk).toFixed(2)}</td>
       <td class="r">
-        ${(currentRole === 'admin' || currentRole === 'superadmin') ? `<button class="dash-row-del" onclick="dashDeleteRecord('${r.date}')">🗑 Delete</button>` : ''}
+        ${currentRole === 'superadmin' ? `<button class="dash-row-del" onclick="dashDeleteRecord('${r.date}')">🗑 Delete</button>` : ''}
       </td>
     </tr>`).join('');
 }
