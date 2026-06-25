@@ -754,6 +754,7 @@ tr.dash-row-alt td { background: #f7fdf9; }
       <div class="dash-card">
         <div class="dash-card-label">Total Volume Processed</div>
         <div class="dash-card-value" id="dcTotalVol">—</div>
+        <div class="dash-card-sub" id="dcTotalVolMT"></div>
       </div>
     </div>
 
@@ -1355,7 +1356,7 @@ function confirmAddContractor() {
   if (!name) { showToast('⚠ Enter a contractor name.', true); return; }
   if (ATT_VENDORS.includes(name)) { showToast('⚠ Already in list.', true); return; }
   ATT_VENDORS.push(name);
-  attState[name] = { workers: 0, cost: 0 };
+  attState[name] = { workers: 0, cost: 0, designations: {} };
   cancelAddContractor();
   renderAtt();
 }
@@ -1480,8 +1481,21 @@ function renderAtt() {
   } else {
     document.getElementById('attTbody').innerHTML = ATT_VENDORS.map(v => {
       const s = attState[v], vk = v.replace(/'/g, "\\'");
+      const desig = s.designations || {};
+      const desigKeys = Object.keys(desig);
+      const desigRows = desigKeys.length > 0
+        ? desigKeys.map(d => `<tr class="att-desig-row" style="display:none;background:#f4faf6">
+            <td style="padding:3px 8px 3px 28px;font-size:12px;color:#4a7060">↳ ${d}</td>
+            <td class="r" style="font-size:12px;color:#4a7060;padding:3px 8px">${desig[d].workers}</td>
+            <td class="r" style="font-size:12px;color:#4a7060;padding:3px 8px">₹${r2(desig[d].totalCost).toLocaleString('en-IN')}</td>
+          </tr>`).join('')
+        : '';
+      const expandBtn = desigKeys.length > 0
+        ? `<button onclick="toggleDesig(this)" title="Show designation breakdown"
+            style="border:none;background:none;cursor:pointer;color:#1e6b45;font-size:11px;padding:0 4px;vertical-align:middle">▶</button>`
+        : '';
       return `<tr>
-        <td>${v} <button onclick="removeContractor('${vk}')" title="Remove row"
+        <td>${expandBtn}${v} <button onclick="removeContractor('${vk}')" title="Remove row"
           style="border:none;background:none;cursor:pointer;color:#b04040;font-size:13px;padding:0 4px">×</button></td>
         <td class="r">
           <input type="number" min="0" step="1" value="${s.workers}" style="width:80px"
@@ -1491,10 +1505,23 @@ function renderAtt() {
           <input type="number" min="0" step="0.01" value="${s.cost}" style="width:130px"
             onchange="attState['${vk}'].cost=parseFloat(this.value)||0;recalc();">
         </td>
-      </tr>`;
+      </tr>${desigRows}`;
     }).join('');
   }
   recalc();
+}
+
+function toggleDesig(btn) {
+  const row = btn.closest('tr');
+  let next = row.nextElementSibling;
+  let visible = false;
+  while (next && next.classList.contains('att-desig-row')) {
+    const show = next.style.display === 'none';
+    next.style.display = show ? '' : 'none';
+    visible = show;
+    next = next.nextElementSibling;
+  }
+  btn.textContent = visible ? '▼' : '▶';
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -1753,7 +1780,7 @@ async function onCSVUpload(e) {
     ATT_VENDORS = Object.keys(result.byContractor).sort();
     ATT_VENDORS.forEach(v => {
       const data = result.byContractor[v];
-      attState[v] = { workers: data.workers, cost: r2(data.totalCost) };
+      attState[v] = { workers: data.workers, cost: r2(data.totalCost), designations: data.designations || {} };
     });
     _freshCSVLoaded = true;
 
@@ -1781,7 +1808,7 @@ async function tryReprocessCSV() {
     ATT_VENDORS = Object.keys(result.byContractor).sort();
     ATT_VENDORS.forEach(v => {
       const data = result.byContractor[v];
-      attState[v] = { workers: data.workers, cost: r2(data.totalCost) };
+      attState[v] = { workers: data.workers, cost: r2(data.totalCost), designations: data.designations || {} };
     });
     _freshCSVLoaded = true;
     updateCSVMeta(result);
@@ -1919,7 +1946,7 @@ function applyRecord(record) {
       if (!ATT_VENDORS.includes(v)) {
         ATT_VENDORS.push(v);
         const a = record.attendance.find(x => x.contractor_name === v);
-        attState[v] = { workers: a?.workers || 0, cost: parseFloat(a?.cost) || 0 };
+        attState[v] = { workers: a?.workers || 0, cost: parseFloat(a?.cost) || 0, designations: {} };
       }
     });
   } else {
@@ -1927,7 +1954,7 @@ function applyRecord(record) {
     ATT_VENDORS = (record.attendance || []).map(a => a.contractor_name);
     ATT_VENDORS.forEach(v => {
       const a = (record.attendance || []).find(x => x.contractor_name === v);
-      attState[v] = { workers: a ? (a.workers || 0) : 0, cost: a ? parseFloat(a.cost) || 0 : 0 };
+      attState[v] = { workers: a ? (a.workers || 0) : 0, cost: a ? parseFloat(a.cost) || 0 : 0, designations: {} };
     });
   }
 
@@ -2870,9 +2897,9 @@ function _renderDashCards(data) {
   document.getElementById('dcWorstDate').textContent = worst ? fmtD(worst.date) : '';
   document.getElementById('dcDaysCount').textContent = String(recs.length);
   document.getElementById('dcTotalAtt').textContent  = fcShort(totalAttSum);
-  document.getElementById('dcTotalVol').textContent  = totalQtySum >= 1e5
-    ? (totalQtySum / 1e5).toFixed(2) + ' L kg'
-    : totalQtySum.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' kg';
+  const mtVal = totalQtySum / 1000;
+  document.getElementById('dcTotalVol').textContent  = mtVal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' MT';
+  document.getElementById('dcTotalVolMT').textContent = totalQtySum.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) + ' kg';
 }
 
 function _renderDashTrend(data) {

@@ -29,10 +29,11 @@ function processCSV(text, filterDate) {
 
   const headers = rows[headerIdx].map(h => (h || '').trim().toLowerCase());
   const col = {
-    contractor: headers.findIndex(h => h.includes('contractor name')),
+    contractor:  headers.findIndex(h => h.includes('contractor name')),
     workStation: headers.findIndex(h => h.includes('work station')),
-    date:       headers.findIndex(h => h.includes('attendance date')),
-    dayCount:   headers.findIndex(h => h.includes('day count')),
+    date:        headers.findIndex(h => h.includes('attendance date')),
+    dayCount:    headers.findIndex(h => h.includes('day count')),
+    designation: headers.findIndex(h => h.includes('designation')),
   };
 
   if (col.contractor === -1) throw new Error('CSV missing "Contractor Name" column');
@@ -89,18 +90,28 @@ function processCSV(text, filterDate) {
     ? dataRows.filter(r => (r[col.date] || '').trim() === activeCSVDate)
     : dataRows;
 
-  // Group by contractor — no hardcoded map, accept everything
+  // Group by contractor (and designation within each contractor)
   const byContractor = {};
   filtered.forEach(r => {
-    const contractor = (r[col.contractor] || '').trim();
+    const contractor  = (r[col.contractor] || '').trim();
     if (!contractor) return;
 
-    const wage     = col.workStation !== -1 ? (parseFloat(r[col.workStation]) || 0) : 0;
-    const dayCount = parseFloat(r[col.dayCount]) || 0;
-    const cost     = wage * dayCount;
+    const wage        = col.workStation !== -1 ? (parseFloat(r[col.workStation]) || 0) : 0;
+    const dayCount    = parseFloat(r[col.dayCount]) || 0;
+    const cost        = wage * dayCount;
+    const designation = col.designation !== -1 ? (r[col.designation] || '').trim() : '';
 
-    if (!byContractor[contractor]) byContractor[contractor] = { workers: 0, totalCost: 0 };
-    if (dayCount > 0) byContractor[contractor].workers++;
+    if (!byContractor[contractor]) byContractor[contractor] = { workers: 0, totalCost: 0, designations: {} };
+    if (dayCount > 0) {
+      byContractor[contractor].workers++;
+      if (designation) {
+        if (!byContractor[contractor].designations[designation])
+          byContractor[contractor].designations[designation] = { workers: 0, totalCost: 0 };
+        byContractor[contractor].designations[designation].workers++;
+        byContractor[contractor].designations[designation].totalCost =
+          Math.round((byContractor[contractor].designations[designation].totalCost + cost) * 100) / 100;
+      }
+    }
     byContractor[contractor].totalCost = Math.round((byContractor[contractor].totalCost + cost) * 100) / 100;
   });
 
