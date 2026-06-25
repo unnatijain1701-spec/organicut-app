@@ -1369,8 +1369,21 @@ async function loadCustomSKUs() {
 function _savedContractorKey() {
   return 'savedContractors_' + (currentPlantId || 'all');
 }
+const _DEFAULT_CONTRACTORS = [
+  'Krish Enterprises',
+  'Sai Enterprises',
+  'RS',
+  'SATENDRA SINGH Bhadoriya',
+  'Bhadawar Service Corporation',
+];
 function getSavedContractors() {
-  try { return JSON.parse(localStorage.getItem(_savedContractorKey()) || '[]'); } catch { return []; }
+  try {
+    const stored = localStorage.getItem(_savedContractorKey());
+    if (stored) return JSON.parse(stored);
+    // First visit — seed defaults and save them
+    setSavedContractors(_DEFAULT_CONTRACTORS);
+    return [..._DEFAULT_CONTRACTORS];
+  } catch { return [..._DEFAULT_CONTRACTORS]; }
 }
 function setSavedContractors(list) {
   localStorage.setItem(_savedContractorKey(), JSON.stringify(list));
