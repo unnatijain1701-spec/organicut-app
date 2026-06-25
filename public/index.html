@@ -487,8 +487,8 @@ td input[type="number"]:hover { border-color: #7dbf99; }
 .dash-close:hover { background: rgba(255,255,255,.18); color: #fff; }
 .dash-body { padding: 24px; max-width: 1320px; width: 100%; }
 .dash-cards {
-  display: grid; grid-template-columns: repeat(6, 1fr);
-  gap: 8px; margin-bottom: 16px;
+  display: grid; grid-template-columns: repeat(5, 1fr);
+  gap: 12px; margin: 20px 24px 16px;
 }
 .dash-card {
   background: var(--surface); border: 1px solid var(--border);
@@ -718,7 +718,7 @@ tr.dash-row-alt td { background: #f7fdf9; }
   <div class="dash-body">
 
     <!-- Date range filter -->
-    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:16px 20px 0;background:#fff;border-bottom:1px solid var(--border);margin-bottom:0">
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:16px 20px;background:#fff;border-bottom:1px solid var(--border);margin-bottom:0">
       <span style="font-size:12px;font-weight:700;color:var(--muted)">DATE RANGE</span>
       <input type="date" id="dashFromDate" onchange="applyDashFilter()" style="border:1px solid var(--border);border-radius:6px;padding:5px 9px;font-size:13px;color:var(--text)">
       <span style="font-size:13px;color:var(--muted)">to</span>
@@ -727,10 +727,20 @@ tr.dash-row-alt td { background: #f7fdf9; }
       <span id="dashDateRangeLabel" style="font-size:12px;color:var(--primary);font-weight:600;margin-left:4px"></span>
     </div>
 
-    <!-- 6 summary cards -->
+    <!-- 5 summary cards -->
     <div class="dash-cards">
       <div class="dash-card">
-        <div class="dash-card-label">Avg MPK (Selected Period)</div>
+        <div class="dash-card-label">Total Cost</div>
+        <div class="dash-card-value" id="dcTotalAtt">—</div>
+        <div class="dash-card-sub" id="dcDaysCount" style="margin-top:4px"></div>
+      </div>
+      <div class="dash-card">
+        <div class="dash-card-label">Total Tonnage</div>
+        <div class="dash-card-value" id="dcTotalVol">—</div>
+        <div class="dash-card-sub" id="dcTotalVolMT"></div>
+      </div>
+      <div class="dash-card">
+        <div class="dash-card-label">Avg MPK</div>
         <div class="dash-card-value green" id="dcAvgMPK">—</div>
       </div>
       <div class="dash-card">
@@ -742,19 +752,6 @@ tr.dash-row-alt td { background: #f7fdf9; }
         <div class="dash-card-label">Worst Day MPK</div>
         <div class="dash-card-value" id="dcWorstMPK">—</div>
         <div class="dash-card-sub" id="dcWorstDate"></div>
-      </div>
-      <div class="dash-card">
-        <div class="dash-card-label">Days Recorded</div>
-        <div class="dash-card-value" id="dcDaysCount">—</div>
-      </div>
-      <div class="dash-card">
-        <div class="dash-card-label">Total Cost</div>
-        <div class="dash-card-value" id="dcTotalAtt">—</div>
-      </div>
-      <div class="dash-card">
-        <div class="dash-card-label">Total Volume Processed</div>
-        <div class="dash-card-value" id="dcTotalVol">—</div>
-        <div class="dash-card-sub" id="dcTotalVolMT"></div>
       </div>
     </div>
 
@@ -3100,7 +3097,7 @@ function _renderDashCards(data) {
   document.getElementById('dcBestDate').textContent  = best  ? fmtD(best.date)  : '';
   document.getElementById('dcWorstMPK').textContent  = worst ? '₹ ' + parseFloat(worst.mpk).toFixed(2) : '—';
   document.getElementById('dcWorstDate').textContent = worst ? fmtD(worst.date) : '';
-  document.getElementById('dcDaysCount').textContent = String(recs.length);
+  document.getElementById('dcDaysCount').textContent = recs.length + ' days recorded';
   document.getElementById('dcTotalAtt').textContent  = fcShort(totalCostSum);
   const mtVal = totalQtySum / 1000;
   document.getElementById('dcTotalVol').textContent  = mtVal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' MT';
