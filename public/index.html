@@ -1484,18 +1484,14 @@ function renderAtt() {
       const desig = s.designations || {};
       const desigKeys = Object.keys(desig);
       const desigRows = desigKeys.length > 0
-        ? desigKeys.map(d => `<tr class="att-desig-row" style="display:none;background:#f4faf6">
-            <td style="padding:3px 8px 3px 28px;font-size:12px;color:#4a7060">↳ ${d}</td>
+        ? desigKeys.map(d => `<tr class="att-desig-row" style="background:#f4faf6">
+            <td style="padding:3px 8px 3px 24px;font-size:12px;color:#4a7060">↳ ${d}</td>
             <td class="r" style="font-size:12px;color:#4a7060;padding:3px 8px">${desig[d].workers}</td>
             <td class="r" style="font-size:12px;color:#4a7060;padding:3px 8px">₹${r2(desig[d].totalCost).toLocaleString('en-IN')}</td>
           </tr>`).join('')
         : '';
-      const expandBtn = desigKeys.length > 0
-        ? `<button onclick="toggleDesig(this)" title="Show designation breakdown"
-            style="border:none;background:none;cursor:pointer;color:#1e6b45;font-size:11px;padding:0 4px;vertical-align:middle">▶</button>`
-        : '';
       return `<tr>
-        <td>${expandBtn}${v} <button onclick="removeContractor('${vk}')" title="Remove row"
+        <td>${v} <button onclick="removeContractor('${vk}')" title="Remove row"
           style="border:none;background:none;cursor:pointer;color:#b04040;font-size:13px;padding:0 4px">×</button></td>
         <td class="r">
           <input type="number" min="0" step="1" value="${s.workers}" style="width:80px"
@@ -1511,18 +1507,6 @@ function renderAtt() {
   recalc();
 }
 
-function toggleDesig(btn) {
-  const row = btn.closest('tr');
-  let next = row.nextElementSibling;
-  let visible = false;
-  while (next && next.classList.contains('att-desig-row')) {
-    const show = next.style.display === 'none';
-    next.style.display = show ? '' : 'none';
-    visible = show;
-    next = next.nextElementSibling;
-  }
-  btn.textContent = visible ? '▼' : '▶';
-}
 
 /* ═══════════════════════════════════════════════════════
    RENDER — KG TABS
