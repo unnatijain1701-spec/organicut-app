@@ -487,23 +487,23 @@ td input[type="number"]:hover { border-color: #7dbf99; }
 .dash-close:hover { background: rgba(255,255,255,.18); color: #fff; }
 .dash-body { padding: 24px; max-width: 1320px; width: 100%; }
 .dash-cards {
-  display: grid; grid-template-columns: repeat(4, 1fr);
-  gap: 16px; margin-bottom: 24px;
+  display: grid; grid-template-columns: repeat(6, 1fr);
+  gap: 8px; margin-bottom: 16px;
 }
 .dash-card {
   background: var(--surface); border: 1px solid var(--border);
-  border-radius: 12px; padding: 20px 22px;
+  border-radius: 10px; padding: 12px 14px;
   box-shadow: 0 1px 4px rgba(30,107,69,.07);
 }
 .dash-card-label {
-  font-size: 10px; font-weight: 700; text-transform: uppercase;
-  letter-spacing: .7px; color: var(--muted); margin-bottom: 10px;
+  font-size: 9px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .6px; color: var(--muted); margin-bottom: 6px;
 }
 .dash-card-value {
-  font-size: 26px; font-weight: 800; color: var(--text); letter-spacing: -.4px;
+  font-size: 18px; font-weight: 800; color: var(--text); letter-spacing: -.3px;
 }
 .dash-card-value.green { color: var(--primary); }
-.dash-card-sub { font-size: 11px; color: var(--muted); margin-top: 5px; }
+.dash-card-sub { font-size: 10px; color: var(--muted); margin-top: 3px; }
 .dash-section {
   background: var(--surface); border: 1px solid var(--border);
   border-radius: 12px; padding: 20px 22px; margin-bottom: 20px;
@@ -748,7 +748,7 @@ tr.dash-row-alt td { background: #f7fdf9; }
         <div class="dash-card-value" id="dcDaysCount">—</div>
       </div>
       <div class="dash-card">
-        <div class="dash-card-label">Total Manpower Cost</div>
+        <div class="dash-card-label">Total Cost</div>
         <div class="dash-card-value" id="dcTotalAtt">—</div>
       </div>
       <div class="dash-card">
@@ -764,20 +764,11 @@ tr.dash-row-alt td { background: #f7fdf9; }
         <span class="dash-section-title">📈 Month-End Prediction</span>
         <span id="dashPredLabel" style="font-size:11px;color:var(--muted)"></span>
       </div>
-      <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-bottom:16px">
-        <div style="border:1.5px solid #bbf7d0;border-radius:10px;padding:12px 14px;background:#fff">
-          <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin-bottom:6px">Actual Total Cost</div>
-          <div style="font-size:18px;font-weight:800;color:var(--text);letter-spacing:-.3px" id="dpActualCost">—</div>
-          <div style="font-size:10px;color:var(--muted);margin-top:3px" id="dpActualDays"></div>
-        </div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px">
         <div style="border:1.5px dashed #6ee7b7;border-radius:10px;padding:12px 14px;background:#fff">
           <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin-bottom:6px">Predicted Total Cost</div>
           <div style="font-size:18px;font-weight:800;color:var(--primary);letter-spacing:-.3px" id="dpPredCost">—</div>
           <div style="font-size:10px;color:var(--muted);margin-top:3px" id="dpPredBasis"></div>
-        </div>
-        <div style="border:1.5px solid #bbf7d0;border-radius:10px;padding:12px 14px;background:#fff">
-          <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin-bottom:6px">Actual Volume</div>
-          <div style="font-size:18px;font-weight:800;color:var(--text);letter-spacing:-.3px" id="dpActualVol">—</div>
         </div>
         <div style="border:1.5px dashed #6ee7b7;border-radius:10px;padding:12px 14px;background:#fff">
           <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin-bottom:6px">Predicted Volume</div>
@@ -3110,7 +3101,7 @@ function _renderDashCards(data) {
   document.getElementById('dcWorstMPK').textContent  = worst ? '₹ ' + parseFloat(worst.mpk).toFixed(2) : '—';
   document.getElementById('dcWorstDate').textContent = worst ? fmtD(worst.date) : '';
   document.getElementById('dcDaysCount').textContent = String(recs.length);
-  document.getElementById('dcTotalAtt').textContent  = fcShort(totalAttSum);
+  document.getElementById('dcTotalAtt').textContent  = fcShort(totalCostSum);
   const mtVal = totalQtySum / 1000;
   document.getElementById('dcTotalVol').textContent  = mtVal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' MT';
   document.getElementById('dcTotalVolMT').textContent = totalQtySum.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) + ' kg';
@@ -3152,11 +3143,8 @@ function _renderDashPrediction(recs) {
 
   const pct = Math.round((daysElapsed / daysInMonth) * 100);
 
-  document.getElementById('dpActualCost').textContent  = fcShort(actualCost);
-  document.getElementById('dpActualDays').textContent  = `${daysRecorded} days recorded`;
   document.getElementById('dpPredCost').textContent    = fcShort(predCost);
   document.getElementById('dpPredBasis').textContent   = `avg ₹${Math.round(avgDailyCost).toLocaleString('en-IN')}/day × ${daysRemaining} days left`;
-  document.getElementById('dpActualVol').textContent   = (actualQty/1000).toFixed(2) + ' MT';
   document.getElementById('dpPredVol').textContent     = (predQty/1000).toFixed(2) + ' MT';
   document.getElementById('dpActualMPK').textContent   = actualMPK ? '₹ ' + actualMPK.toFixed(2) : '—';
   document.getElementById('dpPredMPK').textContent     = predMPK   ? '₹ ' + predMPK.toFixed(2)   : '—';
