@@ -1436,12 +1436,11 @@ function removeFromSavedList(name) {
 function quickAddContractor(name) {
   if (!ATT_VENDORS.includes(name)) {
     ATT_VENDORS.push(name);
+    attState[name] = { workers: 0, cost: 0, designations: {} };
     const el = document.getElementById('savedContractorList');
     if (el) el.innerHTML = _renderSavedList();
-    attState[name] = { workers: 0, cost: 0, designations: {} };
+    renderAtt();
   }
-  closeAddContractorPanel();
-  renderAtt();
 }
 
 function closeAddContractorPanel() {
