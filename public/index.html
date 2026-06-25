@@ -2711,7 +2711,7 @@ async function loadUsers() {
       const roleOpts = currentRole === 'superadmin'
         ? [['user','Operator'],['admin','Admin'],['superadmin','Superadmin']]
         : [['user','Operator'],['admin','Admin']];
-      const roleSelect = isYou ? '' : `<select onchange="changeUserRole(${u.id},'${safeName}',this.value)"
+      const roleSelect = isYou ? '' : `<select onchange="changeUserRole(${u.id},'${safeName}',this.value,'${u.role}')"
         style="font-size:11px;padding:2px 4px;border-radius:6px;border:1px solid var(--border);cursor:pointer;margin-right:2px">
         ${roleOpts.map(([v,l]) => `<option value="${v}"${u.role===v?' selected':''}>${l}</option>`).join('')}
       </select>`;
@@ -2774,11 +2774,57 @@ async function deleteUser(id, username) {
   }
 }
 
-async function changeUserRole(id, username, newRole) {
+async function changeUserRole(id, username, newRole, currentUserRole) {
   const label = newRole === 'superadmin' ? 'Superadmin' : newRole === 'admin' ? 'Admin' : 'Operator';
+
+  // If demoting from superadmin to a plant role, we must collect a plant
+  const needsPlant = (currentUserRole === 'superadmin' || !currentUserRole) && newRole !== 'superadmin';
+  let plantId = null;
+
+  if (needsPlant) {
+    // Fetch plant list and ask user to pick
+    let plants;
+    try { plants = await api('GET', '/api/auth/plants'); } catch { plants = []; }
+    if (!plants.length) { showToast('⚠ Could not load plant list', true); loadUsers(); return; }
+
+    const opts = plants.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+    const modalHtml = `<div id="rolePlantModal" style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center">
+      <div style="background:#fff;border-radius:14px;padding:28px 24px;min-width:300px;box-shadow:0 8px 32px rgba(0,0,0,.18)">
+        <div style="font-weight:700;font-size:15px;margin-bottom:6px">Change role for "${username}"</div>
+        <div style="font-size:13px;color:#4a7060;margin-bottom:16px">Select a plant to assign as <strong>${label}</strong></div>
+        <select id="rolePlantSelect" style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--border);font-size:13px;margin-bottom:18px">
+          <option value="">— Select plant —</option>${opts}
+        </select>
+        <div style="display:flex;gap:8px;justify-content:flex-end">
+          <button onclick="document.getElementById('rolePlantModal').remove();loadUsers();"
+            style="padding:7px 16px;border-radius:8px;border:1px solid var(--border);background:#fff;cursor:pointer;font-size:13px">Cancel</button>
+          <button onclick="confirmRoleChange(${id},'${username.replace(/'/g,"\\'")}','${newRole}')"
+            style="padding:7px 16px;border-radius:8px;border:none;background:var(--primary);color:#fff;cursor:pointer;font-size:13px;font-weight:600">Confirm</button>
+        </div>
+      </div>
+    </div>`;
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+    return;
+  }
+
   if (!confirm(`Change "${username}" role to ${label}?`)) { loadUsers(); return; }
   try {
     await api('PATCH', '/api/auth/users/' + id, { role: newRole });
+    showToast(`✓ "${username}" is now ${label}`, false);
+    loadUsers();
+  } catch (e) {
+    showToast('⚠ ' + e.message, true);
+    loadUsers();
+  }
+}
+
+async function confirmRoleChange(id, username, newRole) {
+  const plantId = document.getElementById('rolePlantSelect').value;
+  if (!plantId) { showToast('⚠ Please select a plant', true); return; }
+  document.getElementById('rolePlantModal').remove();
+  const label = newRole === 'admin' ? 'Admin' : 'Operator';
+  try {
+    await api('PATCH', '/api/auth/users/' + id, { role: newRole, plantId: parseInt(plantId, 10) });
     showToast(`✓ "${username}" is now ${label}`, false);
     loadUsers();
   } catch (e) {

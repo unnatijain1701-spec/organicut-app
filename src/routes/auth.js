@@ -182,20 +182,35 @@ router.patch('/users/:id', authenticateToken, async (req, res) => {
   if (isNaN(targetId)) return res.status(400).json({ error: 'Invalid user id' });
   if (targetId === req.user.id) return res.status(400).json({ error: 'You cannot change your own role' });
 
-  const { role } = req.body || {};
+  const { role, plantId } = req.body || {};
   let newRole;
   if (isSuperadmin && role === 'superadmin') newRole = 'superadmin';
   else if (role === 'admin') newRole = 'admin';
   else newRole = 'user';
 
+  // Determine new plant_id
+  let newPlantId;
+  if (newRole === 'superadmin') {
+    newPlantId = null;
+  } else if (plantId != null) {
+    const plantCheck = await db.query('SELECT id FROM plants WHERE id = $1', [parseInt(plantId, 10)]);
+    if (!plantCheck.rows.length) return res.status(400).json({ error: 'Invalid plant' });
+    newPlantId = parseInt(plantId, 10);
+  } else {
+    // No plantId provided — keep existing plant_id
+    const existing = await db.query('SELECT plant_id FROM users WHERE id = $1', [targetId]);
+    if (!existing.rows.length) return res.status(404).json({ error: 'User not found' });
+    newPlantId = existing.rows[0].plant_id;
+    // If demoting a superadmin (plant_id was NULL) without providing a plantId, reject
+    if (newRole !== 'superadmin' && newPlantId == null) {
+      return res.status(400).json({ error: 'A plant must be assigned when changing from Superadmin to a plant role' });
+    }
+  }
+
   try {
-    const whereClause = isAdmin ? 'WHERE id = $2 AND plant_id = $3' : 'WHERE id = $2';
-    const params = isAdmin
-      ? [newRole, targetId, req.user.plant_id]
-      : [newRole, targetId];
     const result = await db.query(
-      `UPDATE users SET role = $1 ${whereClause} RETURNING id, username, role`,
-      params
+      'UPDATE users SET role = $1, plant_id = $2 WHERE id = $3 RETURNING id, username, role, plant_id',
+      [newRole, newPlantId, targetId]
     );
     if (result.rowCount === 0) return res.status(404).json({ error: 'User not found' });
     res.json(result.rows[0]);
