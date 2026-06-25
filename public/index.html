@@ -758,6 +758,47 @@ tr.dash-row-alt td { background: #f7fdf9; }
       </div>
     </div>
 
+    <!-- Month prediction section -->
+    <div class="dash-section" id="dashPredSection" style="display:none;padding:20px 24px">
+      <div class="dash-section-head" style="margin-bottom:16px">
+        <span class="dash-section-title">📈 Month-End Prediction</span>
+        <span id="dashPredLabel" style="font-size:11px;color:var(--muted)"></span>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px">
+        <div class="dash-card" style="border:1.5px solid #bbf7d0">
+          <div class="dash-card-label">Actual Cost So Far</div>
+          <div class="dash-card-value" id="dpActualCost">—</div>
+          <div class="dash-card-sub" id="dpActualDays"></div>
+        </div>
+        <div class="dash-card" style="border:1.5px dashed #6ee7b7">
+          <div class="dash-card-label">Predicted Month-End Cost</div>
+          <div class="dash-card-value green" id="dpPredCost">—</div>
+          <div class="dash-card-sub" id="dpPredBasis"></div>
+        </div>
+        <div class="dash-card" style="border:1.5px solid #bbf7d0">
+          <div class="dash-card-label">Actual Volume So Far</div>
+          <div class="dash-card-value" id="dpActualVol">—</div>
+        </div>
+        <div class="dash-card" style="border:1.5px dashed #6ee7b7">
+          <div class="dash-card-label">Predicted Month-End Volume</div>
+          <div class="dash-card-value green" id="dpPredVol">—</div>
+        </div>
+        <div class="dash-card" style="border:1.5px solid #bbf7d0">
+          <div class="dash-card-label">Actual MPK So Far</div>
+          <div class="dash-card-value" id="dpActualMPK">—</div>
+        </div>
+        <div class="dash-card" style="border:1.5px dashed #6ee7b7">
+          <div class="dash-card-label">Predicted Month-End MPK</div>
+          <div class="dash-card-value green" id="dpPredMPK">—</div>
+        </div>
+      </div>
+      <!-- Progress bar -->
+      <div style="background:#e8f4ed;border-radius:8px;height:10px;overflow:hidden;margin-bottom:6px">
+        <div id="dpProgressBar" style="height:100%;background:var(--primary);border-radius:8px;transition:width .4s"></div>
+      </div>
+      <div id="dpProgressLabel" style="font-size:11px;color:var(--muted);text-align:center"></div>
+    </div>
+
     <!-- Line chart section -->
     <div class="dash-section">
       <div class="dash-section-head">
@@ -904,13 +945,7 @@ tr.dash-row-alt td { background: #f7fdf9; }
         <button class="btn btn-card-upload" onclick="document.getElementById('csvInput').click()" title="Upload biometric CSV">📂 Upload CSV</button>
         <input type="file" id="csvInput" accept=".csv,.CSV" style="display:none" onchange="onCSVUpload(event)">
         <button class="btn btn-card-outline" id="desigToggleBtn" onclick="toggleDesigView()" title="Show/hide designation breakdown" style="display:none">Show Breakdown</button>
-        <button class="btn btn-card-outline" onclick="showAddContractorForm()" id="addContractorBtn">+ Add manually</button>
-        <span id="addContractorForm" style="display:none;gap:6px;align-items:center">
-          <input id="newContractorName" type="text" placeholder="Contractor name" class="input"
-            style="width:180px" onkeydown="if(event.key==='Enter')confirmAddContractor();if(event.key==='Escape')cancelAddContractor();">
-          <button class="btn btn-save-rec" onclick="confirmAddContractor()">Add</button>
-          <button class="btn btn-card-outline" onclick="cancelAddContractor()">Cancel</button>
-        </span>
+        <button class="btn btn-card-outline" onclick="showAddContractorPanel()" id="addContractorBtn">+ Add manually</button>
       </div>
     </div>
     <div class="table-wrap">
@@ -1341,26 +1376,117 @@ async function loadCustomSKUs() {
 
 /* ── Manual contractor add / remove ── */
 
-function showAddContractorForm() {
-  const form = document.getElementById('addContractorForm');
-  form.style.display = 'inline-flex';
-  document.getElementById('addContractorBtn').style.display = 'none';
+/* ── Saved contractor list (per plant, stored in localStorage) ── */
+
+function _savedContractorKey() {
+  return 'savedContractors_' + (currentPlantId || 'all');
+}
+function getSavedContractors() {
+  try { return JSON.parse(localStorage.getItem(_savedContractorKey()) || '[]'); } catch { return []; }
+}
+function setSavedContractors(list) {
+  localStorage.setItem(_savedContractorKey(), JSON.stringify(list));
+}
+
+function showAddContractorPanel() {
+  if (document.getElementById('addContractorModal')) return;
+  const saved = getSavedContractors();
+  const unaddedSaved = saved.filter(n => !ATT_VENDORS.includes(n));
+  const chips = unaddedSaved.map(n => {
+    const safe = n.replace(/'/g, "\\'");
+    return `<button onclick="quickAddContractor('${safe}')"
+      style="padding:5px 12px;border-radius:20px;border:1px solid #1e6b45;background:#e8f4ed;color:#1e6b45;cursor:pointer;font-size:12px;font-weight:600">${n}</button>`;
+  }).join('');
+  const noSaved = unaddedSaved.length === 0
+    ? `<div style="font-size:12px;color:#8a9a90;margin-bottom:8px">${saved.length === 0 ? 'No saved contractors yet. Add one below.' : 'All saved contractors already in list.'}</div>`
+    : '';
+
+  const html = `<div id="addContractorModal" style="position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:9999;display:flex;align-items:center;justify-content:center">
+    <div style="background:#fff;border-radius:14px;padding:24px;min-width:320px;max-width:480px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,.18)">
+      <div style="font-weight:700;font-size:14px;margin-bottom:4px">Add Contractor</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:14px">Select from saved list or type a new name</div>
+      ${noSaved}
+      ${chips.length ? `<div style="display:flex;flex-wrap:wrap;gap:7px;margin-bottom:16px">${chips}</div>` : ''}
+      <div style="font-size:11px;font-weight:600;color:#4a7060;margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">New contractor</div>
+      <div style="display:flex;gap:6px;margin-bottom:16px">
+        <input id="newContractorName" type="text" placeholder="Contractor name" class="input" style="flex:1"
+          onkeydown="if(event.key==='Enter')confirmAddContractor();if(event.key==='Escape')closeAddContractorPanel();">
+        <button class="btn btn-save-rec" onclick="confirmAddContractor()">Add</button>
+      </div>
+      <div style="border-top:1px solid var(--border);padding-top:14px;margin-top:2px">
+        <div style="font-size:11px;font-weight:600;color:#4a7060;margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">Manage saved list</div>
+        <div id="savedContractorList" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">${_renderSavedList(saved)}</div>
+        <div style="display:flex;gap:6px">
+          <input id="newSavedContractor" type="text" placeholder="Add to saved list" class="input" style="flex:1"
+            onkeydown="if(event.key==='Enter')addToSavedList();">
+          <button class="btn btn-card-outline" onclick="addToSavedList()">Save</button>
+        </div>
+      </div>
+      <div style="display:flex;justify-content:flex-end;margin-top:14px">
+        <button class="btn btn-card-outline" onclick="closeAddContractorPanel()">Close</button>
+      </div>
+    </div>
+  </div>`;
+  document.body.insertAdjacentHTML('beforeend', html);
   document.getElementById('newContractorName').focus();
 }
-function cancelAddContractor() {
-  document.getElementById('addContractorForm').style.display = 'none';
-  document.getElementById('addContractorBtn').style.display = '';
-  document.getElementById('newContractorName').value = '';
+
+function _renderSavedList(saved) {
+  if (!saved.length) return '<span style="font-size:12px;color:#8a9a90">None yet</span>';
+  return saved.map(n => {
+    const safe = n.replace(/'/g, "\\'");
+    return `<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:16px;border:1px solid var(--border);font-size:12px;background:#f7fdf9">
+      ${n}
+      <button onclick="removeFromSavedList('${safe}')" title="Remove"
+        style="border:none;background:none;cursor:pointer;color:#b04040;font-size:13px;padding:0;line-height:1">×</button>
+    </span>`;
+  }).join('');
 }
-function confirmAddContractor() {
-  const name = document.getElementById('newContractorName').value.trim();
-  if (!name) { showToast('⚠ Enter a contractor name.', true); return; }
-  if (ATT_VENDORS.includes(name)) { showToast('⚠ Already in list.', true); return; }
-  ATT_VENDORS.push(name);
-  attState[name] = { workers: 0, cost: 0, designations: {} };
-  cancelAddContractor();
+
+function addToSavedList() {
+  const inp = document.getElementById('newSavedContractor');
+  const name = inp.value.trim();
+  if (!name) return;
+  const saved = getSavedContractors();
+  if (!saved.includes(name)) { saved.push(name); setSavedContractors(saved); }
+  inp.value = '';
+  document.getElementById('savedContractorList').innerHTML = _renderSavedList(saved);
+}
+
+function removeFromSavedList(name) {
+  const saved = getSavedContractors().filter(n => n !== name);
+  setSavedContractors(saved);
+  document.getElementById('savedContractorList').innerHTML = _renderSavedList(saved);
+}
+
+function quickAddContractor(name) {
+  if (!ATT_VENDORS.includes(name)) {
+    ATT_VENDORS.push(name);
+    attState[name] = { workers: 0, cost: 0, designations: {} };
+  }
+  closeAddContractorPanel();
   renderAtt();
 }
+
+function closeAddContractorPanel() {
+  document.getElementById('addContractorModal')?.remove();
+}
+
+function confirmAddContractor() {
+  const inp = document.getElementById('newContractorName');
+  if (!inp) return;
+  const name = inp.value.trim();
+  if (!name) { showToast('⚠ Enter a contractor name.', true); return; }
+  if (ATT_VENDORS.includes(name)) { showToast('⚠ Already in list.', true); closeAddContractorPanel(); return; }
+  // Auto-save to saved list
+  const saved = getSavedContractors();
+  if (!saved.includes(name)) { saved.push(name); setSavedContractors(saved); }
+  ATT_VENDORS.push(name);
+  attState[name] = { workers: 0, cost: 0, designations: {} };
+  closeAddContractorPanel();
+  renderAtt();
+}
+
 function removeContractor(v) {
   ATT_VENDORS = ATT_VENDORS.filter(x => x !== v);
   renderAtt();
@@ -1463,6 +1589,9 @@ function recalc() {
   document.getElementById('sumTotal').textContent = fcShort(total);
   document.getElementById('sumMPK').textContent   = mpk != null ? fn(mpk) : '—';
   document.getElementById('attTotal').textContent = fc(att);
+  const totalW = ATT_VENDORS.reduce((s, v) => s + (parseInt(attState[v]?.workers) || 0), 0);
+  const wEl = document.querySelector('#attTfoot .ft td:nth-child(' + (2 + (_desigViewOn ? _getAllDesigCols().length : 0)) + ')');
+  if (wEl) wEl.textContent = totalW > 0 ? totalW + ' workers' : '';
   KG_VENDORS.forEach(v => {
     const el = document.getElementById('kgTot_' + vid(v));
     if (el) el.textContent = fc(vendorKG(v));
@@ -1518,14 +1647,15 @@ function renderAtt() {
   // Rebuild tfoot
   const tfoot = document.getElementById('attTfoot');
   if (tfoot) {
+    const totalWorkers = ATT_VENDORS.reduce((s, v) => s + (parseInt(attState[v]?.workers) || 0), 0);
     const desigTotals = desigCols.map(d => {
       const total = ATT_VENDORS.reduce((s, v) => s + (attState[v]?.designations?.[d]?.workers || 0), 0);
       return `<td class="r" style="font-size:12px;color:#4a7060">${total || '—'}</td>`;
     }).join('');
     tfoot.innerHTML = `<tr class="ft">
-      <td>Total Production Attendance Cost</td>
+      <td>Total</td>
       ${desigTotals}
-      <td></td>
+      <td class="r">${totalWorkers > 0 ? totalWorkers + ' workers' : ''}</td>
       <td class="r" id="attTotal">₹ 0.00</td>
     </tr>`;
   }
@@ -2984,6 +3114,55 @@ function _renderDashCards(data) {
   const mtVal = totalQtySum / 1000;
   document.getElementById('dcTotalVol').textContent  = mtVal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' MT';
   document.getElementById('dcTotalVolMT').textContent = totalQtySum.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) + ' kg';
+
+  _renderDashPrediction(recs);
+}
+
+function _renderDashPrediction(recs) {
+  const predSection = document.getElementById('dashPredSection');
+  if (!predSection) return;
+
+  // Only show when the filter window is the current month
+  const now = new Date();
+  const curY = now.getFullYear(), curM = now.getMonth();
+  const fromOk = !_dashFromDate || _dashFromDate === `${curY}-${String(curM+1).padStart(2,'0')}-01`;
+  const daysInMonth = new Date(curY, curM + 1, 0).getDate();
+  const lastDay = `${curY}-${String(curM+1).padStart(2,'0')}-${String(daysInMonth).padStart(2,'0')}`;
+  const toOk = !_dashToDate || _dashToDate === lastDay;
+
+  if (!fromOk || !toOk || recs.length === 0) {
+    predSection.style.display = 'none';
+    return;
+  }
+  predSection.style.display = '';
+
+  const daysRecorded = recs.length;
+  const daysElapsed  = now.getDate(); // today's date = days elapsed in month
+  const daysRemaining = daysInMonth - daysElapsed;
+
+  const actualCost = recs.reduce((s, r) => s + parseFloat(r.total_cost || 0), 0);
+  const actualQty  = recs.reduce((s, r) => s + parseFloat(r.sale_qty  || 0), 0);
+  const avgDailyCost = actualCost / daysRecorded;
+  const avgDailyQty  = actualQty  / daysRecorded;
+
+  const predCost = actualCost + avgDailyCost * daysRemaining;
+  const predQty  = actualQty  + avgDailyQty  * daysRemaining;
+  const actualMPK = actualQty > 0 ? actualCost / actualQty : null;
+  const predMPK   = predQty   > 0 ? predCost   / predQty   : null;
+
+  const pct = Math.round((daysElapsed / daysInMonth) * 100);
+
+  document.getElementById('dpActualCost').textContent  = fcShort(actualCost);
+  document.getElementById('dpActualDays').textContent  = `${daysRecorded} days recorded`;
+  document.getElementById('dpPredCost').textContent    = fcShort(predCost);
+  document.getElementById('dpPredBasis').textContent   = `avg ₹${Math.round(avgDailyCost).toLocaleString('en-IN')}/day × ${daysRemaining} days left`;
+  document.getElementById('dpActualVol').textContent   = (actualQty/1000).toFixed(2) + ' MT';
+  document.getElementById('dpPredVol').textContent     = (predQty/1000).toFixed(2) + ' MT';
+  document.getElementById('dpActualMPK').textContent   = actualMPK ? '₹ ' + actualMPK.toFixed(2) : '—';
+  document.getElementById('dpPredMPK').textContent     = predMPK   ? '₹ ' + predMPK.toFixed(2)   : '—';
+  document.getElementById('dpProgressBar').style.width = pct + '%';
+  document.getElementById('dpProgressLabel').textContent = `${daysElapsed} of ${daysInMonth} days elapsed (${pct}%)  •  ${daysRemaining} days remaining`;
+  document.getElementById('dashPredLabel').textContent = `Based on ${daysRecorded}-day average`;
 }
 
 function _renderDashTrend(data) {
