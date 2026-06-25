@@ -764,32 +764,32 @@ tr.dash-row-alt td { background: #f7fdf9; }
         <span class="dash-section-title">📈 Month-End Prediction</span>
         <span id="dashPredLabel" style="font-size:11px;color:var(--muted)"></span>
       </div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px">
-        <div class="dash-card" style="border:1.5px solid #bbf7d0">
-          <div class="dash-card-label">Actual Cost So Far</div>
-          <div class="dash-card-value" id="dpActualCost">—</div>
-          <div class="dash-card-sub" id="dpActualDays"></div>
+      <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-bottom:16px">
+        <div style="border:1.5px solid #bbf7d0;border-radius:10px;padding:12px 14px;background:#fff">
+          <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin-bottom:6px">Actual Total Cost</div>
+          <div style="font-size:18px;font-weight:800;color:var(--text);letter-spacing:-.3px" id="dpActualCost">—</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:3px" id="dpActualDays"></div>
         </div>
-        <div class="dash-card" style="border:1.5px dashed #6ee7b7">
-          <div class="dash-card-label">Predicted Month-End Cost</div>
-          <div class="dash-card-value green" id="dpPredCost">—</div>
-          <div class="dash-card-sub" id="dpPredBasis"></div>
+        <div style="border:1.5px dashed #6ee7b7;border-radius:10px;padding:12px 14px;background:#fff">
+          <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin-bottom:6px">Predicted Total Cost</div>
+          <div style="font-size:18px;font-weight:800;color:var(--primary);letter-spacing:-.3px" id="dpPredCost">—</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:3px" id="dpPredBasis"></div>
         </div>
-        <div class="dash-card" style="border:1.5px solid #bbf7d0">
-          <div class="dash-card-label">Actual Volume So Far</div>
-          <div class="dash-card-value" id="dpActualVol">—</div>
+        <div style="border:1.5px solid #bbf7d0;border-radius:10px;padding:12px 14px;background:#fff">
+          <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin-bottom:6px">Actual Volume</div>
+          <div style="font-size:18px;font-weight:800;color:var(--text);letter-spacing:-.3px" id="dpActualVol">—</div>
         </div>
-        <div class="dash-card" style="border:1.5px dashed #6ee7b7">
-          <div class="dash-card-label">Predicted Month-End Volume</div>
-          <div class="dash-card-value green" id="dpPredVol">—</div>
+        <div style="border:1.5px dashed #6ee7b7;border-radius:10px;padding:12px 14px;background:#fff">
+          <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin-bottom:6px">Predicted Volume</div>
+          <div style="font-size:18px;font-weight:800;color:var(--primary);letter-spacing:-.3px" id="dpPredVol">—</div>
         </div>
-        <div class="dash-card" style="border:1.5px solid #bbf7d0">
-          <div class="dash-card-label">Actual MPK So Far</div>
-          <div class="dash-card-value" id="dpActualMPK">—</div>
+        <div style="border:1.5px solid #bbf7d0;border-radius:10px;padding:12px 14px;background:#fff">
+          <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin-bottom:6px">Actual MPK</div>
+          <div style="font-size:18px;font-weight:800;color:var(--text);letter-spacing:-.3px" id="dpActualMPK">—</div>
         </div>
-        <div class="dash-card" style="border:1.5px dashed #6ee7b7">
-          <div class="dash-card-label">Predicted Month-End MPK</div>
-          <div class="dash-card-value green" id="dpPredMPK">—</div>
+        <div style="border:1.5px dashed #6ee7b7;border-radius:10px;padding:12px 14px;background:#fff">
+          <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin-bottom:6px">Predicted MPK</div>
+          <div style="font-size:18px;font-weight:800;color:var(--primary);letter-spacing:-.3px" id="dpPredMPK">—</div>
         </div>
       </div>
       <!-- Progress bar -->
