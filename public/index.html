@@ -676,7 +676,6 @@ tr.dash-row-alt td { background: #f7fdf9; }
     <select class="users-input" id="newUserRole" style="cursor:pointer" onchange="onNewUserRoleChange(this.value)">
       <option value="user">Operator (can enter data)</option>
       <option value="admin">Admin (full access)</option>
-      <option value="superadmin">Super Admin (all plants)</option>
     </select>
     <select class="users-input" id="newUserPlant" style="cursor:pointer;display:none">
       <option value="">— Select Plant —</option>
@@ -845,6 +844,7 @@ tr.dash-row-alt td { background: #f7fdf9; }
     <div class="spacer"></div>
     <div class="tb-actions">
       <button class="btn btn-save-rec" onclick="saveRecord()">💾 Save</button>
+      <span id="lastSavedLabel" style="font-size:11px;color:rgba(255,255,255,.65);white-space:nowrap;display:none"></span>
       <button class="btn btn-outline" id="reloadBtn" onclick="reloadTodayData()" title="Pull latest saved data for this date">🔄</button>
       <div class="export-dd" id="exportDd">
         <button class="btn btn-success" onclick="toggleExportDd()">↓ Excel ▾</button>
@@ -987,6 +987,7 @@ let activeTab = '';
 let activeKGCat = 'unloading';
 let _cachedCSVFile = null;
 let _freshCSVLoaded = false;  // true immediately after CSV upload; prevents saved record from overwriting attendance
+let _isDirty = false;         // true when form has unsaved changes
 
 /* ═══════════════════════════════════════════════════════
    API HELPER
@@ -1137,6 +1138,8 @@ async function doLogout() {
   currentRole      = '';
   currentPlantId   = null;
   currentPlantName = null;
+  _isDirty = false;
+  sessionStorage.removeItem('activePlantId');
   document.getElementById('navUsers').style.display = 'none';
   document.getElementById('navDashboard').style.display = 'none';
   document.getElementById('navVendors').style.display = 'none';
@@ -1170,6 +1173,12 @@ async function setupPlantSelector() {
     const plants = await fetch('/api/auth/plants', { credentials: 'include' }).then(r => r.json());
     const sel = document.getElementById('plantSelector');
     sel.innerHTML = '<option value="">All Plants</option>';
+    // Restore last selected plant from sessionStorage
+    const saved = parseInt(sessionStorage.getItem('activePlantId'));
+    if (saved && !activePlantId) {
+      const match = plants.find(p => p.id === saved);
+      if (match) { activePlantId = saved; activePlantName = match.name; }
+    }
     plants.forEach(p => {
       const opt = document.createElement('option');
       opt.value = p.id;
@@ -1178,13 +1187,23 @@ async function setupPlantSelector() {
       sel.appendChild(opt);
     });
     document.getElementById('plantSelectorField').style.display = '';
+    // Update badge if a plant was restored
+    if (activePlantId) {
+      document.getElementById('userBadge').textContent = currentUsername + ' • ' + activePlantName;
+    }
   } catch (e) {
     console.error('Failed to load plants:', e.message);
   }
 }
 
 async function onPlantChange(val) {
+  if (_isDirty && !confirm('You have unsaved changes. Switch plant without saving?')) {
+    // Revert the dropdown to current activePlantId
+    document.getElementById('plantSelector').value = activePlantId || '';
+    return;
+  }
   activePlantId = val ? parseInt(val) : null;
+  sessionStorage.setItem('activePlantId', activePlantId || '');
   const sel = document.getElementById('plantSelector');
   const plantName = sel.options[sel.selectedIndex]?.text;
   activePlantName = activePlantId ? plantName : null;
@@ -1426,7 +1445,16 @@ function vid(v) { return v.replace(/[^a-zA-Z0-9]/g, '_'); }
    RECALC
 ═══════════════════════════════════════════════════════ */
 
+function markDirty() {
+  if (!_isDirty) {
+    _isDirty = true;
+    const lbl = document.getElementById('lastSavedLabel');
+    if (lbl) lbl.style.display = 'none'; // hide old "Saved at" when new edits start
+  }
+}
+
 function recalc() {
+  markDirty();
   const att = totalAtt(), kg = totalKG(), total = att + kg, mpk = getMPK();
   document.getElementById('sumAtt').textContent   = fcShort(att);
   document.getElementById('sumKG').textContent    = fcShort(kg);
@@ -1850,6 +1878,11 @@ async function saveRecord() {
       date, attendanceCost: att, kgCost: kg, totalCost: total, saleQty, mpk,
       attendance, kgEntries,
     });
+    _isDirty = false;
+    const now = new Date();
+    const timeStr = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+    const lbl = document.getElementById('lastSavedLabel');
+    if (lbl) { lbl.textContent = 'Saved at ' + timeStr; lbl.style.display = ''; }
     showToast('✓ Record saved for ' + date, false);
     loadHistory();
   } catch (e) {
@@ -1947,9 +1980,13 @@ function clearForm() {
   // Reset sale qty
   document.getElementById('saleQtyInput').value = '';
   _freshCSVLoaded = false;
+  _isDirty = false;
+  const lbl = document.getElementById('lastSavedLabel');
+  if (lbl) lbl.style.display = 'none';
   renderAtt();
   renderKGTabs();
   recalc();
+  _isDirty = false; // recalc sets dirty, reset after clear
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -1963,6 +2000,11 @@ function setActiveNav(section) {
 }
 
 function navTo(section) {
+  // Warn if leaving daily entry with unsaved changes
+  if (section !== 'daily' && _isDirty) {
+    if (!confirm('You have unsaved changes. Leave without saving?')) return;
+    _isDirty = false;
+  }
   // Close any open right-panel / overlay first, then open the requested one
   closeDashboard();
   toggleHistory(false);
@@ -2173,6 +2215,9 @@ async function deleteHistoryRecord(date) {
    EXCEL EXPORT
 ═══════════════════════════════════════════════════════ */
 
+// Convert "YYYY-MM-DD" string to a JS Date that SheetJS writes as a real Excel date
+function xlDate(str) { return str ? new Date(str + 'T00:00:00') : str; }
+
 function exportExcel() {
   if (typeof XLSX === 'undefined') {
     alert('SheetJS library not loaded — check your internet connection and reload the page.');
@@ -2187,19 +2232,21 @@ function exportExcel() {
   const total   = grandTotal();
   const mpk     = saleQty > 0 ? r2(total / saleQty) : '';
 
+  const xd = xlDate(date);
+
   // Sheet 1: Daily Summary
   const ws1 = XLSX.utils.aoa_to_sheet([
     ['Date','Attendance Cost','KG Cost','Total Cost','Sale Qty (kg)','MPK'],
-    [date, r2(attCost), r2(kgCost), r2(total), saleQty, mpk]
-  ]);
+    [xd, r2(attCost), r2(kgCost), r2(total), saleQty, mpk]
+  ], {cellDates: true});
   ws1['!cols'] = [12,16,12,12,14,10].map(w => ({ wch: w }));
 
   // Sheet 2: Attendance Detail
   const attRows = [['Date','Contractor','Workers','Cost (₹)']];
   ATT_VENDORS.forEach(v => {
-    attRows.push([date, v, attState[v]?.workers || 0, parseFloat(attState[v]?.cost) || 0]);
+    attRows.push([xd, v, attState[v]?.workers || 0, parseFloat(attState[v]?.cost) || 0]);
   });
-  const ws2 = XLSX.utils.aoa_to_sheet(attRows);
+  const ws2 = XLSX.utils.aoa_to_sheet(attRows, {cellDates: true});
   ws2['!cols'] = [12,32,10,12].map(w => ({ wch: w }));
 
   // Sheet 3: KG Detail
@@ -2207,15 +2254,15 @@ function exportExcel() {
   KG_VENDORS.forEach(v => {
     (SKU_CFG[v] || []).forEach(([name, rate], i) => {
       const qty = kgState[v]?.[i] || 0;
-      if (qty > 0) kgRows.push([date, v, name, rate, qty, r2(qty * rate)]);
+      if (qty > 0) kgRows.push([xd, v, name, rate, qty, r2(qty * rate)]);
     });
     customSKUs[v].forEach(sku => {
-      if ((sku.qty || 0) > 0) kgRows.push([date, v, sku.name + ' *', sku.rate, sku.qty, r2(sku.qty * sku.rate)]);
+      if ((sku.qty || 0) > 0) kgRows.push([xd, v, sku.name + ' *', sku.rate, sku.qty, r2(sku.qty * sku.rate)]);
     });
     const ul = unloadingCosts[v] || 0;
-    if (ul > 0) kgRows.push([date, v, 'Unloading Cost', '', '', r2(ul)]);
+    if (ul > 0) kgRows.push([xd, v, 'Unloading Cost', '', '', r2(ul)]);
   });
-  const ws3 = XLSX.utils.aoa_to_sheet(kgRows);
+  const ws3 = XLSX.utils.aoa_to_sheet(kgRows, {cellDates: true});
   ws3['!cols'] = [12,14,28,12,10,12].map(w => ({ wch: w }));
 
   // Sheet 4: Attendance Summary (one row per contractor)
@@ -2267,27 +2314,31 @@ async function exportMonthRecords() {
     if (!records.length) { showToast('⚠ No records found for ' + month, true); return; }
 
     const summaryRows = [['Date','Production Attendance Cost','Per KG Cost','Total Cost','Sale Qty (kg)','MPK','Last Saved By']];
-    const vendorRows  = [['Date','Type','Name','Workers','SKU','Rate (₹/kg)','Qty (kg)','Cost (₹)']];
+    const attRows     = [['Date','Contractor','Workers','Cost (₹)']];
+    const kgRows      = [['Date','Vendor','SKU','Rate (₹/kg)','Qty (kg)','Cost (₹)']];
     for (const detail of records) {
-      const date = typeof detail.record_date === 'string' ? detail.record_date.slice(0, 10) : detail.record_date;
-      summaryRows.push([date,
+      const dateStr = typeof detail.record_date === 'string' ? detail.record_date.slice(0, 10) : detail.record_date;
+      const xd = xlDate(dateStr);
+      summaryRows.push([xd,
         r2(parseFloat(detail.attendance_cost)||0), r2(parseFloat(detail.kg_cost)||0),
         r2(parseFloat(detail.total_cost)||0), parseFloat(detail.sale_qty)||0,
         parseFloat(detail.mpk)>0 ? r2(parseFloat(detail.mpk)) : '',
         detail.updated_by || '']);
       (detail.attendance||[]).forEach(a => {
-        vendorRows.push([date,'Attendance',a.contractor_name,a.workers||0,'','','',parseFloat(a.cost)||0]);
+        attRows.push([xd, a.contractor_name, a.workers||0, parseFloat(a.cost)||0]);
       });
       (detail.kgEntries||[]).forEach(e => {
-        if (e.sku_name==='__UNLOADING__') vendorRows.push([date,'Per KG',e.vendor_name,'','Unloading Cost','','',r2(parseFloat(e.cost)||0)]);
-        else vendorRows.push([date,'Per KG',e.vendor_name,'',e.sku_name,parseFloat(e.rate)||0,parseFloat(e.qty)||0,r2(parseFloat(e.cost)||0)]);
+        if (e.sku_name==='__UNLOADING__') kgRows.push([xd, e.vendor_name, 'Unloading Cost', '', '', r2(parseFloat(e.cost)||0)]);
+        else kgRows.push([xd, e.vendor_name, e.sku_name, parseFloat(e.rate)||0, parseFloat(e.qty)||0, r2(parseFloat(e.cost)||0)]);
       });
     }
-    const ws1 = XLSX.utils.aoa_to_sheet(summaryRows); ws1['!cols']=[12,22,14,12,14,10,16].map(w=>({wch:w}));
-    const ws2 = XLSX.utils.aoa_to_sheet(vendorRows);  ws2['!cols']=[12,12,28,10,28,12,10,12].map(w=>({wch:w}));
+    const ws1 = XLSX.utils.aoa_to_sheet(summaryRows, {cellDates:true}); ws1['!cols']=[12,22,14,12,14,10,16].map(w=>({wch:w}));
+    const ws2 = XLSX.utils.aoa_to_sheet(attRows,     {cellDates:true}); ws2['!cols']=[12,32,10,12].map(w=>({wch:w}));
+    const ws3 = XLSX.utils.aoa_to_sheet(kgRows,      {cellDates:true}); ws3['!cols']=[12,20,28,12,10,12].map(w=>({wch:w}));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws1, 'Summary');
-    XLSX.utils.book_append_sheet(wb, ws2, 'Vendor Details');
+    XLSX.utils.book_append_sheet(wb, ws2, 'Attendance Detail');
+    XLSX.utils.book_append_sheet(wb, ws3, 'KG Detail');
     XLSX.writeFile(wb, 'Organicut_MPK_' + month + '.xlsx');
     showToast('✓ Exported ' + records.length + ' record(s) for ' + month, false);
   } catch (e) {
@@ -2306,17 +2357,19 @@ async function exportAllRecords() {
     if (!records.length) { showToast('⚠ No records found.', true); return; }
 
     const summaryRows = [['Date','Production Attendance Cost','Per KG Cost','Total Cost','Sale Qty (kg)','MPK','Last Saved By']];
-    // Combined vendor details: Type = Attendance or Per KG
-    const vendorRows = [['Date','Type','Name','Workers','SKU','Rate (₹/kg)','Qty (kg)','Cost (₹)']];
-    const vendorTotals = {}; // vendor → { qty, cost }
+    const attRows     = [['Date','Contractor','Workers','Cost (₹)']];
+    const kgRows      = [['Date','Vendor','SKU','Rate (₹/kg)','Qty (kg)','Cost (₹)']];
+    const attTotals   = {};
+    const vendorTotals = {};
 
     for (const detail of records) {
-      const date = typeof detail.record_date === 'string'
+      const dateStr = typeof detail.record_date === 'string'
         ? detail.record_date.slice(0, 10)
         : detail.record_date;
+      const xd = xlDate(dateStr);
 
       summaryRows.push([
-        date,
+        xd,
         r2(parseFloat(detail.attendance_cost) || 0),
         r2(parseFloat(detail.kg_cost) || 0),
         r2(parseFloat(detail.total_cost) || 0),
@@ -2326,17 +2379,20 @@ async function exportAllRecords() {
       ]);
 
       (detail.attendance || []).forEach(a => {
-        vendorRows.push([date, 'Attendance', a.contractor_name, a.workers || 0, '', '', '', parseFloat(a.cost) || 0]);
+        attRows.push([xd, a.contractor_name, a.workers || 0, parseFloat(a.cost) || 0]);
+        if (!attTotals[a.contractor_name]) attTotals[a.contractor_name] = { days: 0, workers: 0, cost: 0 };
+        attTotals[a.contractor_name].days    += 1;
+        attTotals[a.contractor_name].workers += a.workers || 0;
+        attTotals[a.contractor_name].cost    += parseFloat(a.cost) || 0;
       });
 
       (detail.kgEntries || []).forEach(e => {
         if (e.sku_name === '__UNLOADING__') {
-          vendorRows.push([date, 'Per KG', e.vendor_name, '', 'Unloading Cost', '', '', r2(parseFloat(e.cost) || 0)]);
+          kgRows.push([xd, e.vendor_name, 'Unloading Cost', '', '', r2(parseFloat(e.cost) || 0)]);
           if (!vendorTotals[e.vendor_name]) vendorTotals[e.vendor_name] = { qty: 0, cost: 0 };
           vendorTotals[e.vendor_name].cost += parseFloat(e.cost) || 0;
         } else {
-          vendorRows.push([date, 'Per KG', e.vendor_name, '',
-            e.sku_name, parseFloat(e.rate) || 0, parseFloat(e.qty) || 0, r2(parseFloat(e.cost) || 0)]);
+          kgRows.push([xd, e.vendor_name, e.sku_name, parseFloat(e.rate) || 0, parseFloat(e.qty) || 0, r2(parseFloat(e.cost) || 0)]);
           if (!vendorTotals[e.vendor_name]) vendorTotals[e.vendor_name] = { qty: 0, cost: 0 };
           vendorTotals[e.vendor_name].qty  += parseFloat(e.qty)  || 0;
           vendorTotals[e.vendor_name].cost += parseFloat(e.cost) || 0;
@@ -2344,44 +2400,31 @@ async function exportAllRecords() {
       });
     }
 
-    // Build attendance summary sheet (aggregated by contractor across all dates)
-    const attTotals = {};
-    for (const detail of records) {
-      (detail.attendance || []).forEach(a => {
-        if (!attTotals[a.contractor_name]) attTotals[a.contractor_name] = { days: 0, workers: 0, cost: 0 };
-        attTotals[a.contractor_name].days    += 1;
-        attTotals[a.contractor_name].workers += a.workers || 0;
-        attTotals[a.contractor_name].cost    += parseFloat(a.cost) || 0;
-      });
-    }
+    // Attendance summary (aggregated by contractor)
     const attSumRows = [['Contractor','No. of Days','Total Workers','Total Attendance Cost (₹)']];
     Object.entries(attTotals).sort((a,b) => b[1].cost - a[1].cost).forEach(([name, v]) => {
       attSumRows.push([name, v.days, v.workers, r2(v.cost)]);
     });
-    const grandAttCost = Object.values(attTotals).reduce((s, v) => s + v.cost, 0);
-    attSumRows.push(['TOTAL', '', '', r2(grandAttCost)]);
+    attSumRows.push(['TOTAL', '', '', r2(Object.values(attTotals).reduce((s,v) => s+v.cost, 0))]);
 
-    // Build KG vendor cost summary sheet
+    // KG vendor summary
     const kgSumRows = [['Vendor','Total Qty Processed (kg)','Total Amount Paid (₹)']];
     Object.entries(vendorTotals).sort((a,b) => b[1].cost - a[1].cost).forEach(([name, v]) => {
       kgSumRows.push([name, r2(v.qty), r2(v.cost)]);
     });
-    const grandVendorCost = Object.values(vendorTotals).reduce((s, v) => s + v.cost, 0);
-    kgSumRows.push(['TOTAL', '', r2(grandVendorCost)]);
+    kgSumRows.push(['TOTAL', '', r2(Object.values(vendorTotals).reduce((s,v) => s+v.cost, 0))]);
 
-    const ws1 = XLSX.utils.aoa_to_sheet(summaryRows);
-    ws1['!cols'] = [12,22,14,12,14,10,16].map(w => ({ wch: w }));
-    const wsAS = XLSX.utils.aoa_to_sheet(attSumRows);
-    wsAS['!cols'] = [32,12,14,26].map(w => ({ wch: w }));
-    const wsVD = XLSX.utils.aoa_to_sheet(vendorRows);
-    wsVD['!cols'] = [12,12,28,10,28,12,10,12].map(w => ({ wch: w }));
-    const wsKS = XLSX.utils.aoa_to_sheet(kgSumRows);
-    wsKS['!cols'] = [20,24,20].map(w => ({ wch: w }));
+    const ws1  = XLSX.utils.aoa_to_sheet(summaryRows, {cellDates:true}); ws1['!cols']  = [12,22,14,12,14,10,16].map(w=>({wch:w}));
+    const wsAD = XLSX.utils.aoa_to_sheet(attRows,     {cellDates:true}); wsAD['!cols'] = [12,32,10,12].map(w=>({wch:w}));
+    const wsAS = XLSX.utils.aoa_to_sheet(attSumRows);                    wsAS['!cols'] = [32,12,14,26].map(w=>({wch:w}));
+    const wsKD = XLSX.utils.aoa_to_sheet(kgRows,      {cellDates:true}); wsKD['!cols'] = [12,20,28,12,10,12].map(w=>({wch:w}));
+    const wsKS = XLSX.utils.aoa_to_sheet(kgSumRows);                     wsKS['!cols'] = [20,24,20].map(w=>({wch:w}));
 
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws1, 'Daily Summary');
+    XLSX.utils.book_append_sheet(wb, ws1,  'Daily Summary');
+    XLSX.utils.book_append_sheet(wb, wsAD, 'Attendance Detail');
     XLSX.utils.book_append_sheet(wb, wsAS, 'Attendance Summary');
-    XLSX.utils.book_append_sheet(wb, wsVD, 'Vendor Details');
+    XLSX.utils.book_append_sheet(wb, wsKD, 'KG Detail');
     XLSX.utils.book_append_sheet(wb, wsKS, 'KG Vendor Summary');
     XLSX.writeFile(wb, 'Organicut_MPK_All_Records.xlsx');
     showToast('✓ Exported ' + records.length + ' record' + (records.length === 1 ? '' : 's'), false);
@@ -2996,6 +3039,13 @@ async function dashDeleteRecord(date) {
 ═══════════════════════════════════════════════════════ */
 
 checkAuth();
+
+window.addEventListener('beforeunload', e => {
+  if (_isDirty) {
+    e.preventDefault();
+    e.returnValue = '';
+  }
+});
 </script>
 </body>
 </html>
