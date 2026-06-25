@@ -903,6 +903,7 @@ tr.dash-row-alt td { background: #f7fdf9; }
         <span class="unmapped-note" id="unmappedNote" style="display:none"></span>
         <button class="btn btn-card-upload" onclick="document.getElementById('csvInput').click()" title="Upload biometric CSV">📂 Upload CSV</button>
         <input type="file" id="csvInput" accept=".csv,.CSV" style="display:none" onchange="onCSVUpload(event)">
+        <button class="btn btn-card-outline" id="desigToggleBtn" onclick="toggleDesigView()" title="Show/hide designation breakdown" style="display:none">Show Breakdown</button>
         <button class="btn btn-card-outline" onclick="showAddContractorForm()" id="addContractorBtn">+ Add manually</button>
         <span id="addContractorForm" style="display:none;gap:6px;align-items:center">
           <input id="newContractorName" type="text" placeholder="Contractor name" class="input"
@@ -914,7 +915,7 @@ tr.dash-row-alt td { background: #f7fdf9; }
     </div>
     <div class="table-wrap">
       <table>
-        <thead>
+        <thead id="attThead">
           <tr>
             <th>Contractor</th>
             <th class="r">Workers Present</th>
@@ -922,7 +923,7 @@ tr.dash-row-alt td { background: #f7fdf9; }
           </tr>
         </thead>
         <tbody id="attTbody"></tbody>
-        <tfoot>
+        <tfoot id="attTfoot">
           <tr class="ft">
             <td>Total Production Attendance Cost</td>
             <td></td>
@@ -1472,27 +1473,80 @@ function recalc() {
    RENDER — ATTENDANCE TABLE
 ═══════════════════════════════════════════════════════ */
 
+let _desigViewOn = false;
+
+function _getAllDesigCols() {
+  const seen = new Set();
+  ATT_VENDORS.forEach(v => Object.keys(attState[v]?.designations || {}).forEach(d => seen.add(d)));
+  return [...seen];
+}
+
+function toggleDesigView() {
+  _desigViewOn = !_desigViewOn;
+  const btn = document.getElementById('desigToggleBtn');
+  if (btn) {
+    btn.textContent = _desigViewOn ? 'Hide Breakdown' : 'Show Breakdown';
+    btn.style.background = _desigViewOn ? '#e8f4ed' : '';
+    btn.style.color = _desigViewOn ? '#1e6b45' : '';
+    btn.style.borderColor = _desigViewOn ? '#1e6b45' : '';
+  }
+  renderAtt();
+}
+
 function renderAtt() {
+  const hasAnyDesig = ATT_VENDORS.some(v => Object.keys(attState[v]?.designations || {}).length > 0);
+  const toggleBtn = document.getElementById('desigToggleBtn');
+  if (toggleBtn) toggleBtn.style.display = hasAnyDesig ? '' : 'none';
+
+  const desigCols = _desigViewOn ? _getAllDesigCols() : [];
+  const totalCols = 3 + desigCols.length;
+
+  // Rebuild thead
+  const thead = document.getElementById('attThead');
+  if (thead) {
+    const desigHeaders = desigCols.map(d =>
+      `<th class="r" style="font-size:11px;color:#1e6b45;white-space:nowrap;padding:8px 10px">${d}</th>`
+    ).join('');
+    thead.innerHTML = `<tr>
+      <th>Contractor</th>
+      ${desigHeaders}
+      <th class="r">Workers Present</th>
+      <th class="r">Production Attendance Cost (₹)</th>
+    </tr>`;
+  }
+
+  // Rebuild tfoot
+  const tfoot = document.getElementById('attTfoot');
+  if (tfoot) {
+    const desigTotals = desigCols.map(d => {
+      const total = ATT_VENDORS.reduce((s, v) => s + (attState[v]?.designations?.[d]?.workers || 0), 0);
+      return `<td class="r" style="font-size:12px;color:#4a7060">${total || '—'}</td>`;
+    }).join('');
+    tfoot.innerHTML = `<tr class="ft">
+      <td>Total Production Attendance Cost</td>
+      ${desigTotals}
+      <td></td>
+      <td class="r" id="attTotal">₹ 0.00</td>
+    </tr>`;
+  }
+
   if (ATT_VENDORS.length === 0) {
     document.getElementById('attTbody').innerHTML =
-      `<tr><td colspan="4" style="text-align:center;color:#8a9a90;padding:18px;font-size:13px">
+      `<tr><td colspan="${totalCols}" style="text-align:center;color:#8a9a90;padding:18px;font-size:13px">
         No contractors yet — upload a CSV or add one manually below
       </td></tr>`;
   } else {
     document.getElementById('attTbody').innerHTML = ATT_VENDORS.map(v => {
       const s = attState[v], vk = v.replace(/'/g, "\\'");
       const desig = s.designations || {};
-      const desigKeys = Object.keys(desig);
-      const desigRows = desigKeys.length > 0
-        ? desigKeys.map(d => `<tr class="att-desig-row" style="background:#f4faf6">
-            <td style="padding:3px 8px 3px 24px;font-size:12px;color:#4a7060">↳ ${d}</td>
-            <td class="r" style="font-size:12px;color:#4a7060;padding:3px 8px">${desig[d].workers}</td>
-            <td class="r" style="font-size:12px;color:#4a7060;padding:3px 8px">₹${r2(desig[d].totalCost).toLocaleString('en-IN')}</td>
-          </tr>`).join('')
-        : '';
+      const desigCells = desigCols.map(d => {
+        const w = desig[d]?.workers || 0;
+        return `<td class="r" style="font-size:12px;color:${w ? '#1e6b45' : '#ccc'};padding:6px 10px">${w || '—'}</td>`;
+      }).join('');
       return `<tr>
         <td>${v} <button onclick="removeContractor('${vk}')" title="Remove row"
           style="border:none;background:none;cursor:pointer;color:#b04040;font-size:13px;padding:0 4px">×</button></td>
+        ${desigCells}
         <td class="r">
           <input type="number" min="0" step="1" value="${s.workers}" style="width:80px"
             onchange="attState['${vk}'].workers=parseInt(this.value)||0;recalc();">
@@ -1501,7 +1555,7 @@ function renderAtt() {
           <input type="number" min="0" step="0.01" value="${s.cost}" style="width:130px"
             onchange="attState['${vk}'].cost=parseFloat(this.value)||0;recalc();">
         </td>
-      </tr>${desigRows}`;
+      </tr>`;
     }).join('');
   }
   recalc();
