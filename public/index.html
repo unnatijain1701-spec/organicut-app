@@ -1269,7 +1269,7 @@ async function initApp() {
   const effectivePlantName = currentPlantName || activePlantName;
   const isJaipur = effectivePlantName === 'Jaipur';
   document.getElementById('allPlantsView').style.display  = isAllPlants ? '' : 'none';
-  document.getElementById('entryCards').style.display     = isAllPlants ? 'none' : '';
+  document.getElementById('entryCards').style.display     = isAllPlants ? 'none' : 'block';
   document.querySelector('.sumbar').style.display         = isAllPlants ? 'none' : '';
   document.querySelector('.btn-save-rec').style.display   = isAllPlants ? 'none' : '';
   document.getElementById('reloadBtn').style.display      = isAllPlants ? 'none' : '';
