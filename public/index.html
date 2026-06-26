@@ -457,7 +457,13 @@ td input[type="number"]:hover { border-color: #7dbf99; }
 #allPlantsView { display:none; }
 #entryCards { display:none; }
 #entryCards.locked-view input, #entryCards.locked-view select { pointer-events:none; opacity:0.45; }
-#entryCards.locked-view button:not(.tab-btn):not([onclick*="toggleDesig"]):not([onclick*="showAddContractor"]):not([onclick*="switchTab"]) { pointer-events:none; opacity:0.45; }
+#entryCards.locked-view .btn-card-upload,
+#entryCards.locked-view .btn-card-outline,
+#entryCards.locked-view .btn-edit-sku,
+#entryCards.locked-view .btn-del,
+#entryCards.locked-view .btn-cancel,
+#entryCards.locked-view .btn-ghost,
+#entryCards.locked-view .add-sku-bar { pointer-events:none; opacity:0.45; }
 #entryCards.locked-view { position:relative; }
 #saleQtyInput.locked-input { pointer-events:none; opacity:0.45; }
 .ap-card { background:#fff; border:1px solid var(--border); border-radius:12px; padding:20px 22px; margin-bottom:18px; }
