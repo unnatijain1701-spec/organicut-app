@@ -17,14 +17,14 @@ router.get('/', async (req, res) => {
     if (!pid) {
       // Superadmin "All Plants" — aggregate per date across all plants, include per-plant rows
       const { rows } = await db.query(`
-        SELECT dr.id, dr.record_date, dr.attendance_cost, dr.kg_cost, dr.total_cost, dr.sale_qty, dr.mpk, dr.updated_at, p.name AS plant_name
+        SELECT dr.id, dr.record_date, dr.attendance_cost, dr.kg_cost, dr.total_cost, dr.sale_qty, dr.mpk, dr.updated_at, dr.locked, p.name AS plant_name
         FROM daily_records dr JOIN plants p ON p.id = dr.plant_id
         ORDER BY dr.record_date DESC, p.display_order
       `);
       return res.json(rows);
     }
     const { rows } = await db.query(`
-      SELECT id, record_date, attendance_cost, kg_cost, total_cost, sale_qty, mpk, updated_at
+      SELECT id, record_date, attendance_cost, kg_cost, total_cost, sale_qty, mpk, updated_at, locked
       FROM daily_records
       WHERE plant_id = $1
       ORDER BY record_date DESC
@@ -183,6 +183,17 @@ router.post('/', async (req, res) => {
   if (!pid) return res.status(400).json({ error: 'No plant selected — please select a plant before saving' });
   if (!date) return res.status(400).json({ error: '"date" is required (YYYY-MM-DD)' });
 
+  // Block saves on locked records for non-superadmin
+  if (req.user.role !== 'superadmin') {
+    const { rows: chk } = await db.query(
+      'SELECT locked FROM daily_records WHERE plant_id=$1 AND record_date=$2',
+      [pid, date]
+    );
+    if (chk[0]?.locked) {
+      return res.status(403).json({ error: 'Record is locked. Contact your superadmin to unlock it.' });
+    }
+  }
+
   const client = await db.connect();
   try {
     await client.query('BEGIN');
@@ -246,6 +257,26 @@ router.delete('/:date', async (req, res) => {
     );
     if (!rowCount) return res.status(404).json({ error: 'Record not found' });
     res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// PATCH /api/records/:date/lock  — superadmin: lock or unlock a record
+router.patch('/:date/lock', async (req, res) => {
+  if (req.user.role !== 'superadmin')
+    return res.status(403).json({ error: 'Superadmin only' });
+  const pid = getPlantId(req);
+  if (!pid) return res.status(400).json({ error: 'No plant selected' });
+  const locked = req.body?.locked === true || req.body?.locked === 'true';
+  try {
+    const { rowCount } = await db.query(
+      'UPDATE daily_records SET locked=$1, updated_at=NOW(), updated_by=$2 WHERE plant_id=$3 AND record_date=$4',
+      [locked, req.user.username, pid, req.params.date]
+    );
+    if (!rowCount) return res.status(404).json({ error: 'Record not found' });
+    res.json({ ok: true, locked });
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: 'Server error' });

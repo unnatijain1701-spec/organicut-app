@@ -449,6 +449,8 @@ td input[type="number"]:hover { border-color: #7dbf99; }
   transition: background .12s, opacity .12s;
 }
 .hist-del-btn:hover { background: #fef2f2; color: #ef4444; opacity: 1; }
+.hist-lock-btn { border: none; background: none; cursor: pointer; font-size: 14px; padding: 4px 6px; border-radius: 6px; opacity: 0.55; transition: opacity .15s, background .15s; flex-shrink: 0; }
+.hist-lock-btn:hover { background: #fefce8; opacity: 1; }
 .hist-empty { padding: 24px; text-align: center; color: var(--muted); font-size: 13px; }
 
 /* ── ALL-PLANTS AGGREGATE VIEW ───────────────────────── */
@@ -873,6 +875,8 @@ tr.dash-row-alt td { background: #f7fdf9; }
     </div>
     <div class="spacer"></div>
     <div class="tb-actions">
+      <button class="btn btn-outline" onclick="previewRecord()" title="Preview filled data before saving" style="background:rgba(255,255,255,.12);color:#fff;border-color:rgba(255,255,255,.35)">👁 Preview</button>
+      <span id="lockBadge" style="display:none;font-size:11px;font-weight:700;color:#f59e0b;white-space:nowrap;padding:4px 8px;background:rgba(245,158,11,.15);border-radius:6px;border:1px solid rgba(245,158,11,.4)">🔒 Locked</span>
       <button class="btn btn-save-rec" onclick="saveRecord()">💾 Save</button>
       <span id="lastSavedLabel" style="font-size:11px;color:rgba(255,255,255,.65);white-space:nowrap;display:none"></span>
       <button class="btn btn-outline" id="reloadBtn" onclick="reloadTodayData()" title="Pull latest saved data for this date">🔄</button>
@@ -1013,6 +1017,7 @@ let activeKGCat = 'unloading';
 let _cachedCSVFile = null;
 let _freshCSVLoaded = false;  // true immediately after CSV upload; prevents saved record from overwriting attendance
 let _isDirty = false;         // true when form has unsaved changes
+let _currentRecordLocked = false;
 
 /* ═══════════════════════════════════════════════════════
    API HELPER
@@ -2006,6 +2011,10 @@ function pickCSVDate(d) {
 ═══════════════════════════════════════════════════════ */
 
 async function saveRecord() {
+  if (_currentRecordLocked && currentRole !== 'superadmin') {
+    showToast('⚠ This record is locked. Ask superadmin to unlock it.', true);
+    return;
+  }
   const date    = document.getElementById('dateInput').value;
   if (!date) { showToast('⚠ Please select a date before saving.', true); return; }
 
@@ -2127,6 +2136,8 @@ function applyRecord(record) {
   renderAtt();
   renderKGTabs();
   recalc();
+  _currentRecordLocked = !!record?.locked;
+  _updateLockUI();
 }
 
 function customSKUs_resetQty() {
@@ -2156,6 +2167,37 @@ function clearForm() {
   renderKGTabs();
   recalc();
   _isDirty = false; // recalc sets dirty, reset after clear
+  _currentRecordLocked = false;
+  _updateLockUI();
+}
+
+function _updateLockUI() {
+  const saveBtn = document.querySelector('.btn-save-rec');
+  const lockBadge = document.getElementById('lockBadge');
+  if (_currentRecordLocked) {
+    if (saveBtn) { saveBtn.disabled = true; saveBtn.title = 'Record is locked by superadmin'; saveBtn.style.opacity = '0.45'; }
+    if (lockBadge) lockBadge.style.display = '';
+  } else {
+    if (saveBtn) { saveBtn.disabled = false; saveBtn.title = ''; saveBtn.style.opacity = ''; }
+    if (lockBadge) lockBadge.style.display = 'none';
+  }
+}
+
+async function toggleRecordLock(date, lock) {
+  try {
+    const pid = activePlantId || currentPlantId;
+    const url = '/api/records/' + date + '/lock' + (pid ? '?plantId=' + pid : '');
+    await api('PATCH', url, { locked: lock });
+    showToast(lock ? '🔒 Record locked for ' + date : '🔓 Record unlocked for ' + date, false);
+    loadHistory();
+    const currentDate = document.getElementById('dateInput').value;
+    if (currentDate === date) {
+      _currentRecordLocked = lock;
+      _updateLockUI();
+    }
+  } catch (e) {
+    showToast('⚠ ' + e.message, true);
+  }
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -2332,7 +2374,10 @@ async function loadHistoryRecords() {
               ${r.updated_by ? `<span style="color:var(--muted);font-size:10px">by ${r.updated_by}</span>` : ''}
             </div>
           </div>
-          ${currentRole === 'superadmin' ? `<button class="hist-del-btn" title="Delete this record" onclick="deleteHistoryRecord('${cleanDate}')">🗑</button>` : ''}
+          ${currentRole === 'superadmin' ? `
+            <button class="hist-lock-btn" title="${r.locked ? 'Unlock this record' : 'Lock this record'}" onclick="event.stopPropagation();toggleRecordLock('${cleanDate}',${r.locked ? 'false' : 'true'})">${r.locked ? '🔓' : '🔒'}</button>
+            <button class="hist-del-btn" title="Delete this record" onclick="deleteHistoryRecord('${cleanDate}')">🗑</button>` : ''}
+          ${currentRole !== 'superadmin' && r.locked ? `<span title="Locked by admin" style="font-size:13px;opacity:.6;flex-shrink:0">🔒</span>` : ''}
         </div>`;
       }).join('');
       return `<div class="hist-month">
