@@ -455,6 +455,7 @@ td input[type="number"]:hover { border-color: #7dbf99; }
 
 /* ── ALL-PLANTS AGGREGATE VIEW ───────────────────────── */
 #allPlantsView { display:none; }
+#entryCards { display:none; }
 .ap-card { background:#fff; border:1px solid var(--border); border-radius:12px; padding:20px 22px; margin-bottom:18px; }
 .ap-card-title { font-weight:700; font-size:14px; color:var(--primary); margin-bottom:14px; }
 .ap-table { width:100%; border-collapse:collapse; font-size:13px; }
@@ -2390,9 +2391,11 @@ async function loadHistoryRecords() {
         const d = new Date(r.record_date);
         const dateStr = d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
         const cleanDate = (r.record_date + '').slice(0, 10);
-        return `<div class="hist-item">
+        const isLocked = !!r.locked;
+        const lockedStyle = (isLocked && currentRole !== 'superadmin') ? 'opacity:0.5;' : '';
+        return `<div class="hist-item" style="${lockedStyle}">
           <div class="hist-item-body" onclick="loadHistoryRecord('${cleanDate}')">
-            <div class="hist-date">${dateStr}</div>
+            <div class="hist-date" style="${isLocked && currentRole !== 'superadmin' ? 'color:var(--muted)' : ''}">${dateStr}</div>
             <div class="hist-meta">
               <span>Total: ${fc(parseFloat(r.total_cost))}</span>
               <span>MPK: ${parseFloat(r.mpk) > 0 ? fn(parseFloat(r.mpk)) : '—'}</span>
@@ -2400,9 +2403,9 @@ async function loadHistoryRecords() {
             </div>
           </div>
           ${currentRole === 'superadmin' ? `
-            <button class="hist-lock-btn" title="${r.locked ? 'Unlock this record' : 'Lock this record'}" onclick="event.stopPropagation();toggleRecordLock('${cleanDate}',${r.locked ? 'false' : 'true'})">${r.locked ? '🔒' : '🔓'}</button>
+            <button class="hist-lock-btn" title="${isLocked ? 'Unlock this record' : 'Lock this record'}" onclick="event.stopPropagation();toggleRecordLock('${cleanDate}',${isLocked ? 'false' : 'true'})">${isLocked ? '🔒' : '🔓'}</button>
             <button class="hist-del-btn" title="Delete this record" onclick="deleteHistoryRecord('${cleanDate}')">🗑</button>` : ''}
-          ${currentRole !== 'superadmin' && r.locked ? `<span title="Locked by admin" style="font-size:13px;opacity:.6;flex-shrink:0">🔒</span>` : ''}
+          ${currentRole !== 'superadmin' && isLocked ? `<span title="Locked by admin" style="font-size:13px;flex-shrink:0">🔒</span>` : ''}
         </div>`;
       }).join('');
       return `<div class="hist-month">
