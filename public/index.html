@@ -2375,7 +2375,7 @@ async function loadHistoryRecords() {
             </div>
           </div>
           ${currentRole === 'superadmin' ? `
-            <button class="hist-lock-btn" title="${r.locked ? 'Unlock this record' : 'Lock this record'}" onclick="event.stopPropagation();toggleRecordLock('${cleanDate}',${r.locked ? 'false' : 'true'})">${r.locked ? '🔓' : '🔒'}</button>
+            <button class="hist-lock-btn" title="${r.locked ? 'Unlock this record' : 'Lock this record'}" onclick="event.stopPropagation();toggleRecordLock('${cleanDate}',${r.locked ? 'false' : 'true'})">${r.locked ? '🔒' : '🔓'}</button>
             <button class="hist-del-btn" title="Delete this record" onclick="deleteHistoryRecord('${cleanDate}')">🗑</button>` : ''}
           ${currentRole !== 'superadmin' && r.locked ? `<span title="Locked by admin" style="font-size:13px;opacity:.6;flex-shrink:0">🔒</span>` : ''}
         </div>`;
