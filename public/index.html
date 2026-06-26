@@ -456,6 +456,9 @@ td input[type="number"]:hover { border-color: #7dbf99; }
 /* ── ALL-PLANTS AGGREGATE VIEW ───────────────────────── */
 #allPlantsView { display:none; }
 #entryCards { display:none; }
+#entryCards.locked-view input, #entryCards.locked-view select, #entryCards.locked-view button:not(.card-head button):not([onclick*="toggleDesig"]):not([onclick*="showAddContractor"]):not([onclick*="openKGTab"]) { pointer-events:none; opacity:0.45; }
+#entryCards.locked-view { position:relative; }
+#saleQtyInput.locked-input { pointer-events:none; opacity:0.45; }
 .ap-card { background:#fff; border:1px solid var(--border); border-radius:12px; padding:20px 22px; margin-bottom:18px; }
 .ap-card-title { font-weight:700; font-size:14px; color:var(--primary); margin-bottom:14px; }
 .ap-table { width:100%; border-collapse:collapse; font-size:13px; }
@@ -2019,6 +2022,90 @@ function pickCSVDate(d) {
    SAVE & LOAD RECORDS
 ═══════════════════════════════════════════════════════ */
 
+function previewRecord() {
+  const date = document.getElementById('dateInput').value;
+  const saleQty = parseFloat(document.getElementById('saleQtyInput').value) || 0;
+  const att = totalAtt(), kg = totalKG(), total = att + kg;
+  const mpk = saleQty > 0 ? r2(total / saleQty) : null;
+
+  const attRows = ATT_VENDORS.map(v => {
+    const w = parseInt(attState[v]?.workers) || 0;
+    const c = parseFloat(attState[v]?.cost) || 0;
+    if (!w && !c) return '';
+    return `<tr><td>${v}</td><td style="text-align:center">${w}</td><td style="text-align:right">${fc(c)}</td></tr>`;
+  }).filter(Boolean).join('');
+
+  const kgRows = [];
+  KG_VENDORS.forEach(v => {
+    (SKU_CFG[v] || []).forEach(([name, rate], i) => {
+      const qty = kgState[v]?.[i] || 0;
+      if (qty > 0) kgRows.push(`<tr><td>${v}</td><td>${name}</td><td style="text-align:center">${qty}</td><td style="text-align:right">${fc(qty * rate)}</td></tr>`);
+    });
+    (customSKUs[v] || []).forEach(sku => {
+      if ((sku.qty || 0) > 0) kgRows.push(`<tr><td>${v}</td><td>${sku.name}</td><td style="text-align:center">${sku.qty}</td><td style="text-align:right">${fc(sku.qty * sku.rate)}</td></tr>`);
+    });
+    const ul = unloadingCosts[v] || 0;
+    if (ul > 0) kgRows.push(`<tr><td>${v}</td><td>Unloading</td><td style="text-align:center">—</td><td style="text-align:right">${fc(ul)}</td></tr>`);
+  });
+
+  const dateStr = date ? new Date(date + 'T00:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
+  const tblStyle = 'width:100%;border-collapse:collapse;font-size:13px;margin-bottom:16px';
+  const thStyle = 'background:#e8f4ed;color:#1e6b45;padding:6px 10px;text-align:left;font-weight:700;border-bottom:1.5px solid #b6d9c7';
+  const tdStyle = 'padding:6px 10px;border-bottom:1px solid #eee';
+
+  document.body.insertAdjacentHTML('beforeend', `
+    <div id="previewModal" onclick="if(event.target===this)closePreviewModal()" style="position:fixed;inset:0;background:rgba(13,35,24,.72);backdrop-filter:blur(4px);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px">
+      <div style="background:#fff;border-radius:16px;width:100%;max-width:640px;max-height:88vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+        <div style="padding:18px 22px;border-bottom:1px solid #eee;display:flex;align-items:center;justify-content:space-between">
+          <div>
+            <div style="font-size:16px;font-weight:800;color:#1e3a28">Record Preview</div>
+            <div style="font-size:12px;color:#888;margin-top:2px">${dateStr}${(currentPlantName||activePlantName) ? ' • ' + (currentPlantName||activePlantName) : ''}</div>
+          </div>
+          <button onclick="closePreviewModal()" style="border:none;background:none;font-size:22px;color:#aaa;cursor:pointer;line-height:1">×</button>
+        </div>
+        <div style="overflow-y:auto;padding:20px 22px;flex:1">
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px">
+            <div style="background:#f0fdf4;border-radius:10px;padding:12px;text-align:center">
+              <div style="font-size:10px;color:#6b7280;text-transform:uppercase;letter-spacing:.5px">Att. Cost</div>
+              <div style="font-size:15px;font-weight:800;color:#1e6b45;margin-top:4px">${fc(att)}</div>
+            </div>
+            <div style="background:#f0fdf4;border-radius:10px;padding:12px;text-align:center">
+              <div style="font-size:10px;color:#6b7280;text-transform:uppercase;letter-spacing:.5px">KG Cost</div>
+              <div style="font-size:15px;font-weight:800;color:#1e6b45;margin-top:4px">${fc(kg)}</div>
+            </div>
+            <div style="background:#1e6b45;border-radius:10px;padding:12px;text-align:center">
+              <div style="font-size:10px;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:.5px">Total Cost</div>
+              <div style="font-size:15px;font-weight:800;color:#fff;margin-top:4px">${fc(total)}</div>
+            </div>
+            <div style="background:#f0fdf4;border-radius:10px;padding:12px;text-align:center">
+              <div style="font-size:10px;color:#6b7280;text-transform:uppercase;letter-spacing:.5px">MPK</div>
+              <div style="font-size:15px;font-weight:800;color:#1e6b45;margin-top:4px">${mpk != null ? '₹ ' + fn(mpk) : '—'}</div>
+            </div>
+          </div>
+          ${attRows ? `
+            <div style="font-size:12px;font-weight:700;color:#1e6b45;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Attendance</div>
+            <table style="${tblStyle}"><thead><tr>
+              <th style="${thStyle}">Contractor</th><th style="${thStyle};text-align:center">Workers</th><th style="${thStyle};text-align:right">Cost</th>
+            </tr></thead><tbody style="color:#2c3e30">${attRows.replace(/padding:6px 10px/g, tdStyle)}</tbody></table>` : '<div style="color:#aaa;font-size:13px;margin-bottom:16px">No attendance data entered.</div>'}
+          ${kgRows.length ? `
+            <div style="font-size:12px;font-weight:700;color:#1e6b45;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Per KG Costs</div>
+            <table style="${tblStyle}"><thead><tr>
+              <th style="${thStyle}">Vendor</th><th style="${thStyle}">SKU</th><th style="${thStyle};text-align:center">Qty</th><th style="${thStyle};text-align:right">Cost</th>
+            </tr></thead><tbody style="color:#2c3e30">${kgRows.join('').replace(/padding:6px 10px/g, tdStyle)}</tbody></table>` : '<div style="color:#aaa;font-size:13px">No KG cost data entered.</div>'}
+          <div style="font-size:12px;color:#888;margin-top:4px">Sale Qty: <strong style="color:#1e3a28">${saleQty > 0 ? saleQty.toLocaleString('en-IN') + ' kg' : '—'}</strong></div>
+        </div>
+        <div style="padding:14px 22px;border-top:1px solid #eee;display:flex;justify-content:flex-end;gap:10px">
+          <button onclick="closePreviewModal()" style="padding:8px 20px;border:1px solid #ddd;background:#fff;border-radius:8px;font-size:13px;cursor:pointer;color:#555">Close</button>
+          ${!_currentRecordLocked || currentRole==='superadmin' ? `<button onclick="closePreviewModal();saveRecord()" style="padding:8px 20px;background:#1e6b45;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">💾 Save Now</button>` : ''}
+        </div>
+      </div>
+    </div>`);
+}
+
+function closePreviewModal() {
+  document.getElementById('previewModal')?.remove();
+}
+
 async function saveRecord() {
   if (_currentRecordLocked && currentRole !== 'superadmin') {
     showToast('⚠ This record is locked. Ask superadmin to unlock it.', true);
@@ -2183,6 +2270,9 @@ function clearForm() {
 function _updateLockUI() {
   const saveBtn = document.querySelector('.btn-save-rec');
   const lockBadge = document.getElementById('lockBadge');
+  const entryCards = document.getElementById('entryCards');
+  const saleQty = document.getElementById('saleQtyInput');
+  const isLockedForUser = _currentRecordLocked && currentRole !== 'superadmin';
   if (_currentRecordLocked) {
     if (saveBtn) { saveBtn.disabled = true; saveBtn.title = 'Record is locked by superadmin'; saveBtn.style.opacity = '0.45'; }
     if (lockBadge) lockBadge.style.display = '';
@@ -2190,6 +2280,8 @@ function _updateLockUI() {
     if (saveBtn) { saveBtn.disabled = false; saveBtn.title = ''; saveBtn.style.opacity = ''; }
     if (lockBadge) lockBadge.style.display = 'none';
   }
+  if (entryCards) entryCards.classList.toggle('locked-view', isLockedForUser);
+  if (saleQty) saleQty.classList.toggle('locked-input', isLockedForUser);
 }
 
 async function lockAllRecords(lock) {
