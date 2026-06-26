@@ -263,6 +263,25 @@ router.delete('/:date', async (req, res) => {
   }
 });
 
+// PATCH /api/records/lock-all  — superadmin: lock or unlock ALL records for a plant
+router.patch('/lock-all', async (req, res) => {
+  if (req.user.role !== 'superadmin')
+    return res.status(403).json({ error: 'Superadmin only' });
+  const pid = getPlantId(req);
+  if (!pid) return res.status(400).json({ error: 'No plant selected' });
+  const locked = req.body?.locked === true || req.body?.locked === 'true';
+  try {
+    const { rowCount } = await db.query(
+      'UPDATE daily_records SET locked=$1, updated_at=NOW(), updated_by=$2 WHERE plant_id=$3',
+      [locked, req.user.username, pid]
+    );
+    res.json({ ok: true, locked, count: rowCount });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // PATCH /api/records/:date/lock  — superadmin: lock or unlock a record
 router.patch('/:date/lock', async (req, res) => {
   if (req.user.role !== 'superadmin')

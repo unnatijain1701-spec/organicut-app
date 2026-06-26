@@ -706,7 +706,13 @@ tr.dash-row-alt td { background: #f7fdf9; }
 <div id="historyPanel">
   <div class="hist-header">
     <span class="hist-title">Saved Records</span>
-    <button class="hist-close" onclick="toggleHistory(false)">×</button>
+    <div style="display:flex;align-items:center;gap:6px">
+      <span id="histBulkLockBtns" style="display:none;gap:6px;display:none">
+        <button class="btn" onclick="lockAllRecords(true)" title="Lock all records" style="font-size:11px;padding:3px 8px;background:#fef9c3;color:#92400e;border:1px solid #fcd34d">🔒 Lock All</button>
+        <button class="btn" onclick="lockAllRecords(false)" title="Unlock all records" style="font-size:11px;padding:3px 8px;background:#f0fdf4;color:#166534;border:1px solid #86efac">🔓 Unlock All</button>
+      </span>
+      <button class="hist-close" onclick="toggleHistory(false)">×</button>
+    </div>
   </div>
   <div id="historyList"><div class="hist-empty">Loading…</div></div>
 </div>
@@ -1071,6 +1077,7 @@ async function checkAuth() {
       document.getElementById('navUsers').style.display = isSuperadmin ? '' : 'none';
       document.getElementById('navDashboard').style.display = canSeeDashboard ? '' : 'none';
       document.getElementById('navVendors').style.display = isSuperadmin ? '' : 'none';
+      document.getElementById('histBulkLockBtns').style.display = isSuperadmin ? 'flex' : 'none';
       document.getElementById('loginOverlay').style.display = 'none';
       if (!currentPlantId) await setupPlantSelector();
       await initApp();
@@ -1135,6 +1142,7 @@ async function doLogin() {
     document.getElementById('navUsers').style.display = isSuperadmin ? '' : 'none';
     document.getElementById('navDashboard').style.display = canSeeDashboard ? '' : 'none';
     document.getElementById('navVendors').style.display = isSuperadmin ? '' : 'none';
+    document.getElementById('histBulkLockBtns').style.display = isSuperadmin ? 'flex' : 'none';
     document.getElementById('loginOverlay').style.display = 'none';
     if (!currentPlantId) await setupPlantSelector();
     await initApp();
@@ -2180,6 +2188,23 @@ function _updateLockUI() {
   } else {
     if (saveBtn) { saveBtn.disabled = false; saveBtn.title = ''; saveBtn.style.opacity = ''; }
     if (lockBadge) lockBadge.style.display = 'none';
+  }
+}
+
+async function lockAllRecords(lock) {
+  const action = lock ? 'lock' : 'unlock';
+  if (!confirm(`This will ${action} ALL saved records for this plant. Continue?`)) return;
+  try {
+    const pid = activePlantId || currentPlantId;
+    const url = '/api/records/lock-all' + (pid ? '?plantId=' + pid : '');
+    const result = await api('PATCH', url, { locked: lock });
+    showToast(`${lock ? '🔒 Locked' : '🔓 Unlocked'} ${result.count} record${result.count !== 1 ? 's' : ''}`, false);
+    loadHistory();
+    // Update topbar if current date's record was affected
+    _currentRecordLocked = lock;
+    _updateLockUI();
+  } catch (e) {
+    showToast('⚠ ' + e.message, true);
   }
 }
 
