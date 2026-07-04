@@ -1766,10 +1766,25 @@ function renderUnloadingTable() {
   </table></div>`;
 }
 
+// Legacy vendor tabs to retire on a cutoff date. The tab stays visible for
+// records dated BEFORE `from` (so historical entries still display), and is
+// hidden for records dated ON/AFTER `from`. No data is deleted — old records
+// keep their own rate snapshots regardless of tab visibility.
+const LEGACY_VENDOR_CUTOFFS = [
+  { plant: 'Bangalore', name: 'Vendor', from: '2026-07-03' },
+];
+function isHiddenLegacyVendor(v) {
+  const plant = currentPlantName || activePlantName;
+  const date  = (document.getElementById('dateInput')?.value || '').slice(0, 10);
+  if (!plant || !date) return false;
+  return LEGACY_VENDOR_CUTOFFS.some(r =>
+    r.plant === plant && r.name === v && date >= r.from);
+}
+
 function renderKGTabs() {
   renderUnloadingTable();
 
-  const procVendors = KG_VENDORS.filter(v => !isUnloadingVendor(v));
+  const procVendors = KG_VENDORS.filter(v => !isUnloadingVendor(v) && !isHiddenLegacyVendor(v));
   if (!procVendors.includes(activeTab)) activeTab = procVendors[0] || '';
 
   document.getElementById('kgTabNav').innerHTML = procVendors.map(v => {
