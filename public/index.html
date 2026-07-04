@@ -689,6 +689,7 @@ tr.dash-row-alt td { background: #f7fdf9; }
     <select class="users-input" id="newUserRole" style="cursor:pointer" onchange="onNewUserRoleChange(this.value)">
       <option value="user">Operator (can enter data)</option>
       <option value="admin">Admin (full access)</option>
+      <option value="superadmin">Superadmin (all plants, no restrictions)</option>
     </select>
     <select class="users-input" id="newUserPlant" style="cursor:pointer;display:none">
       <option value="">— Select Plant —</option>
@@ -993,6 +994,10 @@ tr.dash-row-alt td { background: #f7fdf9; }
       <div id="unloadingTableWrap"></div>
     </div>
     <div id="kgCatProcessing" style="display:none">
+      <div id="rateChangeBanner" style="display:none;margin:10px 16px 0;padding:10px 14px;background:#fefce8;border:1px solid #fcd34d;border-radius:8px;font-size:12.5px;color:#78350f;display:none;align-items:center;gap:10px">
+        <span>⚠ Rates have been updated since this record was saved. Displayed costs reflect the <strong>original saved rates</strong>.</span>
+        <button onclick="recalcWithCurrentRates()" style="white-space:nowrap;padding:4px 12px;background:#1e6b45;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer">↺ Recalculate with current rates</button>
+      </div>
       <div class="tabs" id="kgTabNav"></div>
       <div id="kgTabPanes"></div>
     </div>
@@ -1035,6 +1040,7 @@ let _cachedCSVFile = null;
 let _freshCSVLoaded = false;  // true immediately after CSV upload; prevents saved record from overwriting attendance
 let _isDirty = false;         // true when form has unsaved changes
 let _currentRecordLocked = false;
+let _rateChangedOnLoad = false;
 
 /* ═══════════════════════════════════════════════════════
    API HELPER
@@ -2215,6 +2221,8 @@ function applyRecord(record) {
   KG_VENDORS.forEach(v => { kgState[v] = new Array((SKU_CFG[v] || []).length).fill(0); });
   customSKUs_resetQty();
 
+  // Track if any saved rate differs from current rate
+  let rateChanged = false;
   (record.kgEntries || []).forEach(e => {
     const v   = e.vendor_name;
     const qty = parseFloat(e.qty) || 0;
@@ -2226,11 +2234,21 @@ function applyRecord(record) {
     if (idx >= 0) {
       if (!kgState[v]) kgState[v] = new Array((SKU_CFG[v] || []).length).fill(0);
       kgState[v][idx] = qty;
+      // If saved rate differs from current, temporarily use saved rate for accurate display
+      const savedRate = parseFloat(e.rate);
+      const currentRate = SKU_CFG[v][idx][1];
+      if (!isNaN(savedRate) && Math.abs(savedRate - currentRate) > 0.001) {
+        rateChanged = true;
+        SKU_CFG[v][idx][1] = savedRate; // use saved rate for display
+      }
     } else {
       const cs = customSKUs[v]?.find(s => s.name === e.sku_name);
-      if (cs) cs.qty = qty;
+      if (cs) { cs.qty = qty; if (e.rate) cs.rate = parseFloat(e.rate); }
     }
   });
+  _rateChangedOnLoad = rateChanged;
+  const banner = document.getElementById('rateChangeBanner');
+  if (banner) banner.style.display = rateChanged ? 'flex' : 'none';
 
   if (record.sale_qty != null) {
     document.getElementById('saleQtyInput').value = parseFloat(record.sale_qty) || '';
@@ -2271,7 +2289,22 @@ function clearForm() {
   recalc();
   _isDirty = false; // recalc sets dirty, reset after clear
   _currentRecordLocked = false;
+  _rateChangedOnLoad = false;
+  const banner = document.getElementById('rateChangeBanner');
+  if (banner) banner.style.display = 'none';
   _updateLockUI();
+}
+
+async function recalcWithCurrentRates() {
+  // Reload current rates from DB, then re-render tabs so new rates apply
+  await loadSKURateOverrides();
+  _rateChangedOnLoad = false;
+  const banner = document.getElementById('rateChangeBanner');
+  if (banner) banner.style.display = 'none';
+  renderKGTabs();
+  recalc();
+  markDirty();
+  showToast('↺ Costs recalculated with current rates. Review and save.', false);
 }
 
 function _updateLockUI() {
