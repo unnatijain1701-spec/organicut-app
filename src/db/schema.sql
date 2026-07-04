@@ -331,3 +331,288 @@ ALTER TABLE daily_records ADD COLUMN IF NOT EXISTS locked BOOLEAN NOT NULL DEFAU
 
 -- Promote any existing admin with no plant to superadmin
 UPDATE users SET role = 'superadmin' WHERE role = 'admin' AND plant_id IS NULL;
+
+
+-- ============================================================
+-- Bangalore customer-wise pricing seed (auto-generated)
+-- Adds one vendor tab per customer + their SKUs with new rates.
+-- Safe: ON CONFLICT DO NOTHING — does not overwrite existing data.
+-- Existing Bangalore SKUs / records are untouched.
+-- ============================================================
+
+-- 1) Customer tabs (vendors)
+INSERT INTO kg_vendors (name, display_order, plant_id)
+SELECT v.name, v.ord, p.id FROM (VALUES
+  ('ITC', 11),
+  ('Gopizza', 12),
+  ('Peppercorn', 13),
+  ('Griffith', 14),
+  ('Jubilant', 15),
+  ('Shilton', 16),
+  ('Amicus (Salad Days)', 17),
+  ('Compass', 18),
+  ('Taj SATS', 19),
+  ('Swiggy', 20)
+) AS v(name, ord)
+CROSS JOIN (SELECT id FROM plants WHERE name = 'Bangalore') AS p
+ON CONFLICT (plant_id, name) DO NOTHING;
+
+-- 2) SKUs per customer tab
+-- ITC
+INSERT INTO custom_skus (plant_id, vendor_name, sku_name, rate, display_order)
+SELECT p.id, v.vendor, v.sku, v.rate, v.ord FROM (VALUES
+  ('ITC', 'Ladyfinger', 8, 1)
+) AS v(vendor, sku, rate, ord)
+CROSS JOIN (SELECT id FROM plants WHERE name = 'Bangalore') AS p
+ON CONFLICT (plant_id, vendor_name, sku_name) DO NOTHING;
+
+-- Gopizza
+INSERT INTO custom_skus (plant_id, vendor_name, sku_name, rate, display_order)
+SELECT p.id, v.vendor, v.sku, v.rate, v.ord FROM (VALUES
+  ('Gopizza', 'Onion Slice decoring', 4.275, 1),
+  ('Gopizza', 'Capsicum decoring', 4.36, 2)
+) AS v(vendor, sku, rate, ord)
+CROSS JOIN (SELECT id FROM plants WHERE name = 'Bangalore') AS p
+ON CONFLICT (plant_id, vendor_name, sku_name) DO NOTHING;
+
+-- Peppercorn
+INSERT INTO custom_skus (plant_id, vendor_name, sku_name, rate, display_order)
+SELECT p.id, v.vendor, v.sku, v.rate, v.ord FROM (VALUES
+  ('Peppercorn', 'Peeled Onion', 5.575, 1),
+  ('Peppercorn', 'Potato', 16.3, 2)
+) AS v(vendor, sku, rate, ord)
+CROSS JOIN (SELECT id FROM plants WHERE name = 'Bangalore') AS p
+ON CONFLICT (plant_id, vendor_name, sku_name) DO NOTHING;
+
+-- Griffith
+INSERT INTO custom_skus (plant_id, vendor_name, sku_name, rate, display_order)
+SELECT p.id, v.vendor, v.sku, v.rate, v.ord FROM (VALUES
+  ('Griffith', 'Chilli Green Destem', 7, 1),
+  ('Griffith', 'Peeled Onion Peeling', 4.275, 2)
+) AS v(vendor, sku, rate, ord)
+CROSS JOIN (SELECT id FROM plants WHERE name = 'Bangalore') AS p
+ON CONFLICT (plant_id, vendor_name, sku_name) DO NOTHING;
+
+-- Jubilant
+INSERT INTO custom_skus (plant_id, vendor_name, sku_name, rate, display_order)
+SELECT p.id, v.vendor, v.sku, v.rate, v.ord FROM (VALUES
+  ('Jubilant', 'Capsicum Cut', 5.69, 1),
+  ('Jubilant', 'Onion Cut', 11.215, 2),
+  ('Jubilant', 'Tomato Cut', 10.86, 3),
+  ('Jubilant', 'Mushroom Cut', 5.5, 4)
+) AS v(vendor, sku, rate, ord)
+CROSS JOIN (SELECT id FROM plants WHERE name = 'Bangalore') AS p
+ON CONFLICT (plant_id, vendor_name, sku_name) DO NOTHING;
+
+-- Shilton
+INSERT INTO custom_skus (plant_id, vendor_name, sku_name, rate, display_order)
+SELECT p.id, v.vendor, v.sku, v.rate, v.ord FROM (VALUES
+  ('Shilton', 'Baby Corn', 9, 1),
+  ('Shilton', 'Beetroot', 9, 2),
+  ('Shilton', 'Coriander', 9, 3),
+  ('Shilton', 'Bitter gourd', 9, 4),
+  ('Shilton', 'Green Cabbage', 9, 5),
+  ('Shilton', 'Spinach', 9, 6),
+  ('Shilton', 'Ladyfinger', 9, 7),
+  ('Shilton', 'Long Beans', 9, 8),
+  ('Shilton', 'Mushroom', 1.3, 9),
+  ('Shilton', 'Peeled Sambhar Onion', 1.3, 10),
+  ('Shilton', 'Spring Onion', 1.3, 11),
+  ('Shilton', 'Banana Raw small dice', 9, 12),
+  ('Shilton', 'Beans cluster small dice', 9, 13),
+  ('Shilton', 'Bottle Guard Dice', 9, 14),
+  ('Shilton', 'Broccoli Florettes', 9, 15),
+  ('Shilton', 'Cabbage Green small dice', 9, 16),
+  ('Shilton', 'Carrot Diamond Cut', 18.3, 17),
+  ('Shilton', 'Carrot Small Dice', 9, 18),
+  ('Shilton', 'Cauliflower Florets', 9, 19),
+  ('Shilton', 'Chow Chow Small Dice', 9, 20),
+  ('Shilton', 'Curry Leaves', 9, 21),
+  ('Shilton', 'Drumsticks Finger cut', 9, 22),
+  ('Shilton', 'Garlic Chopped', 4, 23),
+  ('Shilton', 'Green Capsicum whole', 1.3, 24),
+  ('Shilton', 'Green Chilli Destem', 7, 25),
+  ('Shilton', 'Haricot Beans Diamond cut', 9, 26),
+  ('Shilton', 'Hericot Beans small dice', 9, 27),
+  ('Shilton', 'Onion Red Chopped', 4.275, 28),
+  ('Shilton', 'Onion Red Peeled', 4.275, 29),
+  ('Shilton', 'Onion Red Sliced', 11.575, 30),
+  ('Shilton', 'Pumpkin Red Large Dice Sambar', 9, 31),
+  ('Shilton', 'Red Capsicum Whole', 1.3, 32),
+  ('Shilton', 'Ridge Gourd small dice', 9, 33),
+  ('Shilton', 'Snake Guard small dice', 9, 34),
+  ('Shilton', 'Tindli Dice cut', 9, 35),
+  ('Shilton', 'Yellow Capsicum Whole', 1.3, 36),
+  ('Shilton', 'Zucchini Green whole', 1.3, 37),
+  ('Shilton', 'Zucchini Yellow whole', 1.3, 38),
+  ('Shilton', 'Carrot Orange Julienne', 18.8, 39)
+) AS v(vendor, sku, rate, ord)
+CROSS JOIN (SELECT id FROM plants WHERE name = 'Bangalore') AS p
+ON CONFLICT (plant_id, vendor_name, sku_name) DO NOTHING;
+
+-- Amicus (Salad Days)
+INSERT INTO custom_skus (plant_id, vendor_name, sku_name, rate, display_order)
+SELECT p.id, v.vendor, v.sku, v.rate, v.ord FROM (VALUES
+  ('Amicus (Salad Days)', 'Onion', 4.275, 1),
+  ('Amicus (Salad Days)', 'Ginger', 46, 2),
+  ('Amicus (Salad Days)', 'Pomegranate', 24, 3)
+) AS v(vendor, sku, rate, ord)
+CROSS JOIN (SELECT id FROM plants WHERE name = 'Bangalore') AS p
+ON CONFLICT (plant_id, vendor_name, sku_name) DO NOTHING;
+
+-- Compass
+INSERT INTO custom_skus (plant_id, vendor_name, sku_name, rate, display_order)
+SELECT p.id, v.vendor, v.sku, v.rate, v.ord FROM (VALUES
+  ('Compass', 'Beetroot Peeled', 4.6, 1),
+  ('Compass', 'Baby Corn Peeled', 4.6, 2),
+  ('Compass', 'Cabbage', 4.6, 3),
+  ('Compass', 'Cabbage Red Shredded', 4.6, 4),
+  ('Compass', 'Capsicum Green', 4.6, 5),
+  ('Compass', 'Capsicum Red Cut', 4.6, 6),
+  ('Compass', 'Capsicum Yellow', 4.6, 7),
+  ('Compass', 'Carrot Orange Cut', 16.3, 8),
+  ('Compass', 'Carrot Orange Peeled', 8.3, 9),
+  ('Compass', 'Dill Leaves cleaned', 4.6, 10),
+  ('Compass', 'Ginger Peeled', 47.3, 11),
+  ('Compass', 'Garlic Peeled', 4.6, 12),
+  ('Compass', 'Mushroom 1/2 Cut', 4.6, 13),
+  ('Compass', 'Mushroom 1/4 Cut', 4.6, 14),
+  ('Compass', 'Onion Chopped', 8.875, 15),
+  ('Compass', 'Onion Peeled', 8.875, 16),
+  ('Compass', 'Potato Chopped', 12.3, 17),
+  ('Compass', 'Potato Peeled', 8.3, 18),
+  ('Compass', 'Pumpkin Red Cut', 4.6, 19),
+  ('Compass', 'Ridge Gourd', 4.6, 20),
+  ('Compass', 'Spinach Cut', 4.6, 21),
+  ('Compass', 'Spring Onion Chopped', 4.6, 22),
+  ('Compass', 'Bitter Gourd', 4.6, 23),
+  ('Compass', 'Bottlegourd', 4.6, 24),
+  ('Compass', 'Knolkhol', 4.6, 25),
+  ('Compass', 'Zucchini Green Cut', 4.6, 26),
+  ('Compass', 'Chow Chow', 4.6, 27),
+  ('Compass', 'Curry Leaves', 4.6, 28),
+  ('Compass', 'Green Chilli', 4.6, 29),
+  ('Compass', 'Drumstick', 4.6, 30),
+  ('Compass', 'Methi', 4.6, 31),
+  ('Compass', 'Onion SambarSmall', 4.6, 32),
+  ('Compass', 'Radish White', 4.6, 33),
+  ('Compass', 'Tendli', 4.6, 34),
+  ('Compass', 'Yam', 4.6, 35),
+  ('Compass', 'Cluster Beans', 4.6, 36),
+  ('Compass', 'Pumpkin White', 4.6, 37),
+  ('Compass', 'Raw Banana', 4.6, 38),
+  ('Compass', 'Snake Gourd', 4.6, 39),
+  ('Compass', 'Papaya', 10.8, 40),
+  ('Compass', 'Beetroot Slices', 4.6, 41),
+  ('Compass', 'Okra Ring', 4.6, 42),
+  ('Compass', 'Zucchini Yellow', 4.6, 43),
+  ('Compass', 'Jack Fruit Cubed', 4.6, 44),
+  ('Compass', 'Pineapple Cubes', 10.8, 45),
+  ('Compass', 'Watermelon Cubes', 10.8, 46),
+  ('Compass', 'Muskmelon', 10.8, 47),
+  ('Compass', 'Brinjal Round', 4.6, 48),
+  ('Compass', 'Sweet Potato', 4.6, 49),
+  ('Compass', 'Dent Leaves', 4.6, 50)
+) AS v(vendor, sku, rate, ord)
+CROSS JOIN (SELECT id FROM plants WHERE name = 'Bangalore') AS p
+ON CONFLICT (plant_id, vendor_name, sku_name) DO NOTHING;
+
+-- Taj SATS
+INSERT INTO custom_skus (plant_id, vendor_name, sku_name, rate, display_order)
+SELECT p.id, v.vendor, v.sku, v.rate, v.ord FROM (VALUES
+  ('Taj SATS', 'BABY CORN BATON', 9, 1),
+  ('Taj SATS', 'BEANS BATTON', 30.3, 2),
+  ('Taj SATS', 'BEANS HARICOT', 30.3, 3),
+  ('Taj SATS', 'BEETROOT CUBE', 9, 4),
+  ('Taj SATS', 'BOTTLEGOURD CUBE SEEDLESS 1CM', 9, 5),
+  ('Taj SATS', 'BRINJAL BHARTA CUBE', 9, 6),
+  ('Taj SATS', 'CABBAGE SHREDDED', 9, 7),
+  ('Taj SATS', 'CARROT BATON', 18.3, 8),
+  ('Taj SATS', 'CARROT DICED', 18.3, 9),
+  ('Taj SATS', 'CARROT JULIENNE', 18.3, 10),
+  ('Taj SATS', 'CHILLI BHAJI RING CUT', 9, 11),
+  ('Taj SATS', 'CORIANDER W/O ROOTS', 9, 12),
+  ('Taj SATS', 'CURRY LEAVES PEALED', 9, 13),
+  ('Taj SATS', 'GARLIC PEELED', 9, 14),
+  ('Taj SATS', 'GINGER PEELED', 47.3, 15),
+  ('Taj SATS', 'GREEN CHILLI CHOPPED', 9, 16),
+  ('Taj SATS', 'LADIES FINGER RINGCUT', 9, 17),
+  ('Taj SATS', 'MIXED CAPSICUM CHOPPED', 13.39, 18),
+  ('Taj SATS', 'MIXED CAPSICUM JULIENNE', 13.39, 19),
+  ('Taj SATS', 'MUSHROOM SLICE', 9, 20),
+  ('Taj SATS', 'ONION PEELED', 9, 21),
+  ('Taj SATS', 'ONION SLICED', 11.575, 22),
+  ('Taj SATS', 'PARVAL CUBE', 9, 23),
+  ('Taj SATS', 'PEELED CARROT', 9, 24),
+  ('Taj SATS', 'PEELED MINT', 9, 25),
+  ('Taj SATS', 'PEELED SAMBHAR ONION', 9, 26),
+  ('Taj SATS', 'POTATO CUBE', 12.3, 27),
+  ('Taj SATS', 'POTATO DICED', 16.3, 28),
+  ('Taj SATS', 'POTATO PEELED', 8.3, 29),
+  ('Taj SATS', 'POTATO SLICE', 14.3, 30),
+  ('Taj SATS', 'POTATO WEDGES', 14.3, 31),
+  ('Taj SATS', 'PUMPKIN DICE 1CM', 9, 32),
+  ('Taj SATS', 'SPINACH LEAVES WITHOUT ROOTS & STUM', 9, 33),
+  ('Taj SATS', 'TONDLI 1/4 CUT', 9, 34),
+  ('Taj SATS', 'WHITE PUMPKIN DICE', 9, 35),
+  ('Taj SATS', 'ZUCCHINI GREEN', 9, 36),
+  ('Taj SATS', 'ZUCCHINI GREEN DIAMOND CUT', 9, 37),
+  ('Taj SATS', 'ZUCCHINI MIXED JULLIENE', 9, 38),
+  ('Taj SATS', 'ZUCCHINI YELLOW', 9, 39),
+  ('Taj SATS', 'ZUCCHINI YELLOW DIAMOND CUT', 9, 40),
+  ('Taj SATS', 'WHOLE MUSHROOM', 9, 41),
+  ('Taj SATS', 'CAPSICUM GREEN', 9, 42),
+  ('Taj SATS', 'CUCUMBER BABY EUROPEAN', 1.3, 43),
+  ('Taj SATS', 'CHOW CHOW CUBE', 9, 44),
+  ('Taj SATS', 'CAPSICUM RED', 1.3, 45),
+  ('Taj SATS', 'CAPSICUM YELLOW', 1.3, 46),
+  ('Taj SATS', 'PUMPKIN RED', 1.3, 47),
+  ('Taj SATS', 'WHITE PUMPKIN', 9, 48),
+  ('Taj SATS', 'Raw Papaya', 9, 49),
+  ('Taj SATS', 'BEANS SMALL DICED', 30.3, 50),
+  ('Taj SATS', 'Green Chilli Destem', 7, 51),
+  ('Taj SATS', 'Beetroot', 9, 52),
+  ('Taj SATS', 'SNAKE GOURD', 9, 53),
+  ('Taj SATS', 'BEETROOT WHOLE', 9, 54),
+  ('Taj SATS', 'Ridge Gourd', 9, 55)
+) AS v(vendor, sku, rate, ord)
+CROSS JOIN (SELECT id FROM plants WHERE name = 'Bangalore') AS p
+ON CONFLICT (plant_id, vendor_name, sku_name) DO NOTHING;
+
+-- Swiggy
+INSERT INTO custom_skus (plant_id, vendor_name, sku_name, rate, display_order)
+SELECT p.id, v.vendor, v.sku, v.rate, v.ord FROM (VALUES
+  ('Swiggy', 'Ash Gourd - Cut', 7.5, 1),
+  ('Swiggy', 'Ash Gourd Portion', 7.5, 2),
+  ('Swiggy', 'Baby Corn Peeled', 8, 3),
+  ('Swiggy', 'Broccoli Florets', 8, 4),
+  ('Swiggy', 'Brown Chana Sprouts', 8, 5),
+  ('Swiggy', 'Chopped Coriander Leaves', 16, 6),
+  ('Swiggy', 'Coconut Chunks (Naral)', 19, 7),
+  ('Swiggy', 'Coconut Grated', 19, 8),
+  ('Swiggy', 'Diced Muskmelon (Karbuja)', 10.28, 9),
+  ('Swiggy', 'Diced Papaya (Papita)', 10.28, 10),
+  ('Swiggy', 'Drumstick Cut', 8, 11),
+  ('Swiggy', 'Green Peas Peeled', 34, 12),
+  ('Swiggy', 'Sambhar Mix- s', 15.2, 13),
+  ('Swiggy', 'Fruit Chat Mix', 7.2, 14),
+  ('Swiggy', 'Garlic- Ginger Chopped', 12.8, 15),
+  ('Swiggy', 'Lady Finger', 8, 16),
+  ('Swiggy', 'Mixed Sprouts', 9.14, 17),
+  ('Swiggy', 'Moong Sprouts (Modache Moog)', 9.14, 18),
+  ('Swiggy', 'Peeled Garlic (Lahsun)', 16, 19),
+  ('Swiggy', 'Peeled Pomegranate (Anaar)', 24, 20),
+  ('Swiggy', 'Peeled Sambhar Onion (Pyaaz)', 8, 21),
+  ('Swiggy', 'Peeled Sweet Corn', 8, 22),
+  ('Swiggy', 'Pineapple Slices', 10.28, 23),
+  ('Swiggy', 'Pulaw Mix', 15.2, 24),
+  ('Swiggy', 'Pumpkin portion cut', 7.5, 25),
+  ('Swiggy', 'Red Pumpkin Cut', 7.5, 26),
+  ('Swiggy', 'Sukto Mix', 19, 27),
+  ('Swiggy', 'Yam (Cut Portion)', 7.5, 28),
+  ('Swiggy', 'Cauliflower Florets', 8, 29),
+  ('Swiggy', 'Ugadi Pachadi 1Pack', 3.5, 30)
+) AS v(vendor, sku, rate, ord)
+CROSS JOIN (SELECT id FROM plants WHERE name = 'Bangalore') AS p
+ON CONFLICT (plant_id, vendor_name, sku_name) DO NOTHING;
+
