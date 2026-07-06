@@ -148,6 +148,29 @@ router.get('/allplants/:date', async (req, res) => {
   }
 });
 
+// GET /api/records/audit  — superadmin: recent deletion audit entries for a plant
+router.get('/audit', async (req, res) => {
+  if (req.user.role !== 'superadmin')
+    return res.status(403).json({ error: 'Superadmin only' });
+  const pid = getPlantId(req);
+  try {
+    const params = [];
+    let where = '';
+    if (pid) { where = 'WHERE a.plant_id = $1'; params.push(pid); }
+    const { rows } = await db.query(`
+      SELECT a.record_date, a.action, a.details, a.username, a.created_at, p.name AS plant_name
+      FROM audit_log a LEFT JOIN plants p ON p.id = a.plant_id
+      ${where}
+      ORDER BY a.created_at DESC
+      LIMIT 300
+    `, params);
+    res.json(rows);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // GET /api/records/:date  — full record with attendance + KG breakdown
 router.get('/:date', async (req, res) => {
   const pid = getPlantId(req);
@@ -216,6 +239,25 @@ router.post('/', async (req, res) => {
 
     const recordId = rows[0].id;
 
+    // --- Audit: detect vendors/SKUs removed compared to what was previously saved ---
+    const { rows: oldAtt } = await client.query(
+      'SELECT contractor_name FROM contractor_attendance WHERE record_id = $1', [recordId]);
+    const { rows: oldKg } = await client.query(
+      'SELECT vendor_name, sku_name FROM vendor_kg_entries WHERE record_id = $1', [recordId]);
+    const newAttNames = new Set((attendance || []).map(a => a.contractorName));
+    const newKgKeys   = new Set((kgEntries || []).map(e => e.vendorName + '||' + e.skuName));
+    const removedAtt = oldAtt.map(r => r.contractor_name).filter(n => !newAttNames.has(n));
+    const removedKg  = oldKg.filter(r => !newKgKeys.has(r.vendor_name + '||' + r.sku_name))
+                            .map(r => `${r.vendor_name}/${r.sku_name === '__UNLOADING__' ? 'Unloading' : r.sku_name}`);
+    const auditParts = [];
+    if (removedAtt.length) auditParts.push('Attendance removed: ' + removedAtt.join(', '));
+    if (removedKg.length)  auditParts.push('KG entries removed: ' + removedKg.join(', '));
+    if (auditParts.length) {
+      await client.query(
+        'INSERT INTO audit_log (plant_id, record_date, action, details, username) VALUES ($1,$2,$3,$4,$5)',
+        [pid, date, 'remove_entries', auditParts.join('; '), req.user.username]);
+    }
+
     await client.query('DELETE FROM contractor_attendance WHERE record_id = $1', [recordId]);
     for (const a of (attendance || [])) {
       await client.query(
@@ -251,11 +293,24 @@ router.delete('/:date', async (req, res) => {
   const pid = getPlantId(req);
   if (!pid) return res.status(400).json({ error: 'No plant selected' });
   try {
+    // Capture what's being deleted for the audit log, before it's gone
+    const { rows: existing } = await db.query(
+      'SELECT total_cost, sale_qty, mpk FROM daily_records WHERE plant_id = $1 AND record_date = $2',
+      [pid, req.params.date]
+    );
     const { rowCount } = await db.query(
       'DELETE FROM daily_records WHERE plant_id = $1 AND record_date = $2',
       [pid, req.params.date]
     );
     if (!rowCount) return res.status(404).json({ error: 'Record not found' });
+    const e0 = existing[0];
+    const details = e0
+      ? `Deleted full day record (total ₹${e0.total_cost}, sale qty ${e0.sale_qty}, MPK ${e0.mpk})`
+      : 'Deleted full day record';
+    await db.query(
+      'INSERT INTO audit_log (plant_id, record_date, action, details, username) VALUES ($1,$2,$3,$4,$5)',
+      [pid, req.params.date, 'delete_record', details, req.user.username]
+    );
     res.json({ ok: true });
   } catch (e) {
     console.error(e);
