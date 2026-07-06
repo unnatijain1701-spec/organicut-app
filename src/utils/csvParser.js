@@ -44,50 +44,22 @@ function processCSV(text, filterDate) {
     r.length > col.contractor && (r[col.contractor] || '').trim()
   );
 
-  // Collect all dates present in the file
-  const allDates = new Set();
-  if (col.date !== -1) {
-    dataRows.forEach(r => {
-      const d = (r[col.date] || '').trim();
-      if (d) allDates.add(d);
-    });
-  }
+  // Normalise every row's Attendance Date to canonical ISO (YYYY-MM-DD).
+  // rowISO[i] holds the ISO date for dataRows[i]; allDates is the set of ISO dates.
+  const rowISO = dataRows.map(r => col.date !== -1 ? parseDateToISO((r[col.date] || '').trim()) : null);
+  const allDates = new Set(rowISO.filter(Boolean));
 
-  // CSV dates are DD-MM-YYYY; convert to YYYY-MM-DD for the frontend
-  const toISO = s => {
-    const p = s.split('-');
-    if (p.length === 3 && p[0].length === 2) return `${p[2]}-${p[1].padStart(2,'0')}-${p[0].padStart(2,'0')}`;
-    return s;
-  };
-  // Convert YYYY-MM-DD filterDate back to DD-MM-YYYY for matching
-  const toCSV = s => {
-    const p = s.split('-');
-    if (p.length === 3 && p[0].length === 4) return `${p[2]}-${p[1]}-${p[0]}`;
-    return s;
-  };
+  // Sorted unique ISO dates (ascending) — ISO strings sort chronologically as text
+  const sortedDates = [...allDates].sort();
 
-  const sortedDates = [...allDates].sort((a, b) => {
-    const parse = s => { const p = s.split('-'); return p[0].length === 2 ? new Date(p[2],p[1]-1,p[0]) : new Date(s); };
-    return parse(a) - parse(b);
-  }).map(toISO);
-
-  // Determine which date to use
+  // Determine which date to use. filterDate arrives from the frontend already as ISO.
   let activeCSVDate = null;
-  if (filterDate) {
-    const candidate = toCSV(filterDate);
-    if (allDates.has(candidate)) activeCSVDate = candidate;
-  }
-  if (!activeCSVDate && allDates.size > 0) {
-    // Default to last date in the file
-    activeCSVDate = [...allDates].sort((a, b) => {
-      const p = s => { const q = s.split('-'); return q[0].length === 2 ? new Date(q[2],q[1]-1,q[0]) : new Date(s); };
-      return p(a) - p(b);
-    }).pop();
-  }
+  if (filterDate && allDates.has(filterDate)) activeCSVDate = filterDate;
+  if (!activeCSVDate && sortedDates.length > 0) activeCSVDate = sortedDates[sortedDates.length - 1]; // latest
 
-  // Filter rows to the active date
+  // Filter rows to the active date (compare on normalised ISO, not raw text)
   const filtered = activeCSVDate
-    ? dataRows.filter(r => (r[col.date] || '').trim() === activeCSVDate)
+    ? dataRows.filter((r, i) => rowISO[i] === activeCSVDate)
     : dataRows;
 
   // Group by contractor (and designation within each contractor)
@@ -117,12 +89,43 @@ function processCSV(text, filterDate) {
 
   return {
     byContractor,
-    date:        activeCSVDate ? toISO(activeCSVDate) : null,
+    date:        activeCSVDate || null,
     sortedDates,
     totalRows:   filtered.length,
     unmapped:    0,
     unmappedNames: [],
   };
+}
+
+// Parse a date cell into canonical ISO (YYYY-MM-DD). Handles:
+//   DD-MM-YYYY / D-M-YYYY   (dashes, Indian)   -> e.g. 05-07-2026
+//   M/D/YYYY   / D/M/YYYY   (slashes)          -> e.g. 7/5/2026
+//   YYYY-MM-DD (already ISO)
+//   2-digit years (26 -> 2026)
+// When day and month are both <= 12 (ambiguous), the separator decides:
+//   '/' -> US M/D/YYYY,  '-' -> Indian D-M-YYYY.
+function parseDateToISO(raw) {
+  if (!raw) return null;
+  const s = String(raw).trim();
+  const sep = s.includes('/') ? '/' : (s.includes('-') ? '-' : null);
+  if (!sep) return null;
+  const parts = s.split(sep).map(p => p.trim());
+  if (parts.length !== 3) return null;
+
+  let Y, M, D;
+  if (parts[0].length === 4) {            // YYYY-MM-DD
+    Y = +parts[0]; M = +parts[1]; D = +parts[2];
+  } else {
+    let a = +parts[0], b = +parts[1];
+    Y = +parts[2];
+    if (Y < 100) Y += 2000;               // 2-digit year -> 20YY
+    if (a > 12)       { D = a; M = b; }    // first field must be the day
+    else if (b > 12)  { M = a; D = b; }    // second field must be the day
+    else              { if (sep === '/') { M = a; D = b; } else { D = a; M = b; } }
+  }
+  if (!Y || !M || !D || M < 1 || M > 12 || D < 1 || D > 31) return null;
+  const pad = n => String(n).padStart(2, '0');
+  return `${Y}-${pad(M)}-${pad(D)}`;
 }
 
 module.exports = { processCSV };
