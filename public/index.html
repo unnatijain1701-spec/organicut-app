@@ -1986,12 +1986,16 @@ async function onCSVUpload(e) {
 async function tryReprocessCSV() {
   if (!_cachedCSVFile) return;
   const date = document.getElementById('dateInput').value.trim();
+  if (!date) return;
   const fd = new FormData();
   fd.append('file', _cachedCSVFile);
-  if (date) fd.append('date', date);
+  fd.append('date', date);
   try {
     const result = await api('POST', '/api/upload/csv', fd);
-    if (result.date) document.getElementById('dateInput').value = result.date;
+    // Only apply the cached file if it actually contains data for the date the user
+    // selected. If it doesn't, the parser falls back to some other day — in that case
+    // do nothing: never override the chosen date, and let the saved DB record load.
+    if (result.date !== date) return;
     ATT_VENDORS = Object.keys(result.byContractor).sort();
     ATT_VENDORS.forEach(v => {
       const data = result.byContractor[v];
