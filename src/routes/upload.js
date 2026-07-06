@@ -34,14 +34,27 @@ function isExcelFile(file) {
   return file.mimetype === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 }
 
-// Convert an Excel buffer to CSV text (first sheet) so the existing parser can read it
+// Convert an Excel buffer to CSV text (first sheet) so the existing parser can read it.
+// Real Excel date cells are formatted as DD-MM-YYYY to match the CSV parser's expected
+// format — otherwise SheetJS emits US "M/D/YY", the date filter never matches, and the
+// parser silently falls back to the wrong day. Only actual date cells are reformatted,
+// so numeric columns (IDs, rates) are left untouched.
 function excelBufferToCSV(buffer) {
-  const wb = XLSX.read(buffer, { type: 'buffer' });
+  const wb = XLSX.read(buffer, { type: 'buffer', cellDates: true });
   const firstSheetName = wb.SheetNames[0];
   if (!firstSheetName) throw new Error('The Excel file has no sheets.');
   const sheet = wb.Sheets[firstSheetName];
-  // FS: ',' keeps CSV format; blankrows preserved so header-row detection still works
-  return XLSX.utils.sheet_to_csv(sheet, { FS: ',', blankrows: true });
+  const aoa = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, blankrows: true, defval: '' });
+  const EXCEL_EPOCH = Date.UTC(1899, 11, 30); // Excel day 0
+  const esc = s => /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  return aoa.map(row => row.map(cell => {
+    if (cell instanceof Date) {
+      // Round to a whole serial day so timezone offsets can't shift the date
+      const serial = Math.round((cell.getTime() - EXCEL_EPOCH) / 86400000);
+      return XLSX.SSF.format('dd-mm-yyyy', serial);
+    }
+    return esc(String(cell));
+  }).join(',')).join('\n');
 }
 
 // POST /api/upload/csv
