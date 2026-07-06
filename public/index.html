@@ -427,6 +427,27 @@ td input[type="number"]:hover { border-color: #7dbf99; }
 }
 .hist-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); }
 .hist-close { border: none; background: none; font-size: 20px; color: var(--muted); cursor: pointer; line-height: 1; }
+
+/* Superadmin "Manage" dropdown in the history header */
+.hist-mng { position: relative; }
+.hist-mng-btn {
+  font-size: 11.5px; font-weight: 700; padding: 5px 10px; cursor: pointer;
+  background: #fff; color: #1e6b45; border: 1px solid #bfe0cd; border-radius: 7px;
+}
+.hist-mng-btn:hover { background: #f0fdf4; }
+.hist-mng-menu {
+  display: none; position: absolute; top: calc(100% + 5px); right: 0; z-index: 300;
+  background: #fff; border: 1px solid var(--border); border-radius: 9px;
+  overflow: hidden; min-width: 180px; box-shadow: 0 8px 24px rgba(0,0,0,.14);
+}
+.hist-mng-menu.open { display: block; }
+.hist-mng-menu button {
+  display: flex; align-items: center; gap: 8px; width: 100%; padding: 10px 13px;
+  background: none; border: none; border-bottom: 1px solid #f1f5f3;
+  font-size: 12.5px; font-weight: 600; text-align: left; cursor: pointer; color: #234d34;
+}
+.hist-mng-menu button:last-child { border-bottom: none; }
+.hist-mng-menu button:hover { background: #f5faf7; }
 .hist-close:hover { color: #ef4444; }
 #historyList { flex: 1; overflow-y: auto; padding: 8px; }
 .hist-month { margin-bottom: 6px; }
@@ -733,10 +754,13 @@ tr.dash-row-alt td { background: #f7fdf9; }
   <div class="hist-header">
     <span class="hist-title">Saved Records</span>
     <div style="display:flex;align-items:center;gap:6px">
-      <span id="histBulkLockBtns" style="display:none;gap:6px;display:none">
-        <button class="btn" onclick="showAuditLog()" title="See who deleted records" style="font-size:11px;padding:3px 8px;background:#fee2e2;color:#991b1b;border:1px solid #fca5a5">🗑 Deletion Log</button>
-        <button class="btn" onclick="lockAllRecords(true)" title="Lock all records" style="font-size:11px;padding:3px 8px;background:#fef9c3;color:#92400e;border:1px solid #fcd34d">🔒 Lock All</button>
-        <button class="btn" onclick="lockAllRecords(false)" title="Unlock all records" style="font-size:11px;padding:3px 8px;background:#f0fdf4;color:#166534;border:1px solid #86efac">🔓 Unlock All</button>
+      <span id="histBulkLockBtns" class="hist-mng" style="display:none">
+        <button class="hist-mng-btn" onclick="toggleHistMng(event)">⚙ Manage ▾</button>
+        <div class="hist-mng-menu" id="histMngMenu">
+          <button onclick="showAuditLog();toggleHistMng()">🗑 Deletion Log</button>
+          <button onclick="lockAllRecords(true);toggleHistMng()">🔒 Lock All Records</button>
+          <button onclick="lockAllRecords(false);toggleHistMng()">🔓 Unlock All Records</button>
+        </div>
       </span>
       <button class="hist-close" onclick="toggleHistory(false)">×</button>
     </div>
@@ -2070,6 +2094,19 @@ function pickCSVDate(d) {
   document.getElementById('dateInput').value = d;
   tryReprocessCSV();
 }
+
+function toggleHistMng(e) {
+  if (e) e.stopPropagation();
+  const menu = document.getElementById('histMngMenu');
+  if (menu) menu.classList.toggle('open');
+}
+// Close the Manage menu when clicking anywhere else
+document.addEventListener('click', (e) => {
+  const menu = document.getElementById('histMngMenu');
+  if (menu && menu.classList.contains('open') && !e.target.closest('.hist-mng')) {
+    menu.classList.remove('open');
+  }
+});
 
 async function showAuditLog() {
   document.getElementById('auditModal')?.remove();
