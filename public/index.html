@@ -103,6 +103,20 @@ body {
 .field input[type="date"] { color-scheme: dark; min-width: 130px; }
 .field input[type="number"] { width: 110px; }
 
+/* Sale Qty — highlighted pill so operators don't miss it */
+#saleQtyField { padding: 3px 9px; border-radius: 9px; background: rgba(255,255,255,.10);
+  border: 1px solid rgba(255,255,255,.22); }
+#saleQtyField label { color: #ffe08a; font-weight: 800; }
+#saleQtyField input { background: #ffffff; color: #14311f; font-weight: 700;
+  border-color: #ffce54; }
+#saleQtyField input::placeholder { color: #9fb0a6; }
+/* Empty or zero → pulsing amber alert with a "required" hint */
+#saleQtyField.needs-sale { background: rgba(245,158,11,.22); border-color: #f59e0b;
+  animation: saleGlow 1.5s ease-in-out infinite; }
+#saleQtyField.needs-sale label::after { content: " ⚠ required"; color: #ffd27a; font-weight: 800; }
+#saleQtyField.needs-sale input { border-color: #f59e0b; box-shadow: 0 0 0 3px rgba(245,158,11,.30); }
+@keyframes saleGlow { 0%,100% { box-shadow: 0 0 0 0 rgba(245,158,11,.5);} 50% { box-shadow: 0 0 0 5px rgba(245,158,11,.10);} }
+
 .spacer { flex: 1; min-width: 4px; }
 .tb-sep { width: 1px; height: 18px; background: rgba(255,255,255,.22); flex-shrink: 0; margin: 0 2px; }
 .tb-actions { display: flex; align-items: center; gap: 6px; }
@@ -886,7 +900,7 @@ tr.dash-row-alt td { background: #f7fdf9; }
         <label>Date</label>
         <input type="date" id="dateInput" onchange="if(!currentPlantId&&!activePlantId){loadAllPlantsView(this.value);}else{_freshCSVLoaded=false;recalc();tryReprocessCSV();reloadTodayData();}">
       </div>
-      <div class="field">
+      <div class="field" id="saleQtyField">
         <label>Sale&nbsp;Qty&nbsp;(kg)</label>
         <input type="number" id="saleQtyInput" placeholder="0" min="0" step="0.01" oninput="markDirty();recalc()">
       </div>
@@ -1600,6 +1614,12 @@ function recalc() {
     const el = document.getElementById('kgTot_' + vid(v));
     if (el) el.textContent = fc(vendorKG(v));
   });
+  // Flag the Sale Qty box when it's empty or zero so it can't be missed
+  const sqField = document.getElementById('saleQtyField');
+  if (sqField) {
+    const sq = parseFloat(document.getElementById('saleQtyInput').value) || 0;
+    sqField.classList.toggle('needs-sale', !(sq > 0));
+  }
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -2156,6 +2176,9 @@ async function saveRecord() {
   }
 
   const saleQty = parseFloat(document.getElementById('saleQtyInput').value) || 0;
+  if (!(saleQty > 0)) {
+    if (!confirm('⚠ Sale Quantity is empty — MPK cannot be calculated without it.\n\nSave anyway without Sale Quantity?')) return;
+  }
   const att     = totalAtt(), kg = totalKG(), total = att + kg;
   const mpk     = saleQty > 0 ? r2(total / saleQty) : null;
 
