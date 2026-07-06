@@ -923,7 +923,8 @@ tr.dash-row-alt td { background: #f7fdf9; }
     <div class="topbar-fields">
       <div class="field">
         <label>Date</label>
-        <input type="date" id="dateInput" onchange="if(!currentPlantId&&!activePlantId){loadAllPlantsView(this.value);}else{_freshCSVLoaded=false;recalc();tryReprocessCSV();reloadTodayData();}">
+        <input type="date" id="dateInput" onchange="updateDateNice();if(!currentPlantId&&!activePlantId){loadAllPlantsView(this.value);}else{_freshCSVLoaded=false;recalc();tryReprocessCSV();reloadTodayData();}">
+        <span id="dateNice" style="font-size:13px;font-weight:800;color:#ffe08a;white-space:nowrap;margin-left:4px"></span>
       </div>
       <div class="field" id="saleQtyField">
         <label>Sale&nbsp;Qty&nbsp;(kg)</label>
@@ -1625,7 +1626,20 @@ function markDirty() {
   }
 }
 
+// Show the selected date in a friendly, unambiguous form like "5 July 26"
+function updateDateNice() {
+  const el = document.getElementById('dateNice');
+  if (!el) return;
+  const v = document.getElementById('dateInput')?.value;
+  const d = v ? new Date(v + 'T00:00:00') : null;
+  if (!d || isNaN(d)) { el.textContent = ''; return; }
+  const months = ['January','February','March','April','May','June','July',
+                  'August','September','October','November','December'];
+  el.textContent = `${d.getDate()} ${months[d.getMonth()]} ${String(d.getFullYear()).slice(-2)}`;
+}
+
 function recalc() {
+  updateDateNice();
   const att = totalAtt(), kg = totalKG(), total = att + kg, mpk = getMPK();
   document.getElementById('sumAtt').textContent   = fcShort(att);
   document.getElementById('sumKG').textContent    = fcShort(kg);
