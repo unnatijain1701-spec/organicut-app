@@ -2945,6 +2945,11 @@ async function exportAllRecords() {
 }
 
 async function downloadBackup() {
+  const plantName = currentPlantName || activePlantName;
+  if (!plantName) {
+    showToast('⚠ Select a plant first — backups are per plant.', true);
+    return;
+  }
   showToast('⏳ Preparing backup…', false);
   try {
     const records = await api('GET', '/api/records/export');
@@ -2952,10 +2957,11 @@ async function downloadBackup() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     const date = new Date().toISOString().slice(0, 10);
-    a.href = url; a.download = 'Organicut_Backup_' + date + '.json';
+    const plantTag = plantName.replace(/[^a-zA-Z0-9]+/g, '');
+    a.href = url; a.download = `Organicut_${plantTag}_Backup_${date}.json`;
     a.click();
     URL.revokeObjectURL(url);
-    showToast('✓ Backup downloaded (' + records.length + ' records)', false);
+    showToast('✓ Backup downloaded — ' + plantName + ' (' + records.length + ' records)', false);
   } catch (e) {
     showToast('⚠ Backup failed: ' + e.message, true);
   }
