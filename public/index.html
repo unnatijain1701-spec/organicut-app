@@ -551,7 +551,12 @@ td input[type="number"]:hover { border-color: #7dbf99; }
   font-size: 18px; font-weight: 800; color: var(--text); letter-spacing: -.3px;
 }
 .dash-card-value.green { color: var(--primary); }
+.dash-card-value { white-space: nowrap; }
 .dash-card-sub { font-size: 10px; color: var(--muted); margin-top: 3px; }
+
+/* Month-End Prediction cards — 4 across on desktop, 2×2 on phones (no side-scroll) */
+.dash-pred-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 16px; }
+.dash-pred-grid .dp-val { white-space: nowrap; }
 .dash-section {
   background: var(--surface); border: 1px solid var(--border);
   border-radius: 12px; padding: 20px 22px; margin-bottom: 20px;
@@ -595,10 +600,12 @@ tr.dash-row-alt td { background: #f7fdf9; }
 .dash-row-del:hover { background: #fca5a5; }
 @media (max-width: 900px) {
   .dash-cards { grid-template-columns: repeat(2, 1fr); }
+  .dash-pred-grid { grid-template-columns: repeat(2, 1fr); }
 }
 @media (max-width: 480px) {
   .dash-cards { grid-template-columns: 1fr 1fr; }
-  .dash-card-value { font-size: 20px; }
+  .dash-card-value { font-size: 19px; }
+  .dash-pred-grid .dp-val { font-size: 16px; }
   .dash-body { padding: 14px; }
 }
 
@@ -674,6 +681,53 @@ tr.dash-row-alt td { background: #f7fdf9; }
   .hist-panel, #vendorsPanel, #usersPanel { width: 100%; }
   .dashboardOverlay, #dashboardOverlay { padding: 8px; }
   .ap-table th, .ap-table td { font-size: 11px; padding: 5px 4px; }
+}
+
+/* ── Mobile hamburger nav (phones ≤700px) ──────────────── */
+.mobile-topbar { display: none; }
+.nav-backdrop { display: none; }
+@media (max-width: 700px) {
+  /* Slim fixed top bar with brand + hamburger */
+  .mobile-topbar {
+    display: flex; align-items: center; justify-content: space-between;
+    position: sticky; top: 0; z-index: 600;
+    background: #14432c; color: #fff; padding: 9px 14px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.18);
+  }
+  .mobile-topbar .mt-brand { font-size: 15px; font-weight: 800; letter-spacing: .2px; }
+  .mobile-topbar .mt-brand em { color: #96e0bb; font-style: normal; }
+  .hamburger {
+    background: rgba(255,255,255,.14); border: 1px solid rgba(255,255,255,.28);
+    color: #fff; font-size: 19px; line-height: 1; border-radius: 8px;
+    width: 40px; height: 38px; cursor: pointer;
+  }
+
+  /* Sidebar becomes a slide-in drawer from the left */
+  .sidebar {
+    position: fixed; top: 0; left: 0; bottom: 0; height: 100%; width: 82%; max-width: 300px;
+    flex-direction: column; align-items: stretch; flex-wrap: nowrap;
+    padding: 0; overflow-y: auto; z-index: 700; box-shadow: none;
+    transform: translateX(-100%); transition: transform .25s ease;
+  }
+  .sidebar.open { transform: translateX(0); box-shadow: 6px 0 28px rgba(0,0,0,.35); }
+  .sidebar-brand { display: flex; align-items: center; padding: 16px 18px;
+    border-right: none; border-bottom: 1px solid rgba(255,255,255,.12); font-size: 16px; white-space: nowrap; }
+  .sidebar-nav { flex-direction: column; padding: 8px 0; gap: 2px; width: 100%; }
+  .nav-item { flex: none; min-width: 0; text-align: left; padding: 13px 18px; font-size: 14px;
+    border-left: 3px solid transparent; border-bottom: none; }
+  .nav-item.active { border-left-color: #96e0bb; border-bottom-color: transparent; }
+  .nav-ico { display: inline; }
+  #plantSelectorField { display: block; width: 100%; }
+  .sidebar-foot { margin: auto 0 0; border-left: none; border-top: 1px solid rgba(255,255,255,.12);
+    flex-direction: column; align-items: stretch; padding: 8px 0; }
+  .sidebar-user { display: flex; }
+
+  /* Dark backdrop behind the open drawer */
+  .nav-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 650; }
+  .nav-backdrop.open { display: block; }
+
+  /* Content flows full width under the mobile top bar */
+  .topbar, .sumbar, .main { margin-left: 0; }
 }
 </style>
 </head>
@@ -820,23 +874,23 @@ tr.dash-row-alt td { background: #f7fdf9; }
         <span class="dash-section-title">📈 Month-End Prediction</span>
         <span id="dashPredLabel" style="font-size:11px;color:var(--muted)"></span>
       </div>
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px">
+      <div class="dash-pred-grid">
         <div style="border:1.5px dashed #6ee7b7;border-radius:10px;padding:12px 14px;background:#fff">
           <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin-bottom:6px">Predicted Total Cost</div>
-          <div style="font-size:18px;font-weight:800;color:var(--primary);letter-spacing:-.3px" id="dpPredCost">—</div>
+          <div class="dp-val" style="font-size:18px;font-weight:800;color:var(--primary);letter-spacing:-.3px" id="dpPredCost">—</div>
           <div style="font-size:10px;color:var(--muted);margin-top:3px" id="dpPredBasis"></div>
         </div>
         <div style="border:1.5px dashed #6ee7b7;border-radius:10px;padding:12px 14px;background:#fff">
           <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin-bottom:6px">Predicted Volume</div>
-          <div style="font-size:18px;font-weight:800;color:var(--primary);letter-spacing:-.3px" id="dpPredVol">—</div>
+          <div class="dp-val" style="font-size:18px;font-weight:800;color:var(--primary);letter-spacing:-.3px" id="dpPredVol">—</div>
         </div>
         <div style="border:1.5px solid #bbf7d0;border-radius:10px;padding:12px 14px;background:#fff">
           <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin-bottom:6px">Actual MPK</div>
-          <div style="font-size:18px;font-weight:800;color:var(--text);letter-spacing:-.3px" id="dpActualMPK">—</div>
+          <div class="dp-val" style="font-size:18px;font-weight:800;color:var(--text);letter-spacing:-.3px" id="dpActualMPK">—</div>
         </div>
         <div style="border:1.5px dashed #6ee7b7;border-radius:10px;padding:12px 14px;background:#fff">
           <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin-bottom:6px">Predicted MPK</div>
-          <div style="font-size:18px;font-weight:800;color:var(--primary);letter-spacing:-.3px" id="dpPredMPK">—</div>
+          <div class="dp-val" style="font-size:18px;font-weight:800;color:var(--primary);letter-spacing:-.3px" id="dpPredMPK">—</div>
         </div>
       </div>
       <!-- Progress bar -->
@@ -896,6 +950,13 @@ tr.dash-row-alt td { background: #f7fdf9; }
 </div>
 
 <!-- ═══════════════════ SIDEBAR ═══════════════════ -->
+<!-- Mobile top bar (phones only) -->
+<div class="mobile-topbar">
+  <span class="mt-brand">🌿 Organicut&nbsp;<em>Fresh</em></span>
+  <button class="hamburger" onclick="toggleMobileNav()" aria-label="Menu">☰</button>
+</div>
+<div class="nav-backdrop" id="navBackdrop" onclick="toggleMobileNav(false)"></div>
+
 <nav class="sidebar">
   <div class="sidebar-brand"><span class="brand-icon">🌿</span> Organicut&nbsp;<em>Fresh</em></div>
   <div class="sidebar-nav">
@@ -2505,7 +2566,17 @@ function setActiveNav(section) {
   if (el) el.classList.add('active');
 }
 
+function toggleMobileNav(force) {
+  const sb = document.querySelector('.sidebar');
+  const bd = document.getElementById('navBackdrop');
+  const open = (force === undefined) ? !sb.classList.contains('open') : force;
+  sb.classList.toggle('open', open);
+  if (bd) bd.classList.toggle('open', open);
+}
+
 function navTo(section) {
+  // On phones, close the slide-in drawer after choosing a section
+  toggleMobileNav(false);
   // Warn if leaving daily entry with unsaved changes
   if (section !== 'daily' && _isDirty) {
     if (!confirm('You have unsaved changes. Leave without saving?')) return;
