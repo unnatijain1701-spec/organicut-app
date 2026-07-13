@@ -987,12 +987,12 @@ tr.dash-row-alt td { background: #f7fdf9; }
     <div class="card-head">
       <div>
         <div class="card-title">👥 Production Attendance Cost</div>
-        <div style="font-size:11px;color:var(--muted);margin-top:2px">Upload biometric CSV or add contractors manually</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px">Upload biometric CSV / Excel or add contractors manually</div>
       </div>
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
         <span id="csvDateChips" style="display:none;font-size:12px;color:#4a7a5e"></span>
         <span class="unmapped-note" id="unmappedNote" style="display:none"></span>
-        <button class="btn btn-card-upload" onclick="document.getElementById('csvInput').click()" title="Upload biometric CSV">📂 Upload CSV</button>
+        <button class="btn btn-card-upload" onclick="document.getElementById('csvInput').click()" title="Upload biometric CSV or Excel file">📂 Upload CSV / Excel</button>
         <input type="file" id="csvInput" accept=".csv,.CSV,.xlsx,.xls" style="display:none" onchange="onCSVUpload(event)">
         <button class="btn btn-card-outline" id="desigToggleBtn" onclick="toggleDesigView()" title="Show/hide designation breakdown" style="display:none">Show Breakdown</button>
         <button class="btn btn-card-outline" onclick="showAddContractorPanel()" id="addContractorBtn">+ Add manually</button>
