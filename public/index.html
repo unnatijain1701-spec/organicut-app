@@ -3497,12 +3497,16 @@ function _renderDashTrend(data) {
   const c = parseFloat(curr.avg_mpk), p = parseFloat(prev.avg_mpk);
   const pct = Math.abs((c - p) / p * 100).toFixed(1);
 
-  if (c > p) {
-    el.textContent = `This month vs last month: MPK ↑ ${pct}% (improving)`;
-    el.className   = 'dash-trend up';
+  // MPK is cost per kg — LOWER is better. A drop = improving, a rise = worsening.
+  if (c < p) {
+    el.textContent = `This month vs last month: MPK ↓ ${pct}% (improving)`;
+    el.className   = 'dash-trend up';    // green
+  } else if (c > p) {
+    el.textContent = `This month vs last month: MPK ↑ ${pct}% (worsening)`;
+    el.className   = 'dash-trend down';  // red
   } else {
-    el.textContent = `This month vs last month: MPK ↓ ${pct}% (worsening)`;
-    el.className   = 'dash-trend down';
+    el.textContent = `This month vs last month: MPK unchanged`;
+    el.className   = 'dash-trend';
   }
 }
 
