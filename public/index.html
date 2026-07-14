@@ -2900,6 +2900,20 @@ function openPlantReport() {
   document.body.appendChild(m);
 }
 
+// Manually-supplied last-month baseline (plants that started after go-live have no
+// full previous month in the DB). Keyed by the report's previous-month label so it
+// only applies to that month — later reports use real recorded data automatically.
+// Cost in rupees (lakhs × 1e5), qty in kg (MT × 1e3).
+const LAST_MONTH_BASELINE = {
+  '2026-06': {
+    'Rai':       { cost: 66.52e5, qty: 628.92e3 },
+    'Jaipur':    { cost:  2.18e5, qty:  25.99e3 },
+    'Bangalore': { cost: 22.21e5, qty: 174.21e3 },
+    'Mumbai':    { cost: 15.44e5, qty: 170.51e3 },
+    'Hyderabad': { cost: 12.26e5, qty: 131.24e3 },
+  },
+};
+
 async function generatePlantReport() {
   if (typeof XLSX === 'undefined') { alert('Excel library not loaded — reload the page.'); return; }
   const from = document.getElementById('prFrom').value;
@@ -2922,6 +2936,7 @@ async function generatePlantReport() {
                     'Proj. Month-End Cost (L)','Proj. Tonnage (MT)','Proj. MPK (₹)'];
     const rows = [header];
 
+    const baseline = LAST_MONTH_BASELINE[data.prevMonthLabel] || {};
     data.plants.forEach(p => {
       const avgCostDay = p.days ? p.total_cost / p.days : 0;
       const avgQtyDay  = p.days ? p.total_qty  / p.days : 0;
@@ -2929,21 +2944,30 @@ async function generatePlantReport() {
       const projQty  = avgQtyDay  * dim;
       const projMPK  = projQty > 0 ? projCost / projQty : 0;
 
+      // Use the supplied baseline for this month where available; else DB last-month
+      const bl = baseline[p.name];
+      let lmCost, lmQty, lmMPK;
+      if (bl) {
+        lmCost = bl.cost; lmQty = bl.qty; lmMPK = bl.qty > 0 ? bl.cost / bl.qty : null;
+      } else {
+        lmCost = p.last_month_cost; lmQty = p.last_month_qty; lmMPK = p.last_month_mpk;
+      }
+
       let change = '—', status = 'No last-month data';
-      if (p.last_month_mpk != null && p.last_month_mpk > 0) {
-        const pct = ((p.mpk - p.last_month_mpk) / p.last_month_mpk) * 100;
+      if (lmMPK != null && lmMPK > 0) {
+        const pct = ((p.mpk - lmMPK) / lmMPK) * 100;
         change = (pct >= 0 ? '+' : '') + pct.toFixed(1) + '%';
-        status = p.mpk < p.last_month_mpk ? 'Improving ▼' : (p.mpk > p.last_month_mpk ? 'Worsening ▲' : 'Same');
+        status = p.mpk < lmMPK ? 'Improving ▼' : (p.mpk > lmMPK ? 'Worsening ▲' : 'Same');
       }
 
       tCost += p.total_cost; tQty += p.total_qty;
       tPCost += projCost; tPQty += projQty;
-      if (p.last_month_cost) tLCost += p.last_month_cost;
-      if (p.last_month_qty)  tLQty  += p.last_month_qty;
+      if (lmCost) tLCost += lmCost;
+      if (lmQty)  tLQty  += lmQty;
 
       rows.push([
         p.name, L(p.total_cost), MT(p.total_qty), +p.mpk.toFixed(2),
-        p.last_month_mpk != null ? +p.last_month_mpk.toFixed(2) : '—',
+        lmMPK != null ? +lmMPK.toFixed(2) : '—',
         change, status,
         L(projCost), MT(projQty), +projMPK.toFixed(2),
       ]);
