@@ -148,6 +148,65 @@ router.get('/allplants/:date', async (req, res) => {
   }
 });
 
+// GET /api/records/report?from=&to=  — superadmin: per-plant multi-facility report
+// Returns, for the selected range: per-plant cost/tonnage/MPK, plus each plant's
+// previous-calendar-month MPK (for the improving/worsening comparison).
+router.get('/report', async (req, res) => {
+  if (req.user.role !== 'superadmin')
+    return res.status(403).json({ error: 'Superadmin only' });
+  const from = (req.query.from || '').slice(0, 10);
+  const to   = (req.query.to   || '').slice(0, 10);
+  if (!from || !to) return res.status(400).json({ error: 'from and to dates are required' });
+  try {
+    // Previous calendar month relative to the report's "from" month
+    const d = new Date(from + 'T00:00:00');
+    const prevFirst = new Date(d.getFullYear(), d.getMonth() - 1, 1);
+    const prevLast  = new Date(d.getFullYear(), d.getMonth(), 0);
+    const iso = x => `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}-${String(x.getDate()).padStart(2,'0')}`;
+    const daysInMonth = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+
+    const { rows: current } = await db.query(`
+      SELECT p.id, p.name, p.display_order,
+        COUNT(*)                                   AS days,
+        SUM(dr.total_cost)::NUMERIC(14,2)          AS total_cost,
+        SUM(dr.sale_qty)::NUMERIC(14,2)            AS total_qty,
+        CASE WHEN SUM(dr.sale_qty) > 0 THEN (SUM(dr.total_cost)/SUM(dr.sale_qty))::NUMERIC(10,4) ELSE 0 END AS mpk
+      FROM daily_records dr JOIN plants p ON p.id = dr.plant_id
+      WHERE dr.record_date BETWEEN $1 AND $2
+      GROUP BY p.id, p.name, p.display_order
+      ORDER BY p.display_order
+    `, [from, to]);
+
+    const { rows: prev } = await db.query(`
+      SELECT p.id,
+        SUM(dr.total_cost)::NUMERIC(14,2) AS total_cost,
+        SUM(dr.sale_qty)::NUMERIC(14,2)   AS total_qty,
+        CASE WHEN SUM(dr.sale_qty) > 0 THEN (SUM(dr.total_cost)/SUM(dr.sale_qty))::NUMERIC(10,4) ELSE 0 END AS mpk
+      FROM daily_records dr JOIN plants p ON p.id = dr.plant_id
+      WHERE dr.record_date BETWEEN $1 AND $2
+      GROUP BY p.id
+    `, [iso(prevFirst), iso(prevLast)]);
+
+    const prevMap = {};
+    prev.forEach(r => { prevMap[r.id] = { mpk: parseFloat(r.mpk), cost: parseFloat(r.total_cost), qty: parseFloat(r.total_qty) }; });
+    const plants = current.map(r => ({
+      name: r.name,
+      days: parseInt(r.days),
+      total_cost: parseFloat(r.total_cost),
+      total_qty:  parseFloat(r.total_qty),
+      mpk:        parseFloat(r.mpk),
+      last_month_mpk:  prevMap[r.id]?.mpk  ?? null,
+      last_month_cost: prevMap[r.id]?.cost ?? null,
+      last_month_qty:  prevMap[r.id]?.qty  ?? null,
+    }));
+
+    res.json({ from, to, daysInMonth, prevMonthLabel: iso(prevFirst).slice(0,7), plants });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // GET /api/records/audit  — superadmin: recent deletion audit entries for a plant
 router.get('/audit', async (req, res) => {
   if (req.user.role !== 'superadmin')

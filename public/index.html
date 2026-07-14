@@ -1005,6 +1005,7 @@ tr.dash-row-alt td { background: #f7fdf9; }
           <button onclick="exportExcel();toggleExportDd()">Export Today</button>
           <button onclick="exportMonthRecords();toggleExportDd()">Export This Month</button>
           <button onclick="exportAllRecords();toggleExportDd()">Export All Records</button>
+          <button id="reportMenuBtn" style="display:none" onclick="openPlantReport();toggleExportDd()">📑 Multi-Plant Report</button>
           <button onclick="downloadBackup();toggleExportDd()">Download Backup (JSON)</button>
         </div>
       </div>
@@ -1196,6 +1197,7 @@ async function checkAuth() {
       document.getElementById('navDashboard').style.display = canSeeDashboard ? '' : 'none';
       document.getElementById('navVendors').style.display = isSuperadmin ? '' : 'none';
       document.getElementById('histBulkLockBtns').style.display = isSuperadmin ? 'flex' : 'none';
+      { const rb = document.getElementById('reportMenuBtn'); if (rb) rb.style.display = isSuperadmin ? 'block' : 'none'; }
       document.getElementById('loginOverlay').style.display = 'none';
       if (!currentPlantId) await setupPlantSelector();
       await initApp();
@@ -2869,6 +2871,119 @@ function exportExcel() {
 
 function toggleExportDd() {
   document.getElementById('exportDdMenu').classList.toggle('open');
+}
+
+// ── Multi-Plant (Bi-Weekly) Report — superadmin ──
+function openPlantReport() {
+  document.getElementById('plantReportModal')?.remove();
+  const today = new Date();
+  const firstOfMonth = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-01`;
+  const iso = today.toISOString().slice(0,10);
+  const m = document.createElement('div');
+  m.id = 'plantReportModal';
+  m.style.cssText = 'position:fixed;inset:0;background:rgba(13,35,24,.72);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
+  m.innerHTML = `<div style="background:#fff;border-radius:14px;max-width:420px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3);overflow:hidden">
+    <div style="padding:16px 20px;border-bottom:1px solid #eee;display:flex;align-items:center;justify-content:space-between">
+      <span style="font-size:16px;font-weight:800;color:#1e3a28">📑 Multi-Plant Report</span>
+      <button onclick="document.getElementById('plantReportModal').remove()" style="border:none;background:none;font-size:22px;color:#aaa;cursor:pointer">×</button>
+    </div>
+    <div style="padding:20px">
+      <div style="font-size:12px;color:#666;margin-bottom:14px">Generates a report across all plants — totals, month-end projection, and last-month comparison.</div>
+      <label style="font-size:12px;font-weight:700;color:#334">From</label>
+      <input type="date" id="prFrom" value="${firstOfMonth}" style="width:100%;padding:8px 10px;border:1px solid #ccc;border-radius:8px;margin:4px 0 12px;font-size:14px">
+      <label style="font-size:12px;font-weight:700;color:#334">To</label>
+      <input type="date" id="prTo" value="${iso}" style="width:100%;padding:8px 10px;border:1px solid #ccc;border-radius:8px;margin:4px 0 18px;font-size:14px">
+      <button onclick="generatePlantReport()" style="width:100%;padding:11px;background:#1e6b45;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">↓ Generate Excel Report</button>
+    </div>
+  </div>`;
+  m.onclick = e => { if (e.target === m) m.remove(); };
+  document.body.appendChild(m);
+}
+
+async function generatePlantReport() {
+  if (typeof XLSX === 'undefined') { alert('Excel library not loaded — reload the page.'); return; }
+  const from = document.getElementById('prFrom').value;
+  const to   = document.getElementById('prTo').value;
+  if (!from || !to) { showToast('⚠ Pick both dates', true); return; }
+  showToast('⏳ Building report…', false);
+  try {
+    const data = await api('GET', `/api/records/report?from=${from}&to=${to}`);
+    if (!data.plants || !data.plants.length) { showToast('⚠ No data in this range', true); return; }
+    const dim = data.daysInMonth;
+
+    const L  = n => +(n / 1e5).toFixed(2);     // rupees → lakhs
+    const MT = n => +(n / 1e3).toFixed(2);     // kg → metric tonnes
+
+    // Running totals
+    let tCost=0, tQty=0, tPCost=0, tPQty=0, tLCost=0, tLQty=0;
+
+    const header = ['Plant','Total Cost (L)','Total Tonnage (MT)','Avg MPK (₹)',
+                    'Last Month MPK (₹)','MPK Change','Status',
+                    'Proj. Month-End Cost (L)','Proj. Tonnage (MT)','Proj. MPK (₹)'];
+    const rows = [header];
+
+    data.plants.forEach(p => {
+      const avgCostDay = p.days ? p.total_cost / p.days : 0;
+      const avgQtyDay  = p.days ? p.total_qty  / p.days : 0;
+      const projCost = avgCostDay * dim;
+      const projQty  = avgQtyDay  * dim;
+      const projMPK  = projQty > 0 ? projCost / projQty : 0;
+
+      let change = '—', status = 'No last-month data';
+      if (p.last_month_mpk != null && p.last_month_mpk > 0) {
+        const pct = ((p.mpk - p.last_month_mpk) / p.last_month_mpk) * 100;
+        change = (pct >= 0 ? '+' : '') + pct.toFixed(1) + '%';
+        status = p.mpk < p.last_month_mpk ? 'Improving ▼' : (p.mpk > p.last_month_mpk ? 'Worsening ▲' : 'Same');
+      }
+
+      tCost += p.total_cost; tQty += p.total_qty;
+      tPCost += projCost; tPQty += projQty;
+      if (p.last_month_cost) tLCost += p.last_month_cost;
+      if (p.last_month_qty)  tLQty  += p.last_month_qty;
+
+      rows.push([
+        p.name, L(p.total_cost), MT(p.total_qty), +p.mpk.toFixed(2),
+        p.last_month_mpk != null ? +p.last_month_mpk.toFixed(2) : '—',
+        change, status,
+        L(projCost), MT(projQty), +projMPK.toFixed(2),
+      ]);
+    });
+
+    // TOTAL row
+    const totMPK  = tQty  > 0 ? tCost  / tQty  : 0;
+    const totPMPK = tPQty > 0 ? tPCost / tPQty : 0;
+    const totLMPK = tLQty > 0 ? tLCost / tLQty : null;
+    let totChange='—', totStatus='—';
+    if (totLMPK) {
+      const pct = ((totMPK - totLMPK) / totLMPK) * 100;
+      totChange = (pct >= 0 ? '+' : '') + pct.toFixed(1) + '%';
+      totStatus = totMPK < totLMPK ? 'Improving ▼' : (totMPK > totLMPK ? 'Worsening ▲' : 'Same');
+    }
+    rows.push([
+      'TOTAL', L(tCost), MT(tQty), +totMPK.toFixed(2),
+      totLMPK != null ? +totLMPK.toFixed(2) : '—', totChange, totStatus,
+      L(tPCost), MT(tPQty), +totPMPK.toFixed(2),
+    ]);
+
+    // Title block
+    const aoa = [
+      ['BI-WEEKLY MULTI-PLANT REPORT'],
+      ['Period', `${from} to ${to}`],
+      ['Projection basis', `daily average × ${dim} days in month`],
+      ['Comparison', `vs previous month (${data.prevMonthLabel})`],
+      [],
+      ...rows,
+    ];
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    ws['!cols'] = [14,15,17,12,17,12,18,20,17,14].map(w => ({ wch: w }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Multi-Plant Report');
+    XLSX.writeFile(wb, `Organicut_MultiPlant_Report_${from}_to_${to}.xlsx`);
+    document.getElementById('plantReportModal')?.remove();
+    showToast('✓ Report downloaded', false);
+  } catch (e) {
+    showToast('⚠ ' + e.message, true);
+  }
 }
 document.addEventListener('click', function(e) {
   const dd = document.getElementById('exportDd');
