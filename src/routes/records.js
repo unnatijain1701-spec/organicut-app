@@ -165,12 +165,20 @@ router.get('/report', async (req, res) => {
     const iso = x => `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}-${String(x.getDate()).padStart(2,'0')}`;
     const daysInMonth = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
 
+    // A day counts as COMPLETE only when attendance cost, sale qty AND per-kg cost
+    // are all filled. Jaipur has no per-kg processing, so it's exempt from the KG check.
+    // (Fixed SQL fragment — no user input, safe to interpolate.)
+    const COMPLETE = "dr.attendance_cost > 0 AND dr.sale_qty > 0 AND (p.name = 'Jaipur' OR dr.kg_cost > 0)";
+
     const { rows: current } = await db.query(`
       SELECT p.id, p.name, p.display_order,
-        COUNT(*)                                   AS days,
-        SUM(dr.total_cost)::NUMERIC(14,2)          AS total_cost,
-        SUM(dr.sale_qty)::NUMERIC(14,2)            AS total_qty,
-        CASE WHEN SUM(dr.sale_qty) > 0 THEN (SUM(dr.total_cost)/SUM(dr.sale_qty))::NUMERIC(10,4) ELSE 0 END AS mpk
+        COUNT(*) FILTER (WHERE ${COMPLETE})                    AS days,
+        COUNT(*)                                               AS days_saved,
+        COALESCE(SUM(dr.total_cost) FILTER (WHERE ${COMPLETE}), 0)::NUMERIC(14,2) AS total_cost,
+        COALESCE(SUM(dr.sale_qty)   FILTER (WHERE ${COMPLETE}), 0)::NUMERIC(14,2) AS total_qty,
+        CASE WHEN SUM(dr.sale_qty) FILTER (WHERE ${COMPLETE}) > 0
+          THEN (SUM(dr.total_cost) FILTER (WHERE ${COMPLETE}) / SUM(dr.sale_qty) FILTER (WHERE ${COMPLETE}))::NUMERIC(10,4)
+          ELSE 0 END AS mpk
       FROM daily_records dr JOIN plants p ON p.id = dr.plant_id
       WHERE dr.record_date BETWEEN $1 AND $2
       GROUP BY p.id, p.name, p.display_order
@@ -179,9 +187,11 @@ router.get('/report', async (req, res) => {
 
     const { rows: prev } = await db.query(`
       SELECT p.id,
-        SUM(dr.total_cost)::NUMERIC(14,2) AS total_cost,
-        SUM(dr.sale_qty)::NUMERIC(14,2)   AS total_qty,
-        CASE WHEN SUM(dr.sale_qty) > 0 THEN (SUM(dr.total_cost)/SUM(dr.sale_qty))::NUMERIC(10,4) ELSE 0 END AS mpk
+        COALESCE(SUM(dr.total_cost) FILTER (WHERE ${COMPLETE}), 0)::NUMERIC(14,2) AS total_cost,
+        COALESCE(SUM(dr.sale_qty)   FILTER (WHERE ${COMPLETE}), 0)::NUMERIC(14,2) AS total_qty,
+        CASE WHEN SUM(dr.sale_qty) FILTER (WHERE ${COMPLETE}) > 0
+          THEN (SUM(dr.total_cost) FILTER (WHERE ${COMPLETE}) / SUM(dr.sale_qty) FILTER (WHERE ${COMPLETE}))::NUMERIC(10,4)
+          ELSE 0 END AS mpk
       FROM daily_records dr JOIN plants p ON p.id = dr.plant_id
       WHERE dr.record_date BETWEEN $1 AND $2
       GROUP BY p.id
