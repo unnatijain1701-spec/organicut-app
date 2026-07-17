@@ -513,11 +513,49 @@ td input[type="number"]:hover { border-color: #7dbf99; }
 .ap-empty { color:var(--muted); font-size:13px; text-align:center; padding:20px 0; }
 
 /* ── DASHBOARD OVERLAY ────────────────────────────────── */
-#dashboardOverlay {
+#dashboardOverlay, #reportOverlay {
   position: fixed; top: 0; right: 0; bottom: 0; left: 210px; z-index: 400;
   background: var(--bg); overflow-y: auto;
   display: flex; flex-direction: column;
 }
+
+/* Multi-plant report — responsive cards */
+.rep-summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 16px; }
+.rep-sum-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px; }
+.rep-sum-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); }
+.rep-sum-value { font-size: 22px; font-weight: 800; color: var(--text); margin-top: 4px; white-space: nowrap; }
+.rep-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+.rep-plant-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; box-shadow: 0 1px 4px rgba(30,107,69,.07); }
+.rep-plant-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.rep-plant-name { font-size: 15px; font-weight: 800; color: var(--text); }
+.rep-badge { font-size: 11px; font-weight: 800; padding: 3px 9px; border-radius: 20px; white-space: nowrap; }
+.rep-badge.improving { background: #dcfce7; color: #166534; }
+.rep-badge.worsening { background: #fee2e2; color: #991b1b; }
+.rep-badge.same, .rep-badge.no-data { background: #f1f5f9; color: #64748b; }
+.rep-mpk { font-size: 30px; font-weight: 800; color: var(--primary); line-height: 1; }
+.rep-mpk-sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.rep-metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+.rep-metric-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; }
+.rep-metric-value { font-size: 14px; font-weight: 700; color: var(--text); }
+.rep-proj { margin-top: 10px; padding: 8px 10px; background: #f0fdf4; border: 1px dashed #86efac; border-radius: 8px; font-size: 12px; color: #14532d; }
+@media (max-width: 700px) {
+  .rep-summary { grid-template-columns: 1fr; }
+  .rep-cards { grid-template-columns: 1fr; }
+  #reportOverlay { left: 0; }
+}
+
+/* Report table — plants across the top, Total column at the end */
+.rep-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; border: 1px solid var(--border); border-radius: 10px; }
+.rep-table { border-collapse: collapse; width: 100%; min-width: 560px; font-size: 13px; }
+.rep-table th, .rep-table td { padding: 9px 12px; border-bottom: 1px solid var(--border); white-space: nowrap; text-align: right; }
+.rep-table thead th { background: #1e6b45; color: #fff; font-weight: 700; position: sticky; top: 0; z-index: 2; }
+.rep-table thead th:first-child { text-align: left; }
+.rep-metric-name { text-align: left !important; font-weight: 700; color: var(--text); background: #f5faf7; position: sticky; left: 0; z-index: 1; }
+.rep-total-col { background: #eef7f1; font-weight: 800; }
+.rep-table thead th.rep-total-col { background: #14532d; color: #fff; }
+.rep-table tbody tr:last-child td { border-bottom: none; }
+.rep-up   { color: #166534; font-weight: 700; }
+.rep-down { color: #b91c1c; font-weight: 700; }
 .dash-header {
   position: sticky; top: 0; z-index: 10;
   background: var(--primary);
@@ -623,7 +661,7 @@ tr.dash-row-alt td { background: #f7fdf9; }
   .sidebar-foot { margin-top: 0; margin-left: auto; border-top: none; border-left: 1px solid rgba(255,255,255,.12); padding: 0; display: flex; align-items: center; }
   .sidebar-user { display: none; }
   .topbar, .sumbar, .main { margin-left: 0; }
-  #dashboardOverlay { left: 0; }
+  #dashboardOverlay, #reportOverlay { left: 0; }
 
   .topbar-main { padding: 6px 12px; min-height: 48px; gap: 6px; }
   .field input[type="date"]   { min-width: 120px; }
@@ -949,6 +987,26 @@ tr.dash-row-alt td { background: #f7fdf9; }
   </div>
 </div>
 
+<!-- ═══════════════════ MULTI-PLANT REPORT OVERLAY ═══════════════════ -->
+<div id="reportOverlay" style="display:none">
+  <div class="dash-header">
+    <span class="dash-header-title">📑 Multi-Plant <em>Report</em></span>
+    <button class="dash-close" onclick="closeReport()">×</button>
+  </div>
+  <div class="dash-body">
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:16px 20px;background:#fff;border-bottom:1px solid var(--border)">
+      <span style="font-size:12px;font-weight:700;color:var(--muted)">PERIOD</span>
+      <input type="date" id="repFrom" onchange="loadReportView()" style="border:1px solid var(--border);border-radius:6px;padding:5px 9px;font-size:13px;color:var(--text)">
+      <span style="font-size:13px;color:var(--muted)">to</span>
+      <input type="date" id="repTo" onchange="loadReportView()" style="border:1px solid var(--border);border-radius:6px;padding:5px 9px;font-size:13px;color:var(--text)">
+      <button onclick="generatePlantReport(document.getElementById('repFrom').value, document.getElementById('repTo').value)"
+        style="border:none;border-radius:7px;padding:6px 12px;font-size:12px;font-weight:700;background:#1e6b45;color:#fff;cursor:pointer">↓ Excel</button>
+      <span id="repCompareLabel" style="font-size:12px;color:var(--primary);font-weight:600;margin-left:2px"></span>
+    </div>
+    <div id="reportContent" style="padding:16px 20px"><p style="color:var(--muted);text-align:center;padding:20px">Loading…</p></div>
+  </div>
+</div>
+
 <!-- ═══════════════════ SIDEBAR ═══════════════════ -->
 <!-- Mobile top bar (phones only) -->
 <div class="mobile-topbar">
@@ -962,6 +1020,7 @@ tr.dash-row-alt td { background: #f7fdf9; }
   <div class="sidebar-nav">
     <button class="nav-item active" id="navDaily" onclick="navTo('daily')"><span class="nav-ico">📝</span> Daily Entry</button>
     <button class="nav-item" id="navDashboard" style="display:none" onclick="navTo('dashboard')"><span class="nav-ico">📊</span> Dashboard</button>
+    <button class="nav-item" id="navReport" style="display:none" onclick="navTo('report')"><span class="nav-ico">📑</span> Report</button>
     <button class="nav-item" id="navHistory" onclick="navTo('history')"><span class="nav-ico">📋</span> History</button>
     <button class="nav-item" id="navVendors" onclick="navTo('vendors')"><span class="nav-ico">⚙</span> Vendors</button>
     <button class="nav-item" id="navUsers" style="display:none" onclick="navTo('users')"><span class="nav-ico">👤</span> Users</button>
@@ -1198,6 +1257,7 @@ async function checkAuth() {
       document.getElementById('navVendors').style.display = isSuperadmin ? '' : 'none';
       document.getElementById('histBulkLockBtns').style.display = isSuperadmin ? 'flex' : 'none';
       { const rb = document.getElementById('reportMenuBtn'); if (rb) rb.style.display = isSuperadmin ? 'block' : 'none'; }
+      { const nr = document.getElementById('navReport'); if (nr) nr.style.display = isSuperadmin ? '' : 'none'; }
       document.getElementById('loginOverlay').style.display = 'none';
       if (!currentPlantId) await setupPlantSelector();
       await initApp();
@@ -2586,6 +2646,7 @@ function navTo(section) {
   }
   // Close any open right-panel / overlay first, then open the requested one
   closeDashboard();
+  closeReport();
   toggleHistory(false);
   toggleVendorsPanel(false);
   toggleUsersPanel(false);
@@ -2593,6 +2654,7 @@ function navTo(section) {
   switch (section) {
     case 'daily':     /* main is always visible — nothing to open */ break;
     case 'dashboard': loadDashboard();          break;
+    case 'report':    openReport();             break;
     case 'history':   toggleHistory(true);      break;
     case 'vendors':   toggleVendorsPanel(true); break;
     case 'users':     toggleUsersPanel(true);   break;
@@ -2876,9 +2938,9 @@ function toggleExportDd() {
 // ── Multi-Plant (Bi-Weekly) Report — superadmin ──
 function openPlantReport() {
   document.getElementById('plantReportModal')?.remove();
-  const today = new Date();
-  const firstOfMonth = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-01`;
-  const iso = today.toISOString().slice(0,10);
+  const firstOfMonth = _firstOfMonth();
+  let iso = _d2Date();                   // default end = today − 2 days (D-2)
+  if (iso < firstOfMonth) iso = firstOfMonth;
   const m = document.createElement('div');
   m.id = 'plantReportModal';
   m.style.cssText = 'position:fixed;inset:0;background:rgba(13,35,24,.72);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
@@ -2914,89 +2976,94 @@ const LAST_MONTH_BASELINE = {
   },
 };
 
-async function generatePlantReport() {
+// ── Date helpers for the report (local time, D-2 default) ──
+function _isoLocal(d) { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
+function _firstOfMonth() { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01`; }
+function _d2Date() { const d = new Date(); d.setDate(d.getDate() - 2); return _isoLocal(d); }
+
+// Shared computation used by both the Excel export and the on-screen report view.
+// Returns numeric rows + totals; formatting is done by the caller.
+function _computeReport(data) {
+  const dim = data.daysInMonth;
+  const baseline = LAST_MONTH_BASELINE[data.prevMonthLabel] || {};
+  let tCost=0, tQty=0, tPCost=0, tPQty=0, tLCost=0, tLQty=0;
+
+  const rows = data.plants.map(p => {
+    const projCost = (p.days ? p.total_cost / p.days : 0) * dim;
+    const projQty  = (p.days ? p.total_qty  / p.days : 0) * dim;
+    const projMPK  = projQty > 0 ? projCost / projQty : 0;
+
+    const bl = baseline[p.name];
+    let lmCost, lmQty, lmMPK;
+    if (bl) { lmCost = bl.cost; lmQty = bl.qty; lmMPK = bl.qty > 0 ? bl.cost / bl.qty : null; }
+    else    { lmCost = p.last_month_cost; lmQty = p.last_month_qty; lmMPK = p.last_month_mpk; }
+
+    let changePct = null, status = 'no-data';
+    if (lmMPK != null && lmMPK > 0) {
+      changePct = ((p.mpk - lmMPK) / lmMPK) * 100;
+      status = p.mpk < lmMPK ? 'improving' : (p.mpk > lmMPK ? 'worsening' : 'same');
+    }
+
+    tCost += p.total_cost; tQty += p.total_qty; tPCost += projCost; tPQty += projQty;
+    if (lmCost) tLCost += lmCost;
+    if (lmQty)  tLQty  += lmQty;
+
+    return { name: p.name, cost: p.total_cost, qty: p.total_qty, mpk: p.mpk,
+             lmMPK, changePct, status, projCost, projQty, projMPK };
+  });
+
+  const totMPK  = tQty  > 0 ? tCost  / tQty  : 0;
+  const totPMPK = tPQty > 0 ? tPCost / tPQty : 0;
+  const totLMPK = tLQty > 0 ? tLCost / tLQty : null;
+  let totChangePct = null, totStatus = 'no-data';
+  if (totLMPK) {
+    totChangePct = ((totMPK - totLMPK) / totLMPK) * 100;
+    totStatus = totMPK < totLMPK ? 'improving' : (totMPK > totLMPK ? 'worsening' : 'same');
+  }
+  const totals = { cost: tCost, qty: tQty, mpk: totMPK, lmMPK: totLMPK,
+                   changePct: totChangePct, status: totStatus,
+                   projCost: tPCost, projQty: tPQty, projMPK: totPMPK };
+  return { rows, totals };
+}
+
+const _repL  = n => +(n / 1e5).toFixed(2);   // rupees → lakhs
+const _repMT = n => +(n / 1e3).toFixed(2);   // kg → metric tonnes
+function _repStatusText(s) {
+  return s === 'improving' ? 'Improving ▼' : s === 'worsening' ? 'Worsening ▲' : s === 'same' ? 'Same' : 'No last-month data';
+}
+function _repChangeText(status, pct) {
+  return status === 'no-data' ? '—' : (pct >= 0 ? '+' : '') + pct.toFixed(1) + '%';
+}
+
+async function generatePlantReport(from, to) {
   if (typeof XLSX === 'undefined') { alert('Excel library not loaded — reload the page.'); return; }
-  const from = document.getElementById('prFrom').value;
-  const to   = document.getElementById('prTo').value;
+  from = from || document.getElementById('prFrom')?.value;
+  to   = to   || document.getElementById('prTo')?.value;
   if (!from || !to) { showToast('⚠ Pick both dates', true); return; }
   showToast('⏳ Building report…', false);
   try {
     const data = await api('GET', `/api/records/report?from=${from}&to=${to}`);
     if (!data.plants || !data.plants.length) { showToast('⚠ No data in this range', true); return; }
-    const dim = data.daysInMonth;
-
-    const L  = n => +(n / 1e5).toFixed(2);     // rupees → lakhs
-    const MT = n => +(n / 1e3).toFixed(2);     // kg → metric tonnes
-
-    // Running totals
-    let tCost=0, tQty=0, tPCost=0, tPQty=0, tLCost=0, tLQty=0;
+    const { rows: R, totals: T } = _computeReport(data);
 
     const header = ['Plant','Total Cost (L)','Total Tonnage (MT)','Avg MPK (₹)',
                     'Last Month MPK (₹)','MPK Change','Status',
                     'Proj. Month-End Cost (L)','Proj. Tonnage (MT)','Proj. MPK (₹)'];
-    const rows = [header];
-
-    const baseline = LAST_MONTH_BASELINE[data.prevMonthLabel] || {};
-    data.plants.forEach(p => {
-      const avgCostDay = p.days ? p.total_cost / p.days : 0;
-      const avgQtyDay  = p.days ? p.total_qty  / p.days : 0;
-      const projCost = avgCostDay * dim;
-      const projQty  = avgQtyDay  * dim;
-      const projMPK  = projQty > 0 ? projCost / projQty : 0;
-
-      // Use the supplied baseline for this month where available; else DB last-month
-      const bl = baseline[p.name];
-      let lmCost, lmQty, lmMPK;
-      if (bl) {
-        lmCost = bl.cost; lmQty = bl.qty; lmMPK = bl.qty > 0 ? bl.cost / bl.qty : null;
-      } else {
-        lmCost = p.last_month_cost; lmQty = p.last_month_qty; lmMPK = p.last_month_mpk;
-      }
-
-      let change = '—', status = 'No last-month data';
-      if (lmMPK != null && lmMPK > 0) {
-        const pct = ((p.mpk - lmMPK) / lmMPK) * 100;
-        change = (pct >= 0 ? '+' : '') + pct.toFixed(1) + '%';
-        status = p.mpk < lmMPK ? 'Improving ▼' : (p.mpk > lmMPK ? 'Worsening ▲' : 'Same');
-      }
-
-      tCost += p.total_cost; tQty += p.total_qty;
-      tPCost += projCost; tPQty += projQty;
-      if (lmCost) tLCost += lmCost;
-      if (lmQty)  tLQty  += lmQty;
-
-      rows.push([
-        p.name, L(p.total_cost), MT(p.total_qty), +p.mpk.toFixed(2),
-        lmMPK != null ? +lmMPK.toFixed(2) : '—',
-        change, status,
-        L(projCost), MT(projQty), +projMPK.toFixed(2),
-      ]);
-    });
-
-    // TOTAL row
-    const totMPK  = tQty  > 0 ? tCost  / tQty  : 0;
-    const totPMPK = tPQty > 0 ? tPCost / tPQty : 0;
-    const totLMPK = tLQty > 0 ? tLCost / tLQty : null;
-    let totChange='—', totStatus='—';
-    if (totLMPK) {
-      const pct = ((totMPK - totLMPK) / totLMPK) * 100;
-      totChange = (pct >= 0 ? '+' : '') + pct.toFixed(1) + '%';
-      totStatus = totMPK < totLMPK ? 'Improving ▼' : (totMPK > totLMPK ? 'Worsening ▲' : 'Same');
-    }
-    rows.push([
-      'TOTAL', L(tCost), MT(tQty), +totMPK.toFixed(2),
-      totLMPK != null ? +totLMPK.toFixed(2) : '—', totChange, totStatus,
-      L(tPCost), MT(tPQty), +totPMPK.toFixed(2),
-    ]);
-
-    // Title block
+    const rowFor = r => [
+      r.name, _repL(r.cost), _repMT(r.qty), +r.mpk.toFixed(2),
+      r.lmMPK != null ? +r.lmMPK.toFixed(2) : '—',
+      _repChangeText(r.status, r.changePct || 0), _repStatusText(r.status),
+      _repL(r.projCost), _repMT(r.projQty), +r.projMPK.toFixed(2),
+    ];
     const aoa = [
-      ['BI-WEEKLY MULTI-PLANT REPORT'],
+      ['MULTI-PLANT REPORT'],
       ['Period', `${from} to ${to}`],
-      ['Projection basis', `daily average × ${dim} days in month`],
+      ['Projection basis', `daily average × ${data.daysInMonth} days in month`],
       ['Comparison', `vs previous month (${data.prevMonthLabel})`],
       [],
-      ...rows,
+      header,
+      ...R.map(rowFor),
+      rowFor({ ...T, name: 'TOTAL' }),
     ];
     const ws = XLSX.utils.aoa_to_sheet(aoa);
     ws['!cols'] = [14,15,17,12,17,12,18,20,17,14].map(w => ({ wch: w }));
@@ -3008,6 +3075,76 @@ async function generatePlantReport() {
   } catch (e) {
     showToast('⚠ ' + e.message, true);
   }
+}
+
+// ── On-screen Report tab (superadmin) ──
+function openReport() {
+  const first = _firstOfMonth();
+  let to = _d2Date();                 // default end = today − 2 days (D-2)
+  if (to < first) to = first;         // clamp if we're at the very start of a month
+  const fromEl = document.getElementById('repFrom'), toEl = document.getElementById('repTo');
+  if (fromEl && !fromEl.value) fromEl.value = first;
+  if (toEl   && !toEl.value)   toEl.value   = to;
+  document.getElementById('reportOverlay').style.display = 'flex';
+  loadReportView();
+}
+function closeReport() {
+  const el = document.getElementById('reportOverlay');
+  if (el) el.style.display = 'none';
+}
+
+async function loadReportView() {
+  const from = document.getElementById('repFrom')?.value;
+  const to   = document.getElementById('repTo')?.value;
+  const el   = document.getElementById('reportContent');
+  if (!el) return;
+  if (!from || !to) { el.innerHTML = '<p style="color:var(--muted);text-align:center;padding:20px">Pick a date range.</p>'; return; }
+  el.innerHTML = '<p style="color:var(--muted);text-align:center;padding:20px">Loading…</p>';
+  try {
+    const data = await api('GET', `/api/records/report?from=${from}&to=${to}`);
+    if (!data.plants || !data.plants.length) {
+      el.innerHTML = '<p style="color:var(--muted);text-align:center;padding:24px">No records found in this range.</p>';
+      return;
+    }
+    _renderReportView(data);
+  } catch (e) {
+    el.innerHTML = `<p style="color:#c00;text-align:center;padding:20px">⚠ ${e.message}</p>`;
+  }
+}
+
+function _renderReportView(data) {
+  const { rows: R, totals: T } = _computeReport(data);
+  const lbl = document.getElementById('repCompareLabel');
+  if (lbl) lbl.textContent = `Comparing vs previous month (${data.prevMonthLabel})`;
+
+  const L  = n => (n / 1e5).toFixed(2);   // rupees → lakhs
+  const MT = n => (n / 1e3).toFixed(2);   // kg → tonnes
+  const cls = s => s === 'improving' ? 'rep-up' : s === 'worsening' ? 'rep-down' : '';
+  const chg = (s, pct) => s === 'no-data' ? '—' : (pct >= 0 ? '+' : '') + pct.toFixed(1) + '%';
+  const stat = s => s === 'improving' ? 'Improving ▼' : s === 'worsening' ? 'Worsening ▲' : s === 'same' ? 'Same' : '—';
+
+  const head = `<th>Metric</th>` + R.map(p => `<th>${p.name}</th>`).join('') + `<th class="rep-total-col">Total</th>`;
+
+  // Each row: label + a value per plant + the Total-column value
+  const row = (label, cellFn, totalHTML) =>
+    `<tr><td class="rep-metric-name">${label}</td>` +
+    R.map(p => `<td>${cellFn(p)}</td>`).join('') +
+    `<td class="rep-total-col">${totalHTML}</td></tr>`;
+
+  const body = [
+    row('Total Cost (₹ L)',           p => L(p.cost),  L(T.cost)),
+    row('Total Tonnage (MT)',         p => MT(p.qty),  MT(T.qty)),
+    row('Avg MPK (₹)',                p => p.mpk.toFixed(2), T.mpk.toFixed(2)),
+    row('Last Month MPK (₹)',         p => p.lmMPK != null ? p.lmMPK.toFixed(2) : '—', T.lmMPK != null ? T.lmMPK.toFixed(2) : '—'),
+    row('MPK Change',                 p => `<span class="${cls(p.status)}">${chg(p.status, p.changePct || 0)}</span>`, `<span class="${cls(T.status)}">${chg(T.status, T.changePct || 0)}</span>`),
+    row('Status',                     p => `<span class="${cls(p.status)}">${stat(p.status)}</span>`, `<span class="${cls(T.status)}">${stat(T.status)}</span>`),
+    row('Proj. Month-End MPK (₹)',    p => p.projMPK.toFixed(2), T.projMPK.toFixed(2)),
+    row('Proj. Month-End Cost (₹ L)', p => L(p.projCost), L(T.projCost)),
+    row('Proj. Tonnage (MT)',         p => MT(p.projQty), MT(T.projQty)),
+  ].join('');
+
+  document.getElementById('reportContent').innerHTML =
+    `<div class="rep-table-wrap"><table class="rep-table"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
 }
 document.addEventListener('click', function(e) {
   const dd = document.getElementById('exportDd');
