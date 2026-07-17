@@ -1447,7 +1447,7 @@ async function initApp() {
   const isAllPlants = !currentPlantId && !activePlantId;
   const effectivePlantName = currentPlantName || activePlantName;
   const isJaipur = effectivePlantName === 'Jaipur';
-  document.getElementById('allPlantsView').style.display  = isAllPlants ? '' : 'none';
+  document.getElementById('allPlantsView').style.display  = isAllPlants ? 'block' : 'none';
   document.getElementById('entryCards').style.display     = isAllPlants ? 'none' : 'block';
   document.querySelector('.sumbar').style.display         = isAllPlants ? 'none' : '';
   document.querySelector('.btn-save-rec').style.display   = isAllPlants ? 'none' : '';
@@ -1483,29 +1483,57 @@ async function loadAllPlantsView(date) {
   titleEl.textContent = `All Plants — Summary for ${dateStr}`;
   tableEl.innerHTML = '<div class="ap-empty">Loading…</div>';
   try {
-    const rows = await fetch('/api/records/allplants/' + date, { credentials: 'include' }).then(r => r.json());
-    if (!rows.length) { tableEl.innerHTML = '<div class="ap-empty">No data saved for this date across any plant.</div>'; return; }
+    const [rows, plants] = await Promise.all([
+      fetch('/api/records/allplants/' + date, { credentials: 'include' }).then(r => r.json()),
+      fetch('/api/auth/plants', { credentials: 'include' }).then(r => r.json()),
+    ]);
     const fc = v => '₹ ' + parseFloat(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     const fn2 = v => parseFloat(v || 0) > 0 ? '₹ ' + parseFloat(v).toFixed(2) : '—';
+
+    // Index the plants that DID submit for this date
+    const dataByName = {};
+    rows.forEach(r => { dataByName[r.plant_name] = r; });
+    const missing = plants.filter(p => !dataByName[p.name]).map(p => p.name);
+
+    // Submission flag banner
+    const banner = missing.length
+      ? `<div style="padding:10px 14px;margin-bottom:12px;border-radius:8px;background:#fef2f2;border:1px solid #fca5a5;color:#991b1b;font-size:13px;font-weight:600">
+           ⚠ Not updated for ${dateStr}: <b>${missing.join(', ')}</b> (${missing.length} of ${plants.length})</div>`
+      : `<div style="padding:10px 14px;margin-bottom:12px;border-radius:8px;background:#f0fdf4;border:1px solid #86efac;color:#166534;font-size:13px;font-weight:600">
+           ✓ All ${plants.length} plants have updated records for ${dateStr}</div>`;
+
     const totAtt = rows.reduce((s, r) => s + parseFloat(r.attendance_cost || 0), 0);
     const totKG  = rows.reduce((s, r) => s + parseFloat(r.kg_cost || 0), 0);
     const totTot = rows.reduce((s, r) => s + parseFloat(r.total_cost || 0), 0);
     const totQty = rows.reduce((s, r) => s + parseFloat(r.sale_qty || 0), 0);
     const totMPK = totQty > 0 ? totTot / totQty : null;
-    tableEl.innerHTML = `<table class="ap-table">
+
+    const okPill = '<span style="font-size:11px;font-weight:700;color:#166534;background:#dcfce7;padding:2px 8px;border-radius:20px">✓ Updated</span>';
+    const noPill = '<span style="font-size:11px;font-weight:700;color:#991b1b;background:#fee2e2;padding:2px 8px;border-radius:20px">⚠ Not updated</span>';
+
+    const bodyRows = plants.map(p => {
+      const r = dataByName[p.name];
+      if (r) return `<tr>
+        <td>${p.name}</td>
+        <td>${fc(r.attendance_cost)}</td>
+        <td>${fc(r.kg_cost)}</td>
+        <td>${fc(r.total_cost)}</td>
+        <td>${parseFloat(r.sale_qty || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+        <td>${fn2(r.mpk)}</td>
+        <td style="text-align:center">${okPill}</td>
+      </tr>`;
+      return `<tr style="background:#fff7f7">
+        <td>${p.name}</td>
+        <td>—</td><td>—</td><td>—</td><td>—</td><td>—</td>
+        <td style="text-align:center">${noPill}</td>
+      </tr>`;
+    }).join('');
+
+    tableEl.innerHTML = banner + `<table class="ap-table">
       <thead><tr>
-        <th>Plant</th><th>Prod. Att. Cost</th><th>Per KG Cost</th><th>Total Cost</th><th>Sale Qty (kg)</th><th>MPK (₹/kg)</th>
+        <th>Plant</th><th>Prod. Att. Cost</th><th>Per KG Cost</th><th>Total Cost</th><th>Sale Qty (kg)</th><th>MPK (₹/kg)</th><th style="text-align:center">Status</th>
       </tr></thead>
-      <tbody>
-        ${rows.map(r => `<tr>
-          <td>${r.plant_name}</td>
-          <td>${fc(r.attendance_cost)}</td>
-          <td>${fc(r.kg_cost)}</td>
-          <td>${fc(r.total_cost)}</td>
-          <td>${parseFloat(r.sale_qty || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-          <td>${fn2(r.mpk)}</td>
-        </tr>`).join('')}
-      </tbody>
+      <tbody>${bodyRows}</tbody>
       <tfoot><tr class="ap-total">
         <td>Total</td>
         <td>${fc(totAtt)}</td>
@@ -1513,6 +1541,7 @@ async function loadAllPlantsView(date) {
         <td>${fc(totTot)}</td>
         <td>${totQty.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
         <td>${totMPK ? '₹ ' + totMPK.toFixed(2) : '—'}</td>
+        <td></td>
       </tr></tfoot>
     </table>`;
   } catch (e) {
