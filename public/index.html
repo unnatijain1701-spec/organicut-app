@@ -1447,7 +1447,7 @@ async function initApp() {
   const isAllPlants = !currentPlantId && !activePlantId;
   const effectivePlantName = currentPlantName || activePlantName;
   const isJaipur = effectivePlantName === 'Jaipur';
-  document.getElementById('allPlantsView').style.display  = isAllPlants ? 'block' : 'none';
+  document.getElementById('allPlantsView').style.display  = isAllPlants ? '' : 'none';
   document.getElementById('entryCards').style.display     = isAllPlants ? 'none' : 'block';
   document.querySelector('.sumbar').style.display         = isAllPlants ? 'none' : '';
   document.querySelector('.btn-save-rec').style.display   = isAllPlants ? 'none' : '';
@@ -1483,57 +1483,29 @@ async function loadAllPlantsView(date) {
   titleEl.textContent = `All Plants — Summary for ${dateStr}`;
   tableEl.innerHTML = '<div class="ap-empty">Loading…</div>';
   try {
-    const [rows, plants] = await Promise.all([
-      fetch('/api/records/allplants/' + date, { credentials: 'include' }).then(r => r.json()),
-      fetch('/api/auth/plants', { credentials: 'include' }).then(r => r.json()),
-    ]);
+    const rows = await fetch('/api/records/allplants/' + date, { credentials: 'include' }).then(r => r.json());
+    if (!rows.length) { tableEl.innerHTML = '<div class="ap-empty">No data saved for this date across any plant.</div>'; return; }
     const fc = v => '₹ ' + parseFloat(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     const fn2 = v => parseFloat(v || 0) > 0 ? '₹ ' + parseFloat(v).toFixed(2) : '—';
-
-    // Index the plants that DID submit for this date
-    const dataByName = {};
-    rows.forEach(r => { dataByName[r.plant_name] = r; });
-    const missing = plants.filter(p => !dataByName[p.name]).map(p => p.name);
-
-    // Submission flag banner
-    const banner = missing.length
-      ? `<div style="padding:10px 14px;margin-bottom:12px;border-radius:8px;background:#fef2f2;border:1px solid #fca5a5;color:#991b1b;font-size:13px;font-weight:600">
-           ⚠ Not updated for ${dateStr}: <b>${missing.join(', ')}</b> (${missing.length} of ${plants.length})</div>`
-      : `<div style="padding:10px 14px;margin-bottom:12px;border-radius:8px;background:#f0fdf4;border:1px solid #86efac;color:#166534;font-size:13px;font-weight:600">
-           ✓ All ${plants.length} plants have updated records for ${dateStr}</div>`;
-
     const totAtt = rows.reduce((s, r) => s + parseFloat(r.attendance_cost || 0), 0);
     const totKG  = rows.reduce((s, r) => s + parseFloat(r.kg_cost || 0), 0);
     const totTot = rows.reduce((s, r) => s + parseFloat(r.total_cost || 0), 0);
     const totQty = rows.reduce((s, r) => s + parseFloat(r.sale_qty || 0), 0);
     const totMPK = totQty > 0 ? totTot / totQty : null;
-
-    const okPill = '<span style="font-size:11px;font-weight:700;color:#166534;background:#dcfce7;padding:2px 8px;border-radius:20px">✓ Updated</span>';
-    const noPill = '<span style="font-size:11px;font-weight:700;color:#991b1b;background:#fee2e2;padding:2px 8px;border-radius:20px">⚠ Not updated</span>';
-
-    const bodyRows = plants.map(p => {
-      const r = dataByName[p.name];
-      if (r) return `<tr>
-        <td>${p.name}</td>
-        <td>${fc(r.attendance_cost)}</td>
-        <td>${fc(r.kg_cost)}</td>
-        <td>${fc(r.total_cost)}</td>
-        <td>${parseFloat(r.sale_qty || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-        <td>${fn2(r.mpk)}</td>
-        <td style="text-align:center">${okPill}</td>
-      </tr>`;
-      return `<tr style="background:#fff7f7">
-        <td>${p.name}</td>
-        <td>—</td><td>—</td><td>—</td><td>—</td><td>—</td>
-        <td style="text-align:center">${noPill}</td>
-      </tr>`;
-    }).join('');
-
-    tableEl.innerHTML = banner + `<table class="ap-table">
+    tableEl.innerHTML = `<table class="ap-table">
       <thead><tr>
-        <th>Plant</th><th>Prod. Att. Cost</th><th>Per KG Cost</th><th>Total Cost</th><th>Sale Qty (kg)</th><th>MPK (₹/kg)</th><th style="text-align:center">Status</th>
+        <th>Plant</th><th>Prod. Att. Cost</th><th>Per KG Cost</th><th>Total Cost</th><th>Sale Qty (kg)</th><th>MPK (₹/kg)</th>
       </tr></thead>
-      <tbody>${bodyRows}</tbody>
+      <tbody>
+        ${rows.map(r => `<tr>
+          <td>${r.plant_name}</td>
+          <td>${fc(r.attendance_cost)}</td>
+          <td>${fc(r.kg_cost)}</td>
+          <td>${fc(r.total_cost)}</td>
+          <td>${parseFloat(r.sale_qty || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+          <td>${fn2(r.mpk)}</td>
+        </tr>`).join('')}
+      </tbody>
       <tfoot><tr class="ap-total">
         <td>Total</td>
         <td>${fc(totAtt)}</td>
@@ -1541,7 +1513,6 @@ async function loadAllPlantsView(date) {
         <td>${fc(totTot)}</td>
         <td>${totQty.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
         <td>${totMPK ? '₹ ' + totMPK.toFixed(2) : '—'}</td>
-        <td></td>
       </tr></tfoot>
     </table>`;
   } catch (e) {
@@ -3037,7 +3008,7 @@ function _computeReport(data) {
     if (lmCost) tLCost += lmCost;
     if (lmQty)  tLQty  += lmQty;
 
-    return { name: p.name, cost: p.total_cost, qty: p.total_qty, mpk: p.mpk,
+    return { name: p.name, days: p.days, cost: p.total_cost, qty: p.total_qty, mpk: p.mpk,
              lmMPK, changePct, status, projCost, projQty, projMPK };
   });
 
@@ -3074,12 +3045,14 @@ async function generatePlantReport(from, to) {
     const data = await api('GET', `/api/records/report?from=${from}&to=${to}`);
     if (!data.plants || !data.plants.length) { showToast('⚠ No data in this range', true); return; }
     const { rows: R, totals: T } = _computeReport(data);
+    const rangeDays = Math.round((new Date(to) - new Date(from)) / 86400000) + 1;
 
-    const header = ['Plant','Total Cost (L)','Total Tonnage (MT)','Avg MPK (₹)',
+    const header = ['Plant','Days Recorded','Total Cost (L)','Total Tonnage (MT)','Avg MPK (₹)',
                     'Last Month MPK (₹)','MPK Change','Status',
                     'Proj. Month-End Cost (L)','Proj. Tonnage (MT)','Proj. MPK (₹)'];
     const rowFor = r => [
-      r.name, _repL(r.cost), _repMT(r.qty), +r.mpk.toFixed(2),
+      r.name, r.days != null ? `${r.days} / ${rangeDays}` : `${rangeDays} days`,
+      _repL(r.cost), _repMT(r.qty), +r.mpk.toFixed(2),
       r.lmMPK != null ? +r.lmMPK.toFixed(2) : '—',
       _repChangeText(r.status, r.changePct || 0), _repStatusText(r.status),
       _repL(r.projCost), _repMT(r.projQty), +r.projMPK.toFixed(2),
@@ -3095,7 +3068,7 @@ async function generatePlantReport(from, to) {
       rowFor({ ...T, name: 'TOTAL' }),
     ];
     const ws = XLSX.utils.aoa_to_sheet(aoa);
-    ws['!cols'] = [14,15,17,12,17,12,18,20,17,14].map(w => ({ wch: w }));
+    ws['!cols'] = [14,14,15,17,12,17,12,18,20,17,14].map(w => ({ wch: w }));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Multi-Plant Report');
     XLSX.writeFile(wb, `Organicut_MultiPlant_Report_${from}_to_${to}.xlsx`);
@@ -3152,6 +3125,9 @@ function _renderReportView(data) {
   const chg = (s, pct) => s === 'no-data' ? '—' : (pct >= 0 ? '+' : '') + pct.toFixed(1) + '%';
   const stat = s => s === 'improving' ? 'Improving ▼' : s === 'worsening' ? 'Worsening ▲' : s === 'same' ? 'Same' : '—';
 
+  // Number of calendar days in the selected period (inclusive)
+  const rangeDays = Math.round((new Date(data.to) - new Date(data.from)) / 86400000) + 1;
+
   const head = `<th>Metric</th>` + R.map(p => `<th>${p.name}</th>`).join('') + `<th class="rep-total-col">Total</th>`;
 
   // Each row: label + a value per plant + the Total-column value
@@ -3161,6 +3137,7 @@ function _renderReportView(data) {
     `<td class="rep-total-col">${totalHTML}</td></tr>`;
 
   const body = [
+    row('Days Recorded',              p => `<span class="${p.days >= rangeDays ? '' : 'rep-down'}">${p.days} / ${rangeDays}</span>`, `${rangeDays} days`),
     row('Total Cost (₹ L)',           p => L(p.cost),  L(T.cost)),
     row('Total Tonnage (MT)',         p => MT(p.qty),  MT(T.qty)),
     row('Avg MPK (₹)',                p => p.mpk.toFixed(2), T.mpk.toFixed(2)),
