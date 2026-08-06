@@ -615,6 +615,46 @@ td input[type="number"]:hover { border-color: #7dbf99; }
   color: var(--muted); background: none; transition: all .15s;
 }
 .dash-toggle-btn.active { background: var(--primary); color: #fff; }
+
+/* Calendar date-range picker */
+.daterange-trigger {
+  border: 1px solid var(--border); border-radius: 6px; padding: 5px 12px;
+  font-size: 13px; color: var(--text); background: #fff; cursor: pointer;
+  min-width: 190px; text-align: left;
+}
+.daterange-trigger:hover { border-color: var(--primary); }
+.rp-popover {
+  position: absolute; z-index: 2000; background: #fff; border: 1px solid var(--border);
+  border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.12); padding: 14px; width: 260px;
+}
+.rp-presets { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.rp-presets button {
+  border: 1px solid var(--border); border-radius: 20px; background: #f7fbf8;
+  color: var(--text); font-size: 11px; font-weight: 600; padding: 4px 10px; cursor: pointer;
+}
+.rp-presets button:hover { background: #edf7f1; border-color: var(--primary); }
+.rp-cal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.rp-cal-title { font-size: 12px; font-weight: 700; color: var(--text); }
+.rp-nav {
+  border: none; background: none; cursor: pointer; font-size: 16px; color: var(--muted);
+  width: 22px; height: 22px; line-height: 1; border-radius: 4px;
+}
+.rp-nav:hover { background: #edf7f1; color: var(--primary); }
+.rp-weekdays, .rp-days { display: grid; grid-template-columns: repeat(7, 1fr); text-align: center; }
+.rp-weekdays span { font-size: 9px; font-weight: 700; color: var(--muted); padding: 4px 0; }
+.rp-day {
+  font-size: 12px; color: var(--text); padding: 6px 0; cursor: pointer; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center; height: 26px;
+}
+.rp-day:not(.rp-empty):hover { background: #edf7f1; }
+.rp-day.rp-empty { cursor: default; }
+.rp-day.rp-today { font-weight: 700; color: var(--primary); }
+.rp-day.rp-inrange { background: #dcf1e4; border-radius: 0; }
+.rp-day.rp-start, .rp-day.rp-end,
+.rp-day.rp-start:hover, .rp-day.rp-end:hover {
+  background: var(--primary); color: #fff; font-weight: 700; border-radius: 50%;
+}
+.rp-hint { font-size: 11px; color: var(--muted); text-align: center; margin-top: 10px; }
 .dash-trend {
   padding: 13px 18px; border-radius: 10px; margin-bottom: 20px;
   font-size: 13px; font-weight: 600;
@@ -881,9 +921,7 @@ tr.dash-row-alt td { background: #f7fdf9; }
     <!-- Date range filter -->
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:16px 20px;background:#fff;border-bottom:1px solid var(--border);margin-bottom:0">
       <span style="font-size:12px;font-weight:700;color:var(--muted)">DATE RANGE</span>
-      <input type="date" id="dashFromDate" onchange="applyDashFilter()" style="border:1px solid var(--border);border-radius:6px;padding:5px 9px;font-size:13px;color:var(--text)">
-      <span style="font-size:13px;color:var(--muted)">to</span>
-      <input type="date" id="dashToDate" onchange="applyDashFilter()" style="border:1px solid var(--border);border-radius:6px;padding:5px 9px;font-size:13px;color:var(--text)">
+      <button type="button" id="dashRangeBtn" class="daterange-trigger" onclick="openRangePicker('dashRangeBtn', _dashFromDate, _dashToDate, function(f,t){ _dashFromDate=f; _dashToDate=t; _applyDashData(); })">Select dates</button>
       <button onclick="resetDashFilter()" style="border:1px solid var(--border);border-radius:6px;padding:5px 12px;font-size:12px;background:#fff;cursor:pointer;color:var(--muted)">Reset</button>
       <span id="dashDateRangeLabel" style="font-size:12px;color:var(--primary);font-weight:600;margin-left:4px"></span>
     </div>
@@ -1000,9 +1038,7 @@ tr.dash-row-alt td { background: #f7fdf9; }
     <div id="dashCompareView" style="display:none">
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:16px 20px;background:#fff;border-bottom:1px solid var(--border)">
         <span style="font-size:12px;font-weight:700;color:var(--muted)">DATE RANGE</span>
-        <input type="date" id="dashCompFromDate" onchange="loadDashCompare()" style="border:1px solid var(--border);border-radius:6px;padding:5px 9px;font-size:13px;color:var(--text)">
-        <span style="font-size:13px;color:var(--muted)">to</span>
-        <input type="date" id="dashCompToDate" onchange="loadDashCompare()" style="border:1px solid var(--border);border-radius:6px;padding:5px 9px;font-size:13px;color:var(--text)">
+        <button type="button" id="dashCompRangeBtn" class="daterange-trigger" onclick="openRangePicker('dashCompRangeBtn', _dashCompFromDate, _dashCompToDate, function(f,t){ _dashCompFromDate=f; _dashCompToDate=t; loadDashCompare(); })">Select dates</button>
         <span style="font-size:11px;color:var(--muted);margin-left:4px">Lines show each plant's 7-day rolling average MPK</span>
       </div>
       <div class="dash-section">
@@ -3719,6 +3755,159 @@ async function resetUserPassword(id, username) {
 }
 
 /* ═══════════════════════════════════════════════════════
+   CALENDAR DATE-RANGE PICKER
+   One popover: click a start date, click an end date, everything
+   between highlights. Replaces the old two-separate-fields pattern.
+═══════════════════════════════════════════════════════ */
+
+function updateRangeBtnLabel(btnId, from, to) {
+  const btn = document.getElementById(btnId);
+  if (!btn) return;
+  const fmtD = d => new Date(d + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+  btn.textContent = (from && to) ? `${fmtD(from)}  →  ${fmtD(to)}` : 'Select dates';
+}
+
+let _rpEl = null;       // the popover DOM element (single shared instance)
+let _rpState = null;    // { start, end, viewYear, viewMonth, onApply }
+
+function _rpCloseOnOutsideClick(e) {
+  if (_rpEl && !_rpEl.contains(e.target) && e.target.id !== _rpState?.triggerId) {
+    closeRangePicker();
+  }
+}
+
+function closeRangePicker() {
+  if (_rpEl) { _rpEl.remove(); _rpEl = null; }
+  _rpState = null;
+  document.removeEventListener('mousedown', _rpCloseOnOutsideClick);
+}
+
+function openRangePicker(triggerId, currentFrom, currentTo, onApply) {
+  if (_rpEl && _rpState?.triggerId === triggerId) { closeRangePicker(); return; }
+  closeRangePicker();
+
+  const initial = currentFrom ? new Date(currentFrom + 'T00:00:00') : new Date();
+  _rpState = {
+    triggerId,
+    start: currentFrom || null,
+    end: currentTo || null,
+    viewYear: initial.getFullYear(),
+    viewMonth: initial.getMonth(),
+    onApply,
+  };
+
+  _rpEl = document.createElement('div');
+  _rpEl.className = 'rp-popover';
+  document.body.appendChild(_rpEl);
+  _rpRender();
+  _rpPosition(triggerId);
+
+  setTimeout(() => document.addEventListener('mousedown', _rpCloseOnOutsideClick), 0);
+}
+
+function _rpPosition(triggerId) {
+  const trigger = document.getElementById(triggerId);
+  if (!trigger || !_rpEl) return;
+  const r = trigger.getBoundingClientRect();
+  _rpEl.style.top  = (window.scrollY + r.bottom + 6) + 'px';
+  _rpEl.style.left = (window.scrollX + r.left) + 'px';
+}
+
+function _rpSetPreset(days, monthOffset) {
+  const now = new Date();
+  let from, to;
+  if (monthOffset !== undefined) {
+    const y = now.getFullYear(), m = now.getMonth() + monthOffset;
+    from = new Date(y, m, 1);
+    to   = new Date(y, m + 1, 0);
+  } else {
+    to = now;
+    from = new Date(now); from.setDate(from.getDate() - (days - 1));
+  }
+  const iso = d => d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+  _rpState.start = iso(from);
+  _rpState.end   = iso(to);
+  _rpState.viewYear  = to.getFullYear();
+  _rpState.viewMonth = to.getMonth();
+  _rpApplyAndClose();
+}
+
+function _rpApplyAndClose() {
+  const { start, end, onApply } = _rpState;
+  const triggerId = _rpState.triggerId;
+  onApply(start, end);
+  updateRangeBtnLabel(triggerId, start, end);
+  closeRangePicker();
+}
+
+function _rpDayClick(iso) {
+  const s = _rpState;
+  if (!s.start || (s.start && s.end)) {
+    // Starting a fresh selection
+    s.start = iso; s.end = null;
+  } else if (iso < s.start) {
+    // Clicked before the start — restart the range from here
+    s.start = iso; s.end = null;
+  } else {
+    s.end = iso;
+    _rpApplyAndClose();
+    return;
+  }
+  _rpRender();
+}
+
+function _rpNavMonth(delta) {
+  let m = _rpState.viewMonth + delta, y = _rpState.viewYear;
+  if (m < 0) { m = 11; y--; } else if (m > 11) { m = 0; y++; }
+  _rpState.viewMonth = m; _rpState.viewYear = y;
+  _rpRender();
+}
+
+function _rpRender() {
+  const s = _rpState;
+  const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const firstOfMonth = new Date(s.viewYear, s.viewMonth, 1);
+  const startWeekday = firstOfMonth.getDay();
+  const daysInMonth = new Date(s.viewYear, s.viewMonth + 1, 0).getDate();
+  const iso = (y,m,d) => y + '-' + String(m+1).padStart(2,'0') + '-' + String(d).padStart(2,'0');
+  const todayIso = iso(new Date().getFullYear(), new Date().getMonth(), new Date().getDate());
+
+  let cells = '';
+  for (let i = 0; i < startWeekday; i++) cells += '<span class="rp-day rp-empty"></span>';
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dIso = iso(s.viewYear, s.viewMonth, d);
+    let cls = 'rp-day';
+    if (dIso === todayIso) cls += ' rp-today';
+    if (s.start && dIso === s.start) cls += ' rp-start';
+    if (s.end && dIso === s.end) cls += ' rp-end';
+    if (s.start && s.end && dIso > s.start && dIso < s.end) cls += ' rp-inrange';
+    if (s.start && !s.end && dIso === s.start) cls += ' rp-start';
+    cells += `<span class="${cls}" onclick="_rpDayClick('${dIso}')">${d}</span>`;
+  }
+
+  _rpEl.innerHTML = `
+    <div class="rp-presets">
+      <button type="button" onclick="_rpSetPreset(1)">Today</button>
+      <button type="button" onclick="_rpSetPreset(7)">Last 7 Days</button>
+      <button type="button" onclick="_rpSetPreset(null, 0)">This Month</button>
+      <button type="button" onclick="_rpSetPreset(null, -1)">Last Month</button>
+    </div>
+    <div class="rp-cal">
+      <div class="rp-cal-head">
+        <button type="button" class="rp-nav" onclick="_rpNavMonth(-1)">‹</button>
+        <span class="rp-cal-title">${monthNames[s.viewMonth]} ${s.viewYear}</span>
+        <button type="button" class="rp-nav" onclick="_rpNavMonth(1)">›</button>
+      </div>
+      <div class="rp-weekdays">
+        <span>S</span><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span>
+      </div>
+      <div class="rp-days">${cells}</div>
+    </div>
+    <div class="rp-hint">${s.start && !s.end ? 'Pick an end date' : 'Pick a start date'}</div>
+  `;
+}
+
+/* ═══════════════════════════════════════════════════════
    ADMIN DASHBOARD
 ═══════════════════════════════════════════════════════ */
 
@@ -3728,22 +3917,26 @@ let _dashData = null;
 let _dashView = 'daily';
 let _dashFromDate = null;
 let _dashToDate   = null;
+let _dashCompFromDate = null;
+let _dashCompToDate   = null;
+
+function _defaultMonthRange() {
+  const now = new Date();
+  const y = now.getFullYear(), m = String(now.getMonth() + 1).padStart(2, '0');
+  const lastDay = new Date(y, now.getMonth() + 1, 0).getDate();
+  return [`${y}-${m}-01`, `${y}-${m}-${String(lastDay).padStart(2,'0')}`];
+}
 
 async function loadDashboard() {
   if (currentRole !== 'admin' && currentRole !== 'superadmin' && currentPlantId) return;
   document.getElementById('dashboardOverlay').style.display = 'flex';
   document.getElementById('dashViewSwitch').style.display = currentRole === 'superadmin' ? '' : 'none';
   switchDashView('overview');
-  // Default to current month
-  const now = new Date();
-  const y = now.getFullYear(), m = String(now.getMonth() + 1).padStart(2, '0');
-  const lastDay = new Date(y, now.getMonth() + 1, 0).getDate();
-  _dashFromDate = `${y}-${m}-01`;
-  _dashToDate   = `${y}-${m}-${String(lastDay).padStart(2,'0')}`;
-  document.getElementById('dashFromDate').value = _dashFromDate;
-  document.getElementById('dashToDate').value   = _dashToDate;
-  document.getElementById('dashCompFromDate').value = _dashFromDate;
-  document.getElementById('dashCompToDate').value   = _dashToDate;
+  // Keep whatever range the user already picked — only default it the first time.
+  if (!_dashFromDate || !_dashToDate) [_dashFromDate, _dashToDate] = _defaultMonthRange();
+  if (!_dashCompFromDate || !_dashCompToDate) [_dashCompFromDate, _dashCompToDate] = _defaultMonthRange();
+  updateRangeBtnLabel('dashRangeBtn', _dashFromDate, _dashToDate);
+  updateRangeBtnLabel('dashCompRangeBtn', _dashCompFromDate, _dashCompToDate);
   try {
     const data = await api('GET', '/api/records/analytics');
     _dashData = data;
@@ -3765,9 +3958,10 @@ let _dashCompare = null;
 let _dashCompareData = null;
 
 async function loadDashCompare() {
-  const from = document.getElementById('dashCompFromDate').value;
-  const to   = document.getElementById('dashCompToDate').value;
+  const from = _dashCompFromDate;
+  const to   = _dashCompToDate;
   if (!from || !to) return;
+  updateRangeBtnLabel('dashCompRangeBtn', from, to);
   try {
     const data = await api('GET', `/api/records/compare?from=${from}&to=${to}`);
     _dashCompareData = data;
@@ -3840,20 +4034,9 @@ function _renderDashCompare(data) {
   });
 }
 
-function applyDashFilter() {
-  _dashFromDate = document.getElementById('dashFromDate').value || null;
-  _dashToDate   = document.getElementById('dashToDate').value   || null;
-  _applyDashData();
-}
-
 function resetDashFilter() {
-  const now = new Date();
-  const y = now.getFullYear(), m = String(now.getMonth() + 1).padStart(2, '0');
-  const lastDay = new Date(y, now.getMonth() + 1, 0).getDate();
-  _dashFromDate = `${y}-${m}-01`;
-  _dashToDate   = `${y}-${m}-${String(lastDay).padStart(2,'0')}`;
-  document.getElementById('dashFromDate').value = _dashFromDate;
-  document.getElementById('dashToDate').value   = _dashToDate;
+  [_dashFromDate, _dashToDate] = _defaultMonthRange();
+  updateRangeBtnLabel('dashRangeBtn', _dashFromDate, _dashToDate);
   _applyDashData();
 }
 
