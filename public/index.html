@@ -4045,8 +4045,11 @@ function _applyDashData() {
   // Filter daily records to selected range
   const filtered = {
     daily: _dashData.daily.filter(r => {
-      if (_dashFromDate && r.date < _dashFromDate) return false;
-      if (_dashToDate   && r.date > _dashToDate)   return false;
+      // r.date may come back as a full ISO timestamp ("...T00:00:00.000Z") from the
+      // backend — compare only the date portion so the "to" day itself isn't excluded.
+      const d = r.date.slice(0, 10);
+      if (_dashFromDate && d < _dashFromDate) return false;
+      if (_dashToDate   && d > _dashToDate)   return false;
       return true;
     }),
     monthly: _dashData.monthly
@@ -4189,8 +4192,9 @@ function _renderLineChart() {
 
   // Use filtered daily data for daily view
   const filteredDaily = _dashData.daily.filter(r => {
-    if (_dashFromDate && r.date < _dashFromDate) return false;
-    if (_dashToDate   && r.date > _dashToDate)   return false;
+    const d = r.date.slice(0, 10);
+    if (_dashFromDate && d < _dashFromDate) return false;
+    if (_dashToDate   && d > _dashToDate)   return false;
     return true;
   });
 
