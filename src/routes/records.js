@@ -131,6 +131,39 @@ router.get('/analytics', async (req, res) => {
   }
 });
 
+// GET /api/records/compare?from=&to=  — superadmin: daily cost+qty per plant, for cross-plant MPK comparison
+router.get('/compare', async (req, res) => {
+  if (req.user.role !== 'superadmin')
+    return res.status(403).json({ error: 'Superadmin only' });
+  const from = (req.query.from || '').slice(0, 10);
+  const to   = (req.query.to   || '').slice(0, 10);
+  if (!from || !to) return res.status(400).json({ error: 'from and to dates are required' });
+  try {
+    const { rows } = await db.query(`
+      SELECT p.id AS plant_id, p.name AS plant_name, p.display_order,
+        dr.record_date AS date, dr.total_cost, dr.sale_qty
+      FROM daily_records dr JOIN plants p ON p.id = dr.plant_id
+      WHERE dr.record_date BETWEEN $1 AND $2
+      ORDER BY p.display_order, dr.record_date ASC
+    `, [from, to]);
+
+    const plantMap = {};
+    rows.forEach(r => {
+      if (!plantMap[r.plant_id]) plantMap[r.plant_id] = { name: r.plant_name, daily: [] };
+      plantMap[r.plant_id].daily.push({
+        date: r.date.toISOString().slice(0, 10),
+        cost: parseFloat(r.total_cost),
+        qty:  parseFloat(r.sale_qty),
+      });
+    });
+
+    res.json({ from, to, plants: Object.values(plantMap) });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // GET /api/records/allplants/:date  — per-plant summary for a date (all-plants users only)
 router.get('/allplants/:date', async (req, res) => {
   if (req.user.plant_id != null) return res.status(403).json({ error: 'Forbidden' });

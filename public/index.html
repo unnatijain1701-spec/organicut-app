@@ -868,6 +868,16 @@ tr.dash-row-alt td { background: #f7fdf9; }
   </div>
   <div class="dash-body">
 
+    <!-- View switcher (superadmin only) -->
+    <div id="dashViewSwitch" style="display:none;padding:14px 20px 0">
+      <div class="dash-toggle">
+        <button class="dash-toggle-btn active" id="btnDashOverview" onclick="switchDashView('overview')">Overview</button>
+        <button class="dash-toggle-btn" id="btnDashCompare" onclick="switchDashView('compare')">Compare Plants</button>
+      </div>
+    </div>
+
+    <div id="dashOverviewView">
+
     <!-- Date range filter -->
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:16px 20px;background:#fff;border-bottom:1px solid var(--border);margin-bottom:0">
       <span style="font-size:12px;font-weight:700;color:var(--muted)">DATE RANGE</span>
@@ -981,6 +991,26 @@ tr.dash-row-alt td { background: #f7fdf9; }
           </thead>
           <tbody id="dashTableBody"></tbody>
         </table>
+      </div>
+    </div>
+
+    </div><!-- /dashOverviewView -->
+
+    <!-- Compare Plants view (superadmin only) -->
+    <div id="dashCompareView" style="display:none">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:16px 20px;background:#fff;border-bottom:1px solid var(--border)">
+        <span style="font-size:12px;font-weight:700;color:var(--muted)">DATE RANGE</span>
+        <input type="date" id="dashCompFromDate" onchange="loadDashCompare()" style="border:1px solid var(--border);border-radius:6px;padding:5px 9px;font-size:13px;color:var(--text)">
+        <span style="font-size:13px;color:var(--muted)">to</span>
+        <input type="date" id="dashCompToDate" onchange="loadDashCompare()" style="border:1px solid var(--border);border-radius:6px;padding:5px 9px;font-size:13px;color:var(--text)">
+        <span style="font-size:11px;color:var(--muted);margin-left:4px">Lines show each plant's 7-day rolling average MPK</span>
+      </div>
+      <div class="dash-section">
+        <div class="dash-section-head">
+          <span class="dash-section-title">MPK by Plant (7-day rolling avg)</span>
+        </div>
+        <canvas id="dashCompareChart" height="110"></canvas>
+        <div id="dashCompareEmpty" style="display:none;padding:30px;text-align:center;color:var(--muted);font-size:13px">Not enough data in this range yet.</div>
       </div>
     </div>
 
@@ -3702,6 +3732,8 @@ let _dashToDate   = null;
 async function loadDashboard() {
   if (currentRole !== 'admin' && currentRole !== 'superadmin' && currentPlantId) return;
   document.getElementById('dashboardOverlay').style.display = 'flex';
+  document.getElementById('dashViewSwitch').style.display = currentRole === 'superadmin' ? '' : 'none';
+  switchDashView('overview');
   // Default to current month
   const now = new Date();
   const y = now.getFullYear(), m = String(now.getMonth() + 1).padStart(2, '0');
@@ -3710,6 +3742,8 @@ async function loadDashboard() {
   _dashToDate   = `${y}-${m}-${String(lastDay).padStart(2,'0')}`;
   document.getElementById('dashFromDate').value = _dashFromDate;
   document.getElementById('dashToDate').value   = _dashToDate;
+  document.getElementById('dashCompFromDate').value = _dashFromDate;
+  document.getElementById('dashCompToDate').value   = _dashToDate;
   try {
     const data = await api('GET', '/api/records/analytics');
     _dashData = data;
@@ -3717,6 +3751,93 @@ async function loadDashboard() {
   } catch (e) {
     showToast('Failed to load dashboard: ' + e.message, true);
   }
+}
+
+function switchDashView(view) {
+  document.getElementById('btnDashOverview').classList.toggle('active', view === 'overview');
+  document.getElementById('btnDashCompare').classList.toggle('active', view === 'compare');
+  document.getElementById('dashOverviewView').style.display = view === 'overview' ? '' : 'none';
+  document.getElementById('dashCompareView').style.display  = view === 'compare'  ? '' : 'none';
+  if (view === 'compare' && !_dashCompareData) loadDashCompare();
+}
+
+let _dashCompare = null;
+let _dashCompareData = null;
+
+async function loadDashCompare() {
+  const from = document.getElementById('dashCompFromDate').value;
+  const to   = document.getElementById('dashCompToDate').value;
+  if (!from || !to) return;
+  try {
+    const data = await api('GET', `/api/records/compare?from=${from}&to=${to}`);
+    _dashCompareData = data;
+    _renderDashCompare(data);
+  } catch (e) {
+    showToast('Failed to load comparison: ' + e.message, true);
+  }
+}
+
+// Weighted 7-day rolling MPK: sum(cost) / sum(qty) over the trailing window,
+// not an average of daily MPKs (avoids skew from low-volume days).
+function _rollingMPK(daily, windowSize) {
+  const byDate = {};
+  daily.forEach(d => { byDate[d.date] = d; });
+  const dates = daily.map(d => d.date).sort();
+  return dates.map((date, i) => {
+    const windowDates = dates.slice(Math.max(0, i - windowSize + 1), i + 1);
+    let cost = 0, qty = 0;
+    windowDates.forEach(dt => { cost += byDate[dt].cost; qty += byDate[dt].qty; });
+    return { date, mpk: qty > 0 ? cost / qty : null };
+  });
+}
+
+function _renderDashCompare(data) {
+  if (_dashCompare) { _dashCompare.destroy(); _dashCompare = null; }
+  const emptyEl = document.getElementById('dashCompareEmpty');
+  const canvasEl = document.getElementById('dashCompareChart');
+
+  if (!data.plants.length || !data.plants.some(p => p.daily.length)) {
+    emptyEl.style.display = '';
+    canvasEl.style.display = 'none';
+    return;
+  }
+  emptyEl.style.display = 'none';
+  canvasEl.style.display = '';
+
+  const palette = ['#0f766e', '#c2410c', '#7c3aed', '#0369a1', '#be123c'];
+  const fmtLabel = d => new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+
+  // Union of all dates across plants, so every line shares the same x-axis
+  const allDates = [...new Set(data.plants.flatMap(p => p.daily.map(d => d.date)))].sort();
+
+  const datasets = data.plants.map((p, i) => {
+    const rolling = _rollingMPK(p.daily, 7);
+    const byDate = {}; rolling.forEach(r => { byDate[r.date] = r.mpk; });
+    return {
+      label: p.name,
+      data: allDates.map(dt => byDate[dt] ?? null),
+      borderColor: palette[i % palette.length],
+      backgroundColor: palette[i % palette.length],
+      spanGaps: true,
+      tension: 0.3,
+      pointRadius: 2,
+      borderWidth: 2,
+    };
+  });
+
+  const ctx = canvasEl.getContext('2d');
+  _dashCompare = new Chart(ctx, {
+    type: 'line',
+    data: { labels: allDates.map(fmtLabel), datasets },
+    options: {
+      responsive: true,
+      interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { position: 'top', labels: { boxWidth: 12, font: { size: 11 } } } },
+      scales: {
+        y: { title: { display: true, text: 'MPK (₹/kg)' } },
+      },
+    },
+  });
 }
 
 function applyDashFilter() {
