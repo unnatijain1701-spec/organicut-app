@@ -81,6 +81,27 @@ router.get('/export', async (req, res) => {
   }
 });
 
+// GET /api/records/contractors  — every distinct contractor name ever used at this
+// plant, pulled from the database (not per-device localStorage) so every user sees
+// the same list and can pick an existing name instead of retyping a new spelling.
+router.get('/contractors', async (req, res) => {
+  const pid = getPlantId(req);
+  if (!pid) return res.json({ names: [] });
+  try {
+    const { rows } = await db.query(`
+      SELECT DISTINCT ca.contractor_name
+      FROM contractor_attendance ca
+      JOIN daily_records dr ON dr.id = ca.record_id
+      WHERE dr.plant_id = $1
+      ORDER BY ca.contractor_name
+    `, [pid]);
+    res.json({ names: rows.map(r => r.contractor_name) });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // GET /api/records/contractor-drift?from=&to=  — per-contractor daily cost/workers
 // for the selected plant + range, so the client can flag anyone whose cost-per-worker
 // is trending up (used by the Dashboard's "Contractor Cost Trend" section).

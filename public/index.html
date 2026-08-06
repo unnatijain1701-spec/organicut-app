@@ -1669,8 +1669,20 @@ function setSavedContractors(list) {
   localStorage.setItem(_savedContractorKey(), JSON.stringify(list));
 }
 
-function showAddContractorPanel() {
+let _knownContractorNames = [];
+
+async function showAddContractorPanel() {
   if (document.getElementById('addContractorModal')) return;
+  // Pull the real list of names used at this plant (server-side, shared across
+  // everyone) so typing suggests existing names instead of inviting a new typo.
+  try {
+    const res = await api('GET', '/api/records/contractors');
+    _knownContractorNames = res.names || [];
+  } catch { _knownContractorNames = []; }
+
+  const datalistOptions = _knownContractorNames
+    .map(n => `<option value="${n.replace(/"/g, '&quot;')}">`).join('');
+
   const html = `<div id="addContractorModal" style="position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:9999;display:flex;align-items:center;justify-content:center">
     <div style="background:#fff;border-radius:14px;padding:24px;min-width:320px;max-width:480px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,.18)">
       <div style="font-weight:700;font-size:14px;margin-bottom:4px">Add Contractor</div>
@@ -1679,10 +1691,13 @@ function showAddContractorPanel() {
       <div style="border-top:1px solid var(--border);padding-top:14px">
         <div style="font-size:11px;font-weight:600;color:#4a7060;margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">New contractor</div>
         <div style="display:flex;gap:6px">
-          <input id="newContractorName" type="text" placeholder="Contractor name" class="input" style="flex:1"
+          <input id="newContractorName" type="text" placeholder="Start typing — existing names will suggest" class="input" style="flex:1"
+            list="knownContractorsList" autocomplete="off"
             onkeydown="if(event.key==='Enter')confirmAddContractor();if(event.key==='Escape')closeAddContractorPanel();">
+          <datalist id="knownContractorsList">${datalistOptions}</datalist>
           <button class="btn btn-save-rec" onclick="confirmAddContractor()">Add</button>
         </div>
+        ${_knownContractorNames.length ? `<div style="font-size:10px;color:var(--muted);margin-top:5px">${_knownContractorNames.length} existing contractor${_knownContractorNames.length === 1 ? '' : 's'} at this plant — pick a match instead of retyping to avoid duplicates.</div>` : ''}
       </div>
       <div style="display:flex;justify-content:flex-end;margin-top:14px">
         <button class="btn btn-card-outline" onclick="closeAddContractorPanel()">Close</button>
@@ -1730,8 +1745,15 @@ function closeAddContractorPanel() {
 function confirmAddContractor() {
   const inp = document.getElementById('newContractorName');
   if (!inp) return;
-  const name = inp.value.trim();
+  let name = inp.value.trim();
   if (!name) { showToast('⚠ Enter a contractor name.', true); return; }
+  // Case-insensitive match against known plant history — reuse the existing
+  // spelling instead of silently creating a near-duplicate ("siddhi sai" -> "Siddhi Sai").
+  const existingMatch = _knownContractorNames.find(n => n.toLowerCase() === name.toLowerCase());
+  if (existingMatch && existingMatch !== name) {
+    showToast(`Using existing name "${existingMatch}" to avoid a duplicate.`, false);
+    name = existingMatch;
+  }
   if (ATT_VENDORS.includes(name)) { showToast('⚠ Already in list.', true); closeAddContractorPanel(); return; }
   // Auto-save to saved list
   const saved = getSavedContractors();
