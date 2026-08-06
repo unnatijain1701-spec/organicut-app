@@ -655,6 +655,8 @@ td input[type="number"]:hover { border-color: #7dbf99; }
   background: var(--primary); color: #fff; font-weight: 700; border-radius: 50%;
 }
 .rp-hint { font-size: 11px; color: var(--muted); text-align: center; margin-top: 10px; }
+
+.dash-drift-table td { padding: 8px; border-top: 1px solid var(--border); }
 .dash-trend {
   padding: 13px 18px; border-radius: 10px; margin-bottom: 20px;
   font-size: 13px; font-weight: 600;
@@ -1006,6 +1008,15 @@ tr.dash-row-alt td { background: #f7fdf9; }
       </div>
       <canvas id="dashCostBreakdownChart" height="100"></canvas>
       <div id="dashCostBreakdownEmpty" style="display:none;padding:24px;text-align:center;color:var(--muted);font-size:13px">No sale quantity recorded in this range yet.</div>
+    </div>
+
+    <!-- Contractor cost-per-worker drift — flags rate creep, not just totals -->
+    <div class="dash-section" id="dashDriftSection" style="padding:0;overflow:hidden">
+      <div class="dash-section-head" style="padding:16px 20px 0">
+        <span class="dash-section-title">Contractor Cost Trend</span>
+        <span style="font-size:11px;color:var(--muted)">Cost per worker: early vs recent — flags anyone drifting up</span>
+      </div>
+      <div id="dashDriftBody" style="padding:16px 20px 20px"></div>
     </div>
 
     <!-- Bar chart (monthly only) -->
@@ -4076,6 +4087,87 @@ function _applyDashData() {
   setChartView(_dashView);
   _renderDashTable(filtered);
   _renderDashCostBreakdown(filtered.daily);
+  loadDashContractorDrift();
+}
+
+// Contractor cost-per-worker drift: splits the selected range into an
+// early half and a recent half, and flags contractors whose cost-per-worker
+// rose meaningfully between them — catches rate creep hidden inside totals.
+async function loadDashContractorDrift() {
+  const body = document.getElementById('dashDriftBody');
+  if (!currentPlantId && !activePlantId) {
+    body.innerHTML = '<div style="text-align:center;color:var(--muted);font-size:13px;padding:10px 0">Select a specific plant to see contractor cost trends.</div>';
+    return;
+  }
+  if (!_dashFromDate || !_dashToDate) return;
+  try {
+    const { rows } = await api('GET', `/api/records/contractor-drift?from=${_dashFromDate}&to=${_dashToDate}`);
+    _renderDashDrift(rows || []);
+  } catch (e) {
+    body.innerHTML = `<div style="text-align:center;color:var(--muted);font-size:13px;padding:10px 0">Failed to load: ${e.message}</div>`;
+  }
+}
+
+function _renderDashDrift(rows) {
+  const body = document.getElementById('dashDriftBody');
+  const byContractor = {};
+  rows.forEach(r => {
+    const w = parseFloat(r.workers), c = parseFloat(r.cost);
+    if (!(w > 0)) return; // skip days with no workers logged — cost/worker undefined
+    (byContractor[r.contractor_name] ||= []).push({ date: r.date, perWorker: c / w });
+  });
+
+  const results = Object.entries(byContractor).map(([name, entries]) => {
+    entries.sort((a, b) => a.date.localeCompare(b.date));
+    const n = entries.length;
+    const mid = Math.floor(n / 2);
+    const early  = entries.slice(0, mid);
+    const recent = entries.slice(mid);
+    const avg = arr => arr.reduce((s, e) => s + e.perWorker, 0) / arr.length;
+    if (early.length < 2 || recent.length < 2) {
+      return { name, days: n, insufficient: true };
+    }
+    const earlyAvg = avg(early), recentAvg = avg(recent);
+    const driftPct = earlyAvg > 0 ? ((recentAvg - earlyAvg) / earlyAvg) * 100 : 0;
+    return { name, days: n, earlyAvg, recentAvg, driftPct };
+  });
+
+  if (!results.length) {
+    body.innerHTML = '<div style="text-align:center;color:var(--muted);font-size:13px;padding:10px 0">No contractor attendance recorded in this range.</div>';
+    return;
+  }
+
+  results.sort((a, b) => (b.driftPct || -999) - (a.driftPct || -999));
+
+  const fc = v => '₹' + v.toFixed(0);
+  const rowsHtml = results.map(r => {
+    if (r.insufficient) {
+      return `<tr>
+        <td>${r.name}</td>
+        <td colspan="3" style="color:var(--muted);font-size:12px">Not enough days in this range to compare (${r.days} day${r.days === 1 ? '' : 's'})</td>
+      </tr>`;
+    }
+    const flagged = r.driftPct >= 8;
+    const improving = r.driftPct <= -8;
+    const pctColor = flagged ? '#b91c1c' : improving ? 'var(--success)' : 'var(--text)';
+    const sign = r.driftPct > 0 ? '+' : '';
+    return `<tr${flagged ? ' style="background:#fef2f2"' : ''}>
+      <td>${r.name}${flagged ? ' <span style="color:#b91c1c;font-size:11px;font-weight:700">⚠ drifting up</span>' : ''}</td>
+      <td class="r">${fc(r.earlyAvg)}/worker</td>
+      <td class="r">${fc(r.recentAvg)}/worker</td>
+      <td class="r" style="color:${pctColor};font-weight:700">${sign}${r.driftPct.toFixed(1)}%</td>
+    </tr>`;
+  }).join('');
+
+  body.innerHTML = `<div style="overflow-x:auto"><table class="dash-drift-table" style="width:100%;border-collapse:collapse;font-size:13px">
+    <thead><tr style="text-align:left;color:var(--muted);font-size:11px;text-transform:uppercase">
+      <th style="padding:6px 8px 6px 0">Contractor</th>
+      <th class="r" style="padding:6px 8px">Early Avg</th>
+      <th class="r" style="padding:6px 8px">Recent Avg</th>
+      <th class="r" style="padding:6px 0 6px 8px">Change</th>
+    </tr></thead>
+    <tbody>${rowsHtml}</tbody>
+  </table></div>`;
 }
 
 function closeDashboard() {

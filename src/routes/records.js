@@ -81,6 +81,30 @@ router.get('/export', async (req, res) => {
   }
 });
 
+// GET /api/records/contractor-drift?from=&to=  — per-contractor daily cost/workers
+// for the selected plant + range, so the client can flag anyone whose cost-per-worker
+// is trending up (used by the Dashboard's "Contractor Cost Trend" section).
+router.get('/contractor-drift', async (req, res) => {
+  const pid = getPlantId(req);
+  if (!pid) return res.json({ rows: [] }); // all-plants mode has no single plant to scope contractors to
+  const from = (req.query.from || '').slice(0, 10);
+  const to   = (req.query.to   || '').slice(0, 10);
+  if (!from || !to) return res.status(400).json({ error: 'from and to dates are required' });
+  try {
+    const { rows } = await db.query(`
+      SELECT dr.record_date AS date, ca.contractor_name, ca.workers, ca.cost
+      FROM contractor_attendance ca
+      JOIN daily_records dr ON dr.id = ca.record_id
+      WHERE dr.plant_id = $1 AND dr.record_date BETWEEN $2 AND $3
+      ORDER BY ca.contractor_name, dr.record_date ASC
+    `, [pid, from, to]);
+    res.json({ rows });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // GET /api/records/analytics  — monthly + daily aggregates for dashboard
 router.get('/analytics', async (req, res) => {
   const pid = getPlantId(req);
