@@ -615,48 +615,14 @@ td input[type="number"]:hover { border-color: #7dbf99; }
   color: var(--muted); background: none; transition: all .15s;
 }
 .dash-toggle-btn.active { background: var(--primary); color: #fff; }
-
-/* Calendar date-range picker */
-.daterange-trigger {
-  border: 1px solid var(--border); border-radius: 6px; padding: 5px 12px;
-  font-size: 13px; color: var(--text); background: #fff; cursor: pointer;
-  min-width: 190px; text-align: left;
+.dash-preset-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.dash-chip {
+  padding: 5px 12px; border-radius: 20px; border: 1px solid var(--border);
+  font-size: 12px; font-weight: 600; cursor: pointer;
+  color: var(--muted); background: #fff; transition: all .15s;
 }
-.daterange-trigger:hover { border-color: var(--primary); }
-.rp-popover {
-  position: absolute; z-index: 2000; background: #fff; border: 1px solid var(--border);
-  border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.12); padding: 14px; width: 260px;
-}
-.rp-presets { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
-.rp-presets button {
-  border: 1px solid var(--border); border-radius: 20px; background: #f7fbf8;
-  color: var(--text); font-size: 11px; font-weight: 600; padding: 4px 10px; cursor: pointer;
-}
-.rp-presets button:hover { background: #edf7f1; border-color: var(--primary); }
-.rp-cal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
-.rp-cal-title { font-size: 12px; font-weight: 700; color: var(--text); }
-.rp-nav {
-  border: none; background: none; cursor: pointer; font-size: 16px; color: var(--muted);
-  width: 22px; height: 22px; line-height: 1; border-radius: 4px;
-}
-.rp-nav:hover { background: #edf7f1; color: var(--primary); }
-.rp-weekdays, .rp-days { display: grid; grid-template-columns: repeat(7, 1fr); text-align: center; }
-.rp-weekdays span { font-size: 9px; font-weight: 700; color: var(--muted); padding: 4px 0; }
-.rp-day {
-  font-size: 12px; color: var(--text); padding: 6px 0; cursor: pointer; border-radius: 50%;
-  display: flex; align-items: center; justify-content: center; height: 26px;
-}
-.rp-day:not(.rp-empty):hover { background: #edf7f1; }
-.rp-day.rp-empty { cursor: default; }
-.rp-day.rp-today { font-weight: 700; color: var(--primary); }
-.rp-day.rp-inrange { background: #dcf1e4; border-radius: 0; }
-.rp-day.rp-start, .rp-day.rp-end,
-.rp-day.rp-start:hover, .rp-day.rp-end:hover {
-  background: var(--primary); color: #fff; font-weight: 700; border-radius: 50%;
-}
-.rp-hint { font-size: 11px; color: var(--muted); text-align: center; margin-top: 10px; }
-
-.dash-drift-table td { padding: 8px; border-top: 1px solid var(--border); }
+.dash-chip:hover { border-color: var(--primary); color: var(--primary); }
+.dash-chip.active { background: var(--primary); color: #fff; border-color: var(--primary); }
 .dash-trend {
   padding: 13px 18px; border-radius: 10px; margin-bottom: 20px;
   font-size: 13px; font-weight: 600;
@@ -923,8 +889,16 @@ tr.dash-row-alt td { background: #f7fdf9; }
     <!-- Date range filter -->
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:16px 20px;background:#fff;border-bottom:1px solid var(--border);margin-bottom:0">
       <span style="font-size:12px;font-weight:700;color:var(--muted)">DATE RANGE</span>
-      <button type="button" id="dashRangeBtn" class="daterange-trigger" onclick="openRangePicker('dashRangeBtn', _dashFromDate, _dashToDate, function(f,t){ _dashFromDate=f; _dashToDate=t; _applyDashData(); })">Select dates</button>
-      <button onclick="resetDashFilter()" style="border:1px solid var(--border);border-radius:6px;padding:5px 12px;font-size:12px;background:#fff;cursor:pointer;color:var(--muted)">Reset</button>
+      <div class="dash-preset-chips" id="dashPresetChips">
+        <button class="dash-chip" data-preset="today"     onclick="applyDashPreset('today')">Today</button>
+        <button class="dash-chip" data-preset="7d"        onclick="applyDashPreset('7d')">Last 7 Days</button>
+        <button class="dash-chip" data-preset="thisMonth" onclick="applyDashPreset('thisMonth')">This Month</button>
+        <button class="dash-chip" data-preset="lastMonth" onclick="applyDashPreset('lastMonth')">Last Month</button>
+        <button class="dash-chip" data-preset="custom"    onclick="applyDashPreset('custom')">Custom</button>
+      </div>
+      <input type="date" id="dashFromDate" onchange="applyDashPreset('custom')" style="border:1px solid var(--border);border-radius:6px;padding:5px 9px;font-size:13px;color:var(--text)">
+      <span style="font-size:13px;color:var(--muted)">to</span>
+      <input type="date" id="dashToDate" onchange="applyDashPreset('custom')" style="border:1px solid var(--border);border-radius:6px;padding:5px 9px;font-size:13px;color:var(--text)">
       <span id="dashDateRangeLabel" style="font-size:12px;color:var(--primary);font-weight:600;margin-left:4px"></span>
     </div>
 
@@ -1000,25 +974,6 @@ tr.dash-row-alt td { background: #f7fdf9; }
       <canvas id="dashLineChart" height="100"></canvas>
     </div>
 
-    <!-- Cost breakdown per kg: what's actually driving MPK -->
-    <div class="dash-section">
-      <div class="dash-section-head">
-        <span class="dash-section-title">Cost Breakdown per Kg</span>
-        <span style="font-size:11px;color:var(--muted)">Attendance vs KG-processing cost — the two halves of MPK</span>
-      </div>
-      <canvas id="dashCostBreakdownChart" height="100"></canvas>
-      <div id="dashCostBreakdownEmpty" style="display:none;padding:24px;text-align:center;color:var(--muted);font-size:13px">No sale quantity recorded in this range yet.</div>
-    </div>
-
-    <!-- Contractor cost-per-worker drift — flags rate creep, not just totals -->
-    <div class="dash-section" id="dashDriftSection" style="padding:0;overflow:hidden">
-      <div class="dash-section-head" style="padding:16px 20px 0">
-        <span class="dash-section-title">Contractor Cost Trend</span>
-        <span style="font-size:11px;color:var(--muted)">Cost per worker: early vs recent — flags anyone drifting up</span>
-      </div>
-      <div id="dashDriftBody" style="padding:16px 20px 20px"></div>
-    </div>
-
     <!-- Bar chart (monthly only) -->
     <div class="dash-section" id="dashBarSection" style="display:none">
       <div class="dash-section-head">
@@ -1059,7 +1014,16 @@ tr.dash-row-alt td { background: #f7fdf9; }
     <div id="dashCompareView" style="display:none">
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:16px 20px;background:#fff;border-bottom:1px solid var(--border)">
         <span style="font-size:12px;font-weight:700;color:var(--muted)">DATE RANGE</span>
-        <button type="button" id="dashCompRangeBtn" class="daterange-trigger" onclick="openRangePicker('dashCompRangeBtn', _dashCompFromDate, _dashCompToDate, function(f,t){ _dashCompFromDate=f; _dashCompToDate=t; loadDashCompare(); })">Select dates</button>
+        <div class="dash-preset-chips" id="dashCompPresetChips">
+          <button class="dash-chip" data-preset="today"     onclick="applyDashCompPreset('today')">Today</button>
+          <button class="dash-chip" data-preset="7d"        onclick="applyDashCompPreset('7d')">Last 7 Days</button>
+          <button class="dash-chip" data-preset="thisMonth" onclick="applyDashCompPreset('thisMonth')">This Month</button>
+          <button class="dash-chip" data-preset="lastMonth" onclick="applyDashCompPreset('lastMonth')">Last Month</button>
+          <button class="dash-chip" data-preset="custom"    onclick="applyDashCompPreset('custom')">Custom</button>
+        </div>
+        <input type="date" id="dashCompFromDate" onchange="applyDashCompPreset('custom')" style="border:1px solid var(--border);border-radius:6px;padding:5px 9px;font-size:13px;color:var(--text)">
+        <span style="font-size:13px;color:var(--muted)">to</span>
+        <input type="date" id="dashCompToDate" onchange="applyDashCompPreset('custom')" style="border:1px solid var(--border);border-radius:6px;padding:5px 9px;font-size:13px;color:var(--text)">
         <span style="font-size:11px;color:var(--muted);margin-left:4px">Lines show each plant's 7-day rolling average MPK</span>
       </div>
       <div class="dash-section">
@@ -1669,20 +1633,8 @@ function setSavedContractors(list) {
   localStorage.setItem(_savedContractorKey(), JSON.stringify(list));
 }
 
-let _knownContractorNames = [];
-
-async function showAddContractorPanel() {
+function showAddContractorPanel() {
   if (document.getElementById('addContractorModal')) return;
-  // Pull the real list of names used at this plant (server-side, shared across
-  // everyone) so typing suggests existing names instead of inviting a new typo.
-  try {
-    const res = await api('GET', '/api/records/contractors');
-    _knownContractorNames = res.names || [];
-  } catch { _knownContractorNames = []; }
-
-  const datalistOptions = _knownContractorNames
-    .map(n => `<option value="${n.replace(/"/g, '&quot;')}">`).join('');
-
   const html = `<div id="addContractorModal" style="position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:9999;display:flex;align-items:center;justify-content:center">
     <div style="background:#fff;border-radius:14px;padding:24px;min-width:320px;max-width:480px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,.18)">
       <div style="font-weight:700;font-size:14px;margin-bottom:4px">Add Contractor</div>
@@ -1691,13 +1643,10 @@ async function showAddContractorPanel() {
       <div style="border-top:1px solid var(--border);padding-top:14px">
         <div style="font-size:11px;font-weight:600;color:#4a7060;margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">New contractor</div>
         <div style="display:flex;gap:6px">
-          <input id="newContractorName" type="text" placeholder="Start typing — existing names will suggest" class="input" style="flex:1"
-            list="knownContractorsList" autocomplete="off"
+          <input id="newContractorName" type="text" placeholder="Contractor name" class="input" style="flex:1"
             onkeydown="if(event.key==='Enter')confirmAddContractor();if(event.key==='Escape')closeAddContractorPanel();">
-          <datalist id="knownContractorsList">${datalistOptions}</datalist>
           <button class="btn btn-save-rec" onclick="confirmAddContractor()">Add</button>
         </div>
-        ${_knownContractorNames.length ? `<div style="font-size:10px;color:var(--muted);margin-top:5px">${_knownContractorNames.length} existing contractor${_knownContractorNames.length === 1 ? '' : 's'} at this plant — pick a match instead of retyping to avoid duplicates.</div>` : ''}
       </div>
       <div style="display:flex;justify-content:flex-end;margin-top:14px">
         <button class="btn btn-card-outline" onclick="closeAddContractorPanel()">Close</button>
@@ -1745,15 +1694,8 @@ function closeAddContractorPanel() {
 function confirmAddContractor() {
   const inp = document.getElementById('newContractorName');
   if (!inp) return;
-  let name = inp.value.trim();
+  const name = inp.value.trim();
   if (!name) { showToast('⚠ Enter a contractor name.', true); return; }
-  // Case-insensitive match against known plant history — reuse the existing
-  // spelling instead of silently creating a near-duplicate ("siddhi sai" -> "Siddhi Sai").
-  const existingMatch = _knownContractorNames.find(n => n.toLowerCase() === name.toLowerCase());
-  if (existingMatch && existingMatch !== name) {
-    showToast(`Using existing name "${existingMatch}" to avoid a duplicate.`, false);
-    name = existingMatch;
-  }
   if (ATT_VENDORS.includes(name)) { showToast('⚠ Already in list.', true); closeAddContractorPanel(); return; }
   // Auto-save to saved list
   const saved = getSavedContractors();
@@ -2973,6 +2915,12 @@ async function deleteHistoryRecord(date) {
 // Convert "YYYY-MM-DD" string to a JS Date that SheetJS writes as a real Excel date
 function xlDate(str) { return str ? new Date(str + 'T00:00:00') : str; }
 
+// Filesystem-safe plant name for export filenames, e.g. "Rai" or "AllPlants"
+function _exportPlantTag() {
+  const name = currentPlantName || activePlantName;
+  return name ? name.replace(/[^a-zA-Z0-9]+/g, '') : 'AllPlants';
+}
+
 function exportExcel() {
   if (typeof XLSX === 'undefined') {
     alert('SheetJS library not loaded — check your internet connection and reload the page.');
@@ -3037,7 +2985,7 @@ function exportExcel() {
   XLSX.utils.book_append_sheet(wb, ws4, 'Attendance Summary');
   XLSX.utils.book_append_sheet(wb, ws2, 'Attendance Detail');
   XLSX.utils.book_append_sheet(wb, ws3, 'KG Detail');
-  XLSX.writeFile(wb, 'Organicut_MPK_' + date + '.xlsx');
+  XLSX.writeFile(wb, 'Organicut_MPK_' + _exportPlantTag() + '_' + date + '.xlsx');
 }
 
 function toggleExportDd() {
@@ -3312,7 +3260,7 @@ async function exportMonthRecords() {
     XLSX.utils.book_append_sheet(wb, ws1, 'Summary');
     XLSX.utils.book_append_sheet(wb, ws2, 'Attendance Detail');
     XLSX.utils.book_append_sheet(wb, ws3, 'KG Detail');
-    XLSX.writeFile(wb, 'Organicut_MPK_' + month + '.xlsx');
+    XLSX.writeFile(wb, 'Organicut_MPK_' + _exportPlantTag() + '_' + month + '.xlsx');
     showToast('✓ Exported ' + records.length + ' record(s) for ' + month, false);
   } catch (e) {
     showToast('⚠ Export failed: ' + e.message, true);
@@ -3399,7 +3347,7 @@ async function exportAllRecords() {
     XLSX.utils.book_append_sheet(wb, wsAS, 'Attendance Summary');
     XLSX.utils.book_append_sheet(wb, wsKD, 'KG Detail');
     XLSX.utils.book_append_sheet(wb, wsKS, 'KG Vendor Summary');
-    XLSX.writeFile(wb, 'Organicut_MPK_All_Records.xlsx');
+    XLSX.writeFile(wb, 'Organicut_MPK_' + _exportPlantTag() + '_AllRecords.xlsx');
     showToast('✓ Exported ' + records.length + ' record' + (records.length === 1 ? '' : 's'), false);
   } catch (e) {
     showToast('⚠ Export failed: ' + e.message, true);
@@ -3798,177 +3746,42 @@ async function resetUserPassword(id, username) {
 }
 
 /* ═══════════════════════════════════════════════════════
-   CALENDAR DATE-RANGE PICKER
-   One popover: click a start date, click an end date, everything
-   between highlights. Replaces the old two-separate-fields pattern.
-═══════════════════════════════════════════════════════ */
-
-function updateRangeBtnLabel(btnId, from, to) {
-  const btn = document.getElementById(btnId);
-  if (!btn) return;
-  const fmtD = d => new Date(d + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
-  btn.textContent = (from && to) ? `${fmtD(from)}  →  ${fmtD(to)}` : 'Select dates';
-}
-
-let _rpEl = null;       // the popover DOM element (single shared instance)
-let _rpState = null;    // { start, end, viewYear, viewMonth, onApply }
-
-function _rpCloseOnOutsideClick(e) {
-  if (_rpEl && !_rpEl.contains(e.target) && e.target.id !== _rpState?.triggerId) {
-    closeRangePicker();
-  }
-}
-
-function closeRangePicker() {
-  if (_rpEl) { _rpEl.remove(); _rpEl = null; }
-  _rpState = null;
-  document.removeEventListener('mousedown', _rpCloseOnOutsideClick);
-}
-
-function openRangePicker(triggerId, currentFrom, currentTo, onApply) {
-  if (_rpEl && _rpState?.triggerId === triggerId) { closeRangePicker(); return; }
-  closeRangePicker();
-
-  const initial = currentFrom ? new Date(currentFrom + 'T00:00:00') : new Date();
-  _rpState = {
-    triggerId,
-    start: currentFrom || null,
-    end: currentTo || null,
-    viewYear: initial.getFullYear(),
-    viewMonth: initial.getMonth(),
-    onApply,
-  };
-
-  _rpEl = document.createElement('div');
-  _rpEl.className = 'rp-popover';
-  document.body.appendChild(_rpEl);
-  _rpRender();
-  _rpPosition(triggerId);
-
-  setTimeout(() => document.addEventListener('mousedown', _rpCloseOnOutsideClick), 0);
-}
-
-function _rpPosition(triggerId) {
-  const trigger = document.getElementById(triggerId);
-  if (!trigger || !_rpEl) return;
-  const r = trigger.getBoundingClientRect();
-  _rpEl.style.top  = (window.scrollY + r.bottom + 6) + 'px';
-  _rpEl.style.left = (window.scrollX + r.left) + 'px';
-}
-
-function _rpSetPreset(days, monthOffset) {
-  const now = new Date();
-  let from, to;
-  if (monthOffset !== undefined) {
-    const y = now.getFullYear(), m = now.getMonth() + monthOffset;
-    from = new Date(y, m, 1);
-    to   = new Date(y, m + 1, 0);
-  } else {
-    to = now;
-    from = new Date(now); from.setDate(from.getDate() - (days - 1));
-  }
-  const iso = d => d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
-  _rpState.start = iso(from);
-  _rpState.end   = iso(to);
-  _rpState.viewYear  = to.getFullYear();
-  _rpState.viewMonth = to.getMonth();
-  _rpApplyAndClose();
-}
-
-function _rpApplyAndClose() {
-  const { start, end, onApply } = _rpState;
-  const triggerId = _rpState.triggerId;
-  onApply(start, end);
-  updateRangeBtnLabel(triggerId, start, end);
-  closeRangePicker();
-}
-
-function _rpDayClick(iso) {
-  const s = _rpState;
-  if (!s.start || (s.start && s.end)) {
-    // Starting a fresh selection
-    s.start = iso; s.end = null;
-  } else if (iso < s.start) {
-    // Clicked before the start — restart the range from here
-    s.start = iso; s.end = null;
-  } else {
-    s.end = iso;
-    _rpApplyAndClose();
-    return;
-  }
-  _rpRender();
-}
-
-function _rpNavMonth(delta) {
-  let m = _rpState.viewMonth + delta, y = _rpState.viewYear;
-  if (m < 0) { m = 11; y--; } else if (m > 11) { m = 0; y++; }
-  _rpState.viewMonth = m; _rpState.viewYear = y;
-  _rpRender();
-}
-
-function _rpRender() {
-  const s = _rpState;
-  const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-  const firstOfMonth = new Date(s.viewYear, s.viewMonth, 1);
-  const startWeekday = firstOfMonth.getDay();
-  const daysInMonth = new Date(s.viewYear, s.viewMonth + 1, 0).getDate();
-  const iso = (y,m,d) => y + '-' + String(m+1).padStart(2,'0') + '-' + String(d).padStart(2,'0');
-  const todayIso = iso(new Date().getFullYear(), new Date().getMonth(), new Date().getDate());
-
-  let cells = '';
-  for (let i = 0; i < startWeekday; i++) cells += '<span class="rp-day rp-empty"></span>';
-  for (let d = 1; d <= daysInMonth; d++) {
-    const dIso = iso(s.viewYear, s.viewMonth, d);
-    let cls = 'rp-day';
-    if (dIso === todayIso) cls += ' rp-today';
-    if (s.start && dIso === s.start) cls += ' rp-start';
-    if (s.end && dIso === s.end) cls += ' rp-end';
-    if (s.start && s.end && dIso > s.start && dIso < s.end) cls += ' rp-inrange';
-    if (s.start && !s.end && dIso === s.start) cls += ' rp-start';
-    cells += `<span class="${cls}" onclick="_rpDayClick('${dIso}')">${d}</span>`;
-  }
-
-  _rpEl.innerHTML = `
-    <div class="rp-presets">
-      <button type="button" onclick="_rpSetPreset(1)">Today</button>
-      <button type="button" onclick="_rpSetPreset(7)">Last 7 Days</button>
-      <button type="button" onclick="_rpSetPreset(null, 0)">This Month</button>
-      <button type="button" onclick="_rpSetPreset(null, -1)">Last Month</button>
-    </div>
-    <div class="rp-cal">
-      <div class="rp-cal-head">
-        <button type="button" class="rp-nav" onclick="_rpNavMonth(-1)">‹</button>
-        <span class="rp-cal-title">${monthNames[s.viewMonth]} ${s.viewYear}</span>
-        <button type="button" class="rp-nav" onclick="_rpNavMonth(1)">›</button>
-      </div>
-      <div class="rp-weekdays">
-        <span>S</span><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span>
-      </div>
-      <div class="rp-days">${cells}</div>
-    </div>
-    <div class="rp-hint">${s.start && !s.end ? 'Pick an end date' : 'Pick a start date'}</div>
-  `;
-}
-
-/* ═══════════════════════════════════════════════════════
    ADMIN DASHBOARD
 ═══════════════════════════════════════════════════════ */
 
 let _dashLine = null;
 let _dashBar  = null;
-let _dashCostChart = null;
 let _dashData = null;
 let _dashView = 'daily';
 let _dashFromDate = null;
 let _dashToDate   = null;
+let _dashPreset = 'thisMonth';
 let _dashCompFromDate = null;
 let _dashCompToDate   = null;
+let _dashCompPreset = 'thisMonth';
 
-function _defaultMonthRange() {
+// Shared preset -> {from, to} resolver used by both the Overview and Compare Plants filters
+function _presetRange(preset) {
   const now = new Date();
-  const y = now.getFullYear(), m = String(now.getMonth() + 1).padStart(2, '0');
-  const lastDay = new Date(y, now.getMonth() + 1, 0).getDate();
-  return [`${y}-${m}-01`, `${y}-${m}-${String(lastDay).padStart(2,'0')}`];
+  const y = now.getFullYear(), mo = now.getMonth();
+  const pad = n => String(n).padStart(2, '0');
+  const iso = (yy, mm, dd) => `${yy}-${pad(mm+1)}-${pad(dd)}`;
+  if (preset === 'today') {
+    const t = iso(y, mo, now.getDate());
+    return { from: t, to: t };
+  }
+  if (preset === '7d') {
+    const start = new Date(now); start.setDate(start.getDate() - 6);
+    return { from: iso(start.getFullYear(), start.getMonth(), start.getDate()), to: iso(y, mo, now.getDate()) };
+  }
+  if (preset === 'lastMonth') {
+    const lm = new Date(y, mo - 1, 1);
+    const lastDay = new Date(lm.getFullYear(), lm.getMonth() + 1, 0).getDate();
+    return { from: iso(lm.getFullYear(), lm.getMonth(), 1), to: iso(lm.getFullYear(), lm.getMonth(), lastDay) };
+  }
+  // thisMonth (default)
+  const lastDay = new Date(y, mo + 1, 0).getDate();
+  return { from: iso(y, mo, 1), to: iso(y, mo, lastDay) };
 }
 
 async function loadDashboard() {
@@ -3976,11 +3789,22 @@ async function loadDashboard() {
   document.getElementById('dashboardOverlay').style.display = 'flex';
   document.getElementById('dashViewSwitch').style.display = currentRole === 'superadmin' ? '' : 'none';
   switchDashView('overview');
-  // Keep whatever range the user already picked — only default it the first time.
-  if (!_dashFromDate || !_dashToDate) [_dashFromDate, _dashToDate] = _defaultMonthRange();
-  if (!_dashCompFromDate || !_dashCompToDate) [_dashCompFromDate, _dashCompToDate] = _defaultMonthRange();
-  updateRangeBtnLabel('dashRangeBtn', _dashFromDate, _dashToDate);
-  updateRangeBtnLabel('dashCompRangeBtn', _dashCompFromDate, _dashCompToDate);
+  // Only default the range the first time the dashboard is ever opened this session —
+  // switching plants or reopening must NOT wipe out a range the user already picked.
+  if (!_dashFromDate) {
+    const r = _presetRange('thisMonth');
+    _dashFromDate = r.from; _dashToDate = r.to;
+  }
+  if (!_dashCompFromDate) {
+    const r = _presetRange('thisMonth');
+    _dashCompFromDate = r.from; _dashCompToDate = r.to;
+  }
+  document.getElementById('dashFromDate').value = _dashFromDate;
+  document.getElementById('dashToDate').value   = _dashToDate;
+  document.getElementById('dashCompFromDate').value = _dashCompFromDate;
+  document.getElementById('dashCompToDate').value   = _dashCompToDate;
+  _setActiveChip('dashPresetChips', _dashPreset);
+  _setActiveChip('dashCompPresetChips', _dashCompPreset);
   try {
     const data = await api('GET', '/api/records/analytics');
     _dashData = data;
@@ -3988,6 +3812,44 @@ async function loadDashboard() {
   } catch (e) {
     showToast('Failed to load dashboard: ' + e.message, true);
   }
+  // Compare Plants tab is loaded lazily by switchDashView(), but if it was already
+  // showing (re-entering the dashboard), refresh it with the persisted range.
+  if (_dashCompareData) loadDashCompare();
+}
+
+function _setActiveChip(containerId, preset) {
+  document.querySelectorAll(`#${containerId} .dash-chip`).forEach(btn =>
+    btn.classList.toggle('active', btn.dataset.preset === preset));
+}
+
+function applyDashPreset(preset) {
+  _dashPreset = preset;
+  if (preset !== 'custom') {
+    const r = _presetRange(preset);
+    _dashFromDate = r.from; _dashToDate = r.to;
+    document.getElementById('dashFromDate').value = _dashFromDate;
+    document.getElementById('dashToDate').value   = _dashToDate;
+  } else {
+    _dashFromDate = document.getElementById('dashFromDate').value || null;
+    _dashToDate   = document.getElementById('dashToDate').value   || null;
+  }
+  _setActiveChip('dashPresetChips', _dashPreset);
+  _applyDashData();
+}
+
+function applyDashCompPreset(preset) {
+  _dashCompPreset = preset;
+  if (preset !== 'custom') {
+    const r = _presetRange(preset);
+    _dashCompFromDate = r.from; _dashCompToDate = r.to;
+    document.getElementById('dashCompFromDate').value = _dashCompFromDate;
+    document.getElementById('dashCompToDate').value   = _dashCompToDate;
+  } else {
+    _dashCompFromDate = document.getElementById('dashCompFromDate').value || null;
+    _dashCompToDate   = document.getElementById('dashCompToDate').value   || null;
+  }
+  _setActiveChip('dashCompPresetChips', _dashCompPreset);
+  loadDashCompare();
 }
 
 function switchDashView(view) {
@@ -4002,10 +3864,9 @@ let _dashCompare = null;
 let _dashCompareData = null;
 
 async function loadDashCompare() {
-  const from = _dashCompFromDate;
-  const to   = _dashCompToDate;
+  const from = _dashCompFromDate || document.getElementById('dashCompFromDate').value;
+  const to   = _dashCompToDate   || document.getElementById('dashCompToDate').value;
   if (!from || !to) return;
-  updateRangeBtnLabel('dashCompRangeBtn', from, to);
   try {
     const data = await api('GET', `/api/records/compare?from=${from}&to=${to}`);
     _dashCompareData = data;
@@ -4078,22 +3939,13 @@ function _renderDashCompare(data) {
   });
 }
 
-function resetDashFilter() {
-  [_dashFromDate, _dashToDate] = _defaultMonthRange();
-  updateRangeBtnLabel('dashRangeBtn', _dashFromDate, _dashToDate);
-  _applyDashData();
-}
-
 function _applyDashData() {
   if (!_dashData) return;
   // Filter daily records to selected range
   const filtered = {
     daily: _dashData.daily.filter(r => {
-      // r.date may come back as a full ISO timestamp ("...T00:00:00.000Z") from the
-      // backend — compare only the date portion so the "to" day itself isn't excluded.
-      const d = r.date.slice(0, 10);
-      if (_dashFromDate && d < _dashFromDate) return false;
-      if (_dashToDate   && d > _dashToDate)   return false;
+      if (_dashFromDate && r.date < _dashFromDate) return false;
+      if (_dashToDate   && r.date > _dashToDate)   return false;
       return true;
     }),
     monthly: _dashData.monthly
@@ -4108,88 +3960,6 @@ function _applyDashData() {
   _renderDashTrend(filtered);
   setChartView(_dashView);
   _renderDashTable(filtered);
-  _renderDashCostBreakdown(filtered.daily);
-  loadDashContractorDrift();
-}
-
-// Contractor cost-per-worker drift: splits the selected range into an
-// early half and a recent half, and flags contractors whose cost-per-worker
-// rose meaningfully between them — catches rate creep hidden inside totals.
-async function loadDashContractorDrift() {
-  const body = document.getElementById('dashDriftBody');
-  if (!currentPlantId && !activePlantId) {
-    body.innerHTML = '<div style="text-align:center;color:var(--muted);font-size:13px;padding:10px 0">Select a specific plant to see contractor cost trends.</div>';
-    return;
-  }
-  if (!_dashFromDate || !_dashToDate) return;
-  try {
-    const { rows } = await api('GET', `/api/records/contractor-drift?from=${_dashFromDate}&to=${_dashToDate}`);
-    _renderDashDrift(rows || []);
-  } catch (e) {
-    body.innerHTML = `<div style="text-align:center;color:var(--muted);font-size:13px;padding:10px 0">Failed to load: ${e.message}</div>`;
-  }
-}
-
-function _renderDashDrift(rows) {
-  const body = document.getElementById('dashDriftBody');
-  const byContractor = {};
-  rows.forEach(r => {
-    const w = parseFloat(r.workers), c = parseFloat(r.cost);
-    if (!(w > 0)) return; // skip days with no workers logged — cost/worker undefined
-    (byContractor[r.contractor_name] ||= []).push({ date: r.date, perWorker: c / w });
-  });
-
-  const results = Object.entries(byContractor).map(([name, entries]) => {
-    entries.sort((a, b) => a.date.localeCompare(b.date));
-    const n = entries.length;
-    const mid = Math.floor(n / 2);
-    const early  = entries.slice(0, mid);
-    const recent = entries.slice(mid);
-    const avg = arr => arr.reduce((s, e) => s + e.perWorker, 0) / arr.length;
-    if (early.length < 2 || recent.length < 2) {
-      return { name, days: n, insufficient: true };
-    }
-    const earlyAvg = avg(early), recentAvg = avg(recent);
-    const driftPct = earlyAvg > 0 ? ((recentAvg - earlyAvg) / earlyAvg) * 100 : 0;
-    return { name, days: n, earlyAvg, recentAvg, driftPct };
-  });
-
-  if (!results.length) {
-    body.innerHTML = '<div style="text-align:center;color:var(--muted);font-size:13px;padding:10px 0">No contractor attendance recorded in this range.</div>';
-    return;
-  }
-
-  results.sort((a, b) => (b.driftPct || -999) - (a.driftPct || -999));
-
-  const fc = v => '₹' + v.toFixed(0);
-  const rowsHtml = results.map(r => {
-    if (r.insufficient) {
-      return `<tr>
-        <td>${r.name}</td>
-        <td colspan="3" style="color:var(--muted);font-size:12px">Not enough days in this range to compare (${r.days} day${r.days === 1 ? '' : 's'})</td>
-      </tr>`;
-    }
-    const flagged = r.driftPct >= 8;
-    const improving = r.driftPct <= -8;
-    const pctColor = flagged ? '#b91c1c' : improving ? 'var(--success)' : 'var(--text)';
-    const sign = r.driftPct > 0 ? '+' : '';
-    return `<tr${flagged ? ' style="background:#fef2f2"' : ''}>
-      <td>${r.name}${flagged ? ' <span style="color:#b91c1c;font-size:11px;font-weight:700">⚠ drifting up</span>' : ''}</td>
-      <td class="r">${fc(r.earlyAvg)}/worker</td>
-      <td class="r">${fc(r.recentAvg)}/worker</td>
-      <td class="r" style="color:${pctColor};font-weight:700">${sign}${r.driftPct.toFixed(1)}%</td>
-    </tr>`;
-  }).join('');
-
-  body.innerHTML = `<div style="overflow-x:auto"><table class="dash-drift-table" style="width:100%;border-collapse:collapse;font-size:13px">
-    <thead><tr style="text-align:left;color:var(--muted);font-size:11px;text-transform:uppercase">
-      <th style="padding:6px 8px 6px 0">Contractor</th>
-      <th class="r" style="padding:6px 8px">Early Avg</th>
-      <th class="r" style="padding:6px 8px">Recent Avg</th>
-      <th class="r" style="padding:6px 0 6px 8px">Change</th>
-    </tr></thead>
-    <tbody>${rowsHtml}</tbody>
-  </table></div>`;
 }
 
 function closeDashboard() {
@@ -4318,9 +4088,8 @@ function _renderLineChart() {
 
   // Use filtered daily data for daily view
   const filteredDaily = _dashData.daily.filter(r => {
-    const d = r.date.slice(0, 10);
-    if (_dashFromDate && d < _dashFromDate) return false;
-    if (_dashToDate   && d > _dashToDate)   return false;
+    if (_dashFromDate && r.date < _dashFromDate) return false;
+    if (_dashToDate   && r.date > _dashToDate)   return false;
     return true;
   });
 
@@ -4398,54 +4167,6 @@ function _renderBarChart() {
              ticks: { font: { size: 11 }, callback: v => '₹' + v.toFixed(0) } }
       }
     }
-  });
-}
-
-// Splits MPK into its two cost-per-kg components, so you can see what's
-// actually driving a change — labor cost or vendor/processing cost.
-function _renderDashCostBreakdown(daily) {
-  if (_dashCostChart) { _dashCostChart.destroy(); _dashCostChart = null; }
-  const emptyEl  = document.getElementById('dashCostBreakdownEmpty');
-  const canvasEl = document.getElementById('dashCostBreakdownChart');
-
-  const sorted = [...daily].sort((a, b) => a.date.localeCompare(b.date));
-  const withQty = sorted.filter(r => parseFloat(r.sale_qty) > 0);
-
-  if (!withQty.length) {
-    emptyEl.style.display = '';
-    canvasEl.style.display = 'none';
-    return;
-  }
-  emptyEl.style.display = 'none';
-  canvasEl.style.display = '';
-
-  const fmtLabel = d => new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
-  const attPerKg = sorted.map(r => parseFloat(r.sale_qty) > 0 ? parseFloat(r.attendance_cost) / parseFloat(r.sale_qty) : null);
-  const kgPerKg  = sorted.map(r => parseFloat(r.sale_qty) > 0 ? parseFloat(r.kg_cost)         / parseFloat(r.sale_qty) : null);
-
-  const ctx = canvasEl.getContext('2d');
-  _dashCostChart = new Chart(ctx, {
-    type: 'line',
-    data: {
-      labels: sorted.map(r => fmtLabel(r.date)),
-      datasets: [
-        { label: 'Attendance Cost / kg', data: attPerKg, borderColor: '#1e6b45', backgroundColor: '#1e6b45',
-          spanGaps: true, tension: 0.3, pointRadius: 2, borderWidth: 2 },
-        { label: 'KG Processing Cost / kg', data: kgPerKg, borderColor: '#c2410c', backgroundColor: '#c2410c',
-          spanGaps: true, tension: 0.3, pointRadius: 2, borderWidth: 2 },
-      ],
-    },
-    options: {
-      responsive: true,
-      interaction: { mode: 'index', intersect: false },
-      plugins: {
-        legend: { position: 'top', labels: { boxWidth: 12, font: { size: 11 } } },
-        tooltip: { callbacks: { label: ctx => ctx.dataset.label + ': ₹' + ctx.parsed.y.toFixed(2) } },
-      },
-      scales: {
-        y: { title: { display: true, text: '₹ / kg' }, ticks: { callback: v => '₹' + v.toFixed(0) } },
-      },
-    },
   });
 }
 
