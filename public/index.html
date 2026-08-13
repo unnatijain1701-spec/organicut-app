@@ -1024,7 +1024,7 @@ tr.dash-row-alt td { background: #f7fdf9; }
         <input type="date" id="dashCompFromDate" onchange="applyDashCompPreset('custom')" style="border:1px solid var(--border);border-radius:6px;padding:5px 9px;font-size:13px;color:var(--text)">
         <span style="font-size:13px;color:var(--muted)">to</span>
         <input type="date" id="dashCompToDate" onchange="applyDashCompPreset('custom')" style="border:1px solid var(--border);border-radius:6px;padding:5px 9px;font-size:13px;color:var(--text)">
-        <span style="font-size:11px;color:var(--muted);margin-left:4px" id="dashCompareHint">Lines show each plant's 7-day rolling average MPK — click a plant name below to see its cost breakdown</span>
+        <span style="font-size:11px;color:var(--muted);margin-left:4px" id="dashCompareHint">Lines show each plant's 7-day rolling average MPK — click a plant in the legend to show/hide it</span>
       </div>
 
       <!-- All-plants comparison chart -->
@@ -1034,6 +1034,10 @@ tr.dash-row-alt td { background: #f7fdf9; }
         </div>
         <canvas id="dashCompareChart" height="110"></canvas>
         <div id="dashCompareEmpty" style="display:none;padding:30px;text-align:center;color:var(--muted);font-size:13px">Not enough data in this range yet.</div>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">
+          <span style="font-size:11px;font-weight:700;color:var(--muted)">VIEW COST BREAKDOWN:</span>
+          <div class="dash-preset-chips" id="dashCompareDrillinChips"></div>
+        </div>
       </div>
 
       <!-- Single-plant drill-in: cost breakdown + sale qty -->
@@ -1042,7 +1046,13 @@ tr.dash-row-alt td { background: #f7fdf9; }
           <span class="dash-section-title" id="dashCompareDetailTitle">Plant Breakdown</span>
           <button onclick="closeDashCompareDetail()" style="border:1px solid var(--border);border-radius:6px;padding:5px 12px;font-size:12px;background:#fff;cursor:pointer;color:var(--muted)">← Back to Compare</button>
         </div>
-        <div style="font-size:11px;color:var(--muted);margin:-10px 0 14px">Attendance cost/kg and KG cost/kg (left axis, ₹) vs Sale Qty (right axis, kg) — shows which cost component moved, and whether volume shifted too</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin:-6px 0 14px">
+          <div style="font-size:11px;color:var(--muted)" id="dashCompareDetailHint"></div>
+          <div class="dash-toggle" id="dashCompareDetailModeToggle">
+            <button class="dash-toggle-btn active" data-mode="perKg"    onclick="setDashCompareDetailMode('perKg')">₹ per kg</button>
+            <button class="dash-toggle-btn"        data-mode="absolute" onclick="setDashCompareDetailMode('absolute')">Absolute ₹</button>
+          </div>
+        </div>
         <canvas id="dashCompareDetailChart" height="110"></canvas>
       </div>
     </div>
@@ -3946,35 +3956,67 @@ function _renderDashCompare(data) {
       responsive: true,
       interaction: { mode: 'index', intersect: false },
       plugins: {
-        legend: {
-          position: 'top', labels: { boxWidth: 12, font: { size: 11 } },
-          // Clicking a plant's name drills into its cost breakdown instead of the
-          // default show/hide-dataset behavior — there's nothing to toggle with 5 lines.
-          onClick: (evt, legendItem) => openDashCompareDetail(legendItem.text),
-        },
+        // Default legend behavior: click a plant's name to show/hide just that line,
+        // so any subset of plants (1, 2, 3...) can be isolated for comparison.
+        legend: { position: 'top', labels: { boxWidth: 12, font: { size: 11 } } },
       },
       scales: {
         y: { title: { display: true, text: 'MPK (₹/kg)' } },
       },
     },
   });
+
+  // Drill-in buttons, separate from the legend so the legend stays free for
+  // isolating any subset of plants (its normal show/hide behavior).
+  const chipsEl = document.getElementById('dashCompareDrillinChips');
+  chipsEl.innerHTML = data.plants.map((p, i) =>
+    `<button class="dash-chip" style="border-color:${palette[i % palette.length]}55"
+       onclick="openDashCompareDetail('${p.name.replace(/'/g, "\\'")}')">${p.name}</button>`
+  ).join('');
 }
+
+let _dashCompareDetailPlantName = null;
+let _dashCompareDetailMode = 'perKg'; // 'perKg' | 'absolute'
 
 function openDashCompareDetail(plantName) {
   const plant = _dashCompareData?.plants.find(p => p.name === plantName);
   if (!plant || !plant.daily.length) { showToast('No data for ' + plantName + ' in this range', true); return; }
 
+  _dashCompareDetailPlantName = plantName;
   document.getElementById('dashCompareChartSection').style.display = 'none';
   document.getElementById('dashCompareDetailSection').style.display = '';
   document.getElementById('dashCompareDetailTitle').textContent = 'Plant Breakdown — ' + plantName;
+  _renderDashCompareDetailChart();
+}
+
+function setDashCompareDetailMode(mode) {
+  _dashCompareDetailMode = mode;
+  document.querySelectorAll('#dashCompareDetailModeToggle .dash-toggle-btn').forEach(btn =>
+    btn.classList.toggle('active', btn.dataset.mode === mode));
+  _renderDashCompareDetailChart();
+}
+
+function _renderDashCompareDetailChart() {
+  const plant = _dashCompareData?.plants.find(p => p.name === _dashCompareDetailPlantName);
+  if (!plant) return;
+
+  const hintEl = document.getElementById('dashCompareDetailHint');
+  hintEl.textContent = _dashCompareDetailMode === 'perKg'
+    ? 'Attendance cost/kg and KG cost/kg (left axis, ₹) vs Sale Qty (right axis, kg) — note: both cost/kg lines rise together if volume simply drops, even with no real cost change.'
+    : 'Absolute ₹ spent on attendance and KG processing (left axis) vs Sale Qty (right axis) — these lines are unaffected by volume, so a rise here means you actually spent more.';
 
   if (_dashCompareDetail) { _dashCompareDetail.destroy(); _dashCompareDetail = null; }
 
   const sorted = [...plant.daily].sort((a, b) => a.date.localeCompare(b.date));
   const fmtLabel = d => new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
-  const attPerKg = sorted.map(d => d.qty > 0 ? d.attendanceCost / d.qty : null);
-  const kgPerKg  = sorted.map(d => d.qty > 0 ? d.kgCost / d.qty : null);
-  const qty      = sorted.map(d => d.qty);
+  const qty = sorted.map(d => d.qty);
+  const isPerKg = _dashCompareDetailMode === 'perKg';
+  const attData = isPerKg
+    ? sorted.map(d => d.qty > 0 ? d.attendanceCost / d.qty : null)
+    : sorted.map(d => d.attendanceCost);
+  const kgData = isPerKg
+    ? sorted.map(d => d.qty > 0 ? d.kgCost / d.qty : null)
+    : sorted.map(d => d.kgCost);
 
   const ctx = document.getElementById('dashCompareDetailChart').getContext('2d');
   _dashCompareDetail = new Chart(ctx, {
@@ -3982,9 +4024,9 @@ function openDashCompareDetail(plantName) {
     data: {
       labels: sorted.map(d => fmtLabel(d.date)),
       datasets: [
-        { label: 'Attendance Cost/kg', data: attPerKg, borderColor: '#1e6b45', backgroundColor: '#1e6b45',
+        { label: isPerKg ? 'Attendance Cost/kg' : 'Attendance Cost (₹)', data: attData, borderColor: '#1e6b45', backgroundColor: '#1e6b45',
           yAxisID: 'y', spanGaps: true, tension: 0.3, pointRadius: 2, borderWidth: 2 },
-        { label: 'KG Cost/kg', data: kgPerKg, borderColor: '#c2410c', backgroundColor: '#c2410c',
+        { label: isPerKg ? 'KG Cost/kg' : 'KG Cost (₹)', data: kgData, borderColor: '#c2410c', backgroundColor: '#c2410c',
           yAxisID: 'y', spanGaps: true, tension: 0.3, pointRadius: 2, borderWidth: 2 },
         { label: 'Sale Qty (kg)', data: qty, borderColor: '#94a3b8', backgroundColor: '#94a3b8',
           yAxisID: 'y1', spanGaps: true, tension: 0.3, pointRadius: 2, borderWidth: 2, borderDash: [5, 3] },
@@ -3995,7 +4037,7 @@ function openDashCompareDetail(plantName) {
       interaction: { mode: 'index', intersect: false },
       plugins: { legend: { position: 'top', labels: { boxWidth: 12, font: { size: 11 } } } },
       scales: {
-        y:  { position: 'left',  title: { display: true, text: '₹ per kg' } },
+        y:  { position: 'left',  title: { display: true, text: isPerKg ? '₹ per kg' : '₹ (absolute)' } },
         y1: { position: 'right', title: { display: true, text: 'Sale Qty (kg)' }, grid: { drawOnChartArea: false } },
       },
     },
