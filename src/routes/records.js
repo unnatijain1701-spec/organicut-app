@@ -141,7 +141,8 @@ router.get('/compare', async (req, res) => {
   try {
     const { rows } = await db.query(`
       SELECT p.id AS plant_id, p.name AS plant_name, p.display_order,
-        TO_CHAR(dr.record_date, 'YYYY-MM-DD') AS date, dr.total_cost, dr.sale_qty
+        TO_CHAR(dr.record_date, 'YYYY-MM-DD') AS date,
+        dr.total_cost, dr.attendance_cost, dr.kg_cost, dr.sale_qty
       FROM daily_records dr JOIN plants p ON p.id = dr.plant_id
       WHERE dr.record_date BETWEEN $1 AND $2
       ORDER BY p.display_order, dr.record_date ASC
@@ -153,6 +154,8 @@ router.get('/compare', async (req, res) => {
       plantMap[r.plant_id].daily.push({
         date: r.date,
         cost: parseFloat(r.total_cost),
+        attendanceCost: parseFloat(r.attendance_cost),
+        kgCost: parseFloat(r.kg_cost),
         qty:  parseFloat(r.sale_qty),
       });
     });

@@ -1024,14 +1024,26 @@ tr.dash-row-alt td { background: #f7fdf9; }
         <input type="date" id="dashCompFromDate" onchange="applyDashCompPreset('custom')" style="border:1px solid var(--border);border-radius:6px;padding:5px 9px;font-size:13px;color:var(--text)">
         <span style="font-size:13px;color:var(--muted)">to</span>
         <input type="date" id="dashCompToDate" onchange="applyDashCompPreset('custom')" style="border:1px solid var(--border);border-radius:6px;padding:5px 9px;font-size:13px;color:var(--text)">
-        <span style="font-size:11px;color:var(--muted);margin-left:4px">Lines show each plant's 7-day rolling average MPK</span>
+        <span style="font-size:11px;color:var(--muted);margin-left:4px" id="dashCompareHint">Lines show each plant's 7-day rolling average MPK — click a plant name below to see its cost breakdown</span>
       </div>
-      <div class="dash-section">
+
+      <!-- All-plants comparison chart -->
+      <div class="dash-section" id="dashCompareChartSection">
         <div class="dash-section-head">
           <span class="dash-section-title">MPK by Plant (7-day rolling avg)</span>
         </div>
         <canvas id="dashCompareChart" height="110"></canvas>
         <div id="dashCompareEmpty" style="display:none;padding:30px;text-align:center;color:var(--muted);font-size:13px">Not enough data in this range yet.</div>
+      </div>
+
+      <!-- Single-plant drill-in: cost breakdown + sale qty -->
+      <div class="dash-section" id="dashCompareDetailSection" style="display:none">
+        <div class="dash-section-head">
+          <span class="dash-section-title" id="dashCompareDetailTitle">Plant Breakdown</span>
+          <button onclick="closeDashCompareDetail()" style="border:1px solid var(--border);border-radius:6px;padding:5px 12px;font-size:12px;background:#fff;cursor:pointer;color:var(--muted)">← Back to Compare</button>
+        </div>
+        <div style="font-size:11px;color:var(--muted);margin:-10px 0 14px">Attendance cost/kg and KG cost/kg (left axis, ₹) vs Sale Qty (right axis, kg) — shows which cost component moved, and whether volume shifted too</div>
+        <canvas id="dashCompareDetailChart" height="110"></canvas>
       </div>
     </div>
 
@@ -3862,11 +3874,13 @@ function switchDashView(view) {
 
 let _dashCompare = null;
 let _dashCompareData = null;
+let _dashCompareDetail = null;
 
 async function loadDashCompare() {
   const from = _dashCompFromDate || document.getElementById('dashCompFromDate').value;
   const to   = _dashCompToDate   || document.getElementById('dashCompToDate').value;
   if (!from || !to) return;
+  closeDashCompareDetail();
   try {
     const data = await api('GET', `/api/records/compare?from=${from}&to=${to}`);
     _dashCompareData = data;
@@ -3931,12 +3945,66 @@ function _renderDashCompare(data) {
     options: {
       responsive: true,
       interaction: { mode: 'index', intersect: false },
-      plugins: { legend: { position: 'top', labels: { boxWidth: 12, font: { size: 11 } } } },
+      plugins: {
+        legend: {
+          position: 'top', labels: { boxWidth: 12, font: { size: 11 } },
+          // Clicking a plant's name drills into its cost breakdown instead of the
+          // default show/hide-dataset behavior — there's nothing to toggle with 5 lines.
+          onClick: (evt, legendItem) => openDashCompareDetail(legendItem.text),
+        },
+      },
       scales: {
         y: { title: { display: true, text: 'MPK (₹/kg)' } },
       },
     },
   });
+}
+
+function openDashCompareDetail(plantName) {
+  const plant = _dashCompareData?.plants.find(p => p.name === plantName);
+  if (!plant || !plant.daily.length) { showToast('No data for ' + plantName + ' in this range', true); return; }
+
+  document.getElementById('dashCompareChartSection').style.display = 'none';
+  document.getElementById('dashCompareDetailSection').style.display = '';
+  document.getElementById('dashCompareDetailTitle').textContent = 'Plant Breakdown — ' + plantName;
+
+  if (_dashCompareDetail) { _dashCompareDetail.destroy(); _dashCompareDetail = null; }
+
+  const sorted = [...plant.daily].sort((a, b) => a.date.localeCompare(b.date));
+  const fmtLabel = d => new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+  const attPerKg = sorted.map(d => d.qty > 0 ? d.attendanceCost / d.qty : null);
+  const kgPerKg  = sorted.map(d => d.qty > 0 ? d.kgCost / d.qty : null);
+  const qty      = sorted.map(d => d.qty);
+
+  const ctx = document.getElementById('dashCompareDetailChart').getContext('2d');
+  _dashCompareDetail = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: sorted.map(d => fmtLabel(d.date)),
+      datasets: [
+        { label: 'Attendance Cost/kg', data: attPerKg, borderColor: '#1e6b45', backgroundColor: '#1e6b45',
+          yAxisID: 'y', spanGaps: true, tension: 0.3, pointRadius: 2, borderWidth: 2 },
+        { label: 'KG Cost/kg', data: kgPerKg, borderColor: '#c2410c', backgroundColor: '#c2410c',
+          yAxisID: 'y', spanGaps: true, tension: 0.3, pointRadius: 2, borderWidth: 2 },
+        { label: 'Sale Qty (kg)', data: qty, borderColor: '#94a3b8', backgroundColor: '#94a3b8',
+          yAxisID: 'y1', spanGaps: true, tension: 0.3, pointRadius: 2, borderWidth: 2, borderDash: [5, 3] },
+      ],
+    },
+    options: {
+      responsive: true,
+      interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { position: 'top', labels: { boxWidth: 12, font: { size: 11 } } } },
+      scales: {
+        y:  { position: 'left',  title: { display: true, text: '₹ per kg' } },
+        y1: { position: 'right', title: { display: true, text: 'Sale Qty (kg)' }, grid: { drawOnChartArea: false } },
+      },
+    },
+  });
+}
+
+function closeDashCompareDetail() {
+  document.getElementById('dashCompareDetailSection').style.display = 'none';
+  document.getElementById('dashCompareChartSection').style.display  = '';
 }
 
 function _applyDashData() {
