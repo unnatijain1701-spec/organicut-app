@@ -1171,7 +1171,10 @@ tr.dash-row-alt td { background: #f7fdf9; }
 <!-- ALL-PLANTS AGGREGATE VIEW (superadmin, no plant selected) -->
 <div id="allPlantsView">
   <div class="ap-card">
-    <div class="ap-card-title" id="allPlantsTitle">All Plants — Daily Summary</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:14px">
+      <div class="ap-card-title" id="allPlantsTitle" style="margin-bottom:0">All Plants — Daily Summary</div>
+      <button class="btn btn-card-outline" onclick="exportAllPlantsMonth()" title="Export every plant's full detail for a chosen month, in one file">⬇ Export All Plants (Month)</button>
+    </div>
     <div id="allPlantsTable"></div>
   </div>
 </div>
@@ -3284,6 +3287,64 @@ async function exportMonthRecords() {
     XLSX.utils.book_append_sheet(wb, ws3, 'KG Detail');
     XLSX.writeFile(wb, 'Organicut_MPK_' + _exportPlantTag() + '_' + month + '.xlsx');
     showToast('✓ Exported ' + records.length + ' record(s) for ' + month, false);
+  } catch (e) {
+    showToast('⚠ Export failed: ' + e.message, true);
+  }
+}
+
+// Superadmin, from the All Plants view: every plant's full daily detail for one
+// month in a single workbook, each row tagged with its Plant name.
+async function exportAllPlantsMonth() {
+  if (typeof XLSX === 'undefined') {
+    alert('SheetJS library not loaded — check your internet connection and reload the page.');
+    return;
+  }
+  const d = new Date();
+  const ym = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+  const month = prompt('Enter month to export for ALL plants (YYYY-MM):', ym);
+  if (!month || !/^\d{4}-\d{2}$/.test(month)) { showToast('⚠ Invalid month format. Use YYYY-MM.', true); return; }
+  showToast('⏳ Fetching all plants’ records for ' + month + '…', false);
+  try {
+    const records = await api('GET', '/api/records/export-all?month=' + month);
+    if (!records.length) { showToast('⚠ No records found for ' + month + ' across any plant', true); return; }
+
+    const summaryRows = [['Plant','Date','Production Attendance Cost','Per KG Cost','Total Cost','Sale Qty (kg)','MPK','Last Saved By']];
+    const attRows     = [['Plant','Date','Contractor','Workers','Cost (₹)']];
+    const kgRows      = [['Plant','Date','Vendor','SKU','Rate (₹/kg)','Qty (kg)','Cost (₹)']];
+
+    let grandCost = 0, grandQty = 0;
+    for (const detail of records) {
+      const dateStr = typeof detail.record_date === 'string' ? detail.record_date.slice(0, 10) : detail.record_date;
+      const xd = xlDate(dateStr);
+      const plant = detail.plant_name || '';
+      const totalCost = parseFloat(detail.total_cost) || 0;
+      const saleQty   = parseFloat(detail.sale_qty) || 0;
+      grandCost += totalCost; grandQty += saleQty;
+      summaryRows.push([plant, xd,
+        r2(parseFloat(detail.attendance_cost)||0), r2(parseFloat(detail.kg_cost)||0),
+        r2(totalCost), saleQty,
+        parseFloat(detail.mpk)>0 ? r2(parseFloat(detail.mpk)) : '',
+        detail.updated_by || '']);
+      (detail.attendance||[]).forEach(a => {
+        attRows.push([plant, xd, a.contractor_name, a.workers||0, parseFloat(a.cost)||0]);
+      });
+      (detail.kgEntries||[]).forEach(e => {
+        if (e.sku_name==='__UNLOADING__') kgRows.push([plant, xd, e.vendor_name, 'Unloading Cost', '', '', r2(parseFloat(e.cost)||0)]);
+        else kgRows.push([plant, xd, e.vendor_name, e.sku_name, parseFloat(e.rate)||0, parseFloat(e.qty)||0, r2(parseFloat(e.cost)||0)]);
+      });
+    }
+    summaryRows.push(['ALL PLANTS TOTAL', '', '', '', r2(grandCost), grandQty,
+      grandQty > 0 ? r2(grandCost/grandQty) : '', '']);
+
+    const ws1 = XLSX.utils.aoa_to_sheet(summaryRows, {cellDates:true}); ws1['!cols']=[14,12,22,14,12,14,10,16].map(w=>({wch:w}));
+    const ws2 = XLSX.utils.aoa_to_sheet(attRows,     {cellDates:true}); ws2['!cols']=[14,12,32,10,12].map(w=>({wch:w}));
+    const ws3 = XLSX.utils.aoa_to_sheet(kgRows,      {cellDates:true}); ws3['!cols']=[14,12,20,28,12,10,12].map(w=>({wch:w}));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws1, 'Summary');
+    XLSX.utils.book_append_sheet(wb, ws2, 'Attendance Detail');
+    XLSX.utils.book_append_sheet(wb, ws3, 'KG Detail');
+    XLSX.writeFile(wb, 'Organicut_MPK_AllPlants_' + month + '.xlsx');
+    showToast('✓ Exported ' + records.length + ' record(s) across all plants for ' + month, false);
   } catch (e) {
     showToast('⚠ Export failed: ' + e.message, true);
   }

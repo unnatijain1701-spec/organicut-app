@@ -81,6 +81,60 @@ router.get('/export', async (req, res) => {
   }
 });
 
+// GET /api/records/export-all?month=YYYY-MM  — superadmin: full detail for ALL plants for one month
+router.get('/export-all', async (req, res) => {
+  if (req.user.role !== 'superadmin')
+    return res.status(403).json({ error: 'Superadmin only' });
+  const month = (req.query.month || '').slice(0, 7);
+  if (!/^\d{4}-\d{2}$/.test(month))
+    return res.status(400).json({ error: 'month is required (YYYY-MM)' });
+  try {
+    const { rows: records } = await db.query(`
+      SELECT dr.*, p.name AS plant_name, p.display_order
+      FROM daily_records dr JOIN plants p ON p.id = dr.plant_id
+      WHERE TO_CHAR(dr.record_date, 'YYYY-MM') = $1
+      ORDER BY p.display_order, dr.record_date ASC
+    `, [month]);
+
+    if (!records.length) return res.json([]);
+
+    const { rows: attendance } = await db.query(`
+      SELECT ca.record_id, ca.contractor_name, ca.workers, ca.cost
+      FROM contractor_attendance ca
+      JOIN daily_records dr ON dr.id = ca.record_id
+      WHERE TO_CHAR(dr.record_date, 'YYYY-MM') = $1
+    `, [month]);
+    const { rows: kgEntries } = await db.query(`
+      SELECT vke.record_id, vke.vendor_name, vke.sku_name, vke.rate, vke.qty, vke.cost
+      FROM vendor_kg_entries vke
+      JOIN daily_records dr ON dr.id = vke.record_id
+      WHERE TO_CHAR(dr.record_date, 'YYYY-MM') = $1
+    `, [month]);
+
+    const attMap = {};
+    attendance.forEach(a => {
+      if (!attMap[a.record_id]) attMap[a.record_id] = [];
+      attMap[a.record_id].push(a);
+    });
+    const kgMap = {};
+    kgEntries.forEach(e => {
+      if (!kgMap[e.record_id]) kgMap[e.record_id] = [];
+      kgMap[e.record_id].push(e);
+    });
+
+    const result = records.map(r => ({
+      ...r,
+      attendance: attMap[r.id] || [],
+      kgEntries:  kgMap[r.id]  || [],
+    }));
+
+    res.json(result);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // GET /api/records/analytics  — monthly + daily aggregates for dashboard
 router.get('/analytics', async (req, res) => {
   const pid = getPlantId(req);
