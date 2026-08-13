@@ -81,51 +81,6 @@ router.get('/export', async (req, res) => {
   }
 });
 
-// GET /api/records/contractors  — every distinct contractor name ever used at this
-// plant, pulled from the database (not per-device localStorage) so every user sees
-// the same list and can pick an existing name instead of retyping a new spelling.
-router.get('/contractors', async (req, res) => {
-  const pid = getPlantId(req);
-  if (!pid) return res.json({ names: [] });
-  try {
-    const { rows } = await db.query(`
-      SELECT DISTINCT ca.contractor_name
-      FROM contractor_attendance ca
-      JOIN daily_records dr ON dr.id = ca.record_id
-      WHERE dr.plant_id = $1
-      ORDER BY ca.contractor_name
-    `, [pid]);
-    res.json({ names: rows.map(r => r.contractor_name) });
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
-// GET /api/records/contractor-drift?from=&to=  — per-contractor daily cost/workers
-// for the selected plant + range, so the client can flag anyone whose cost-per-worker
-// is trending up (used by the Dashboard's "Contractor Cost Trend" section).
-router.get('/contractor-drift', async (req, res) => {
-  const pid = getPlantId(req);
-  if (!pid) return res.json({ rows: [] }); // all-plants mode has no single plant to scope contractors to
-  const from = (req.query.from || '').slice(0, 10);
-  const to   = (req.query.to   || '').slice(0, 10);
-  if (!from || !to) return res.status(400).json({ error: 'from and to dates are required' });
-  try {
-    const { rows } = await db.query(`
-      SELECT dr.record_date AS date, ca.contractor_name, ca.workers, ca.cost
-      FROM contractor_attendance ca
-      JOIN daily_records dr ON dr.id = ca.record_id
-      WHERE dr.plant_id = $1 AND dr.record_date BETWEEN $2 AND $3
-      ORDER BY ca.contractor_name, dr.record_date ASC
-    `, [pid, from, to]);
-    res.json({ rows });
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
 // GET /api/records/analytics  — monthly + daily aggregates for dashboard
 router.get('/analytics', async (req, res) => {
   const pid = getPlantId(req);
@@ -133,7 +88,7 @@ router.get('/analytics', async (req, res) => {
     if (!pid) {
       // Superadmin "All Plants" — aggregate across all plants
       const { rows: daily } = await db.query(`
-        SELECT record_date AS date,
+        SELECT TO_CHAR(record_date, 'YYYY-MM-DD') AS date,
           SUM(attendance_cost)::NUMERIC(12,2) AS attendance_cost,
           SUM(kg_cost)::NUMERIC(12,2)         AS kg_cost,
           SUM(total_cost)::NUMERIC(12,2)      AS total_cost,
@@ -154,7 +109,7 @@ router.get('/analytics', async (req, res) => {
       return res.json({ daily, monthly });
     }
     const { rows: daily } = await db.query(`
-      SELECT record_date AS date, attendance_cost, kg_cost, total_cost, sale_qty, mpk
+      SELECT TO_CHAR(record_date, 'YYYY-MM-DD') AS date, attendance_cost, kg_cost, total_cost, sale_qty, mpk
       FROM daily_records WHERE plant_id = $1 ORDER BY record_date ASC
     `, [pid]);
     const { rows: monthly } = await db.query(`
@@ -186,7 +141,7 @@ router.get('/compare', async (req, res) => {
   try {
     const { rows } = await db.query(`
       SELECT p.id AS plant_id, p.name AS plant_name, p.display_order,
-        dr.record_date AS date, dr.total_cost, dr.sale_qty
+        TO_CHAR(dr.record_date, 'YYYY-MM-DD') AS date, dr.total_cost, dr.sale_qty
       FROM daily_records dr JOIN plants p ON p.id = dr.plant_id
       WHERE dr.record_date BETWEEN $1 AND $2
       ORDER BY p.display_order, dr.record_date ASC
@@ -196,7 +151,7 @@ router.get('/compare', async (req, res) => {
     rows.forEach(r => {
       if (!plantMap[r.plant_id]) plantMap[r.plant_id] = { name: r.plant_name, daily: [] };
       plantMap[r.plant_id].daily.push({
-        date: r.date.toISOString().slice(0, 10),
+        date: r.date,
         cost: parseFloat(r.total_cost),
         qty:  parseFloat(r.sale_qty),
       });
