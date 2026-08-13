@@ -1137,6 +1137,7 @@ tr.dash-row-alt td { background: #f7fdf9; }
           <button onclick="exportExcel();toggleExportDd()">Export Today</button>
           <button onclick="exportMonthRecords();toggleExportDd()">Export This Month</button>
           <button onclick="exportAllRecords();toggleExportDd()">Export All Records</button>
+          <button id="exportAllPlantsBtn" style="display:none" onclick="exportAllPlantsMonth();toggleExportDd()">⬇ Export All Plants (Month)</button>
           <button id="reportMenuBtn" style="display:none" onclick="openPlantReport();toggleExportDd()">📑 Multi-Plant Report</button>
           <button onclick="downloadBackup();toggleExportDd()">Download Backup (JSON)</button>
         </div>
@@ -1171,10 +1172,7 @@ tr.dash-row-alt td { background: #f7fdf9; }
 <!-- ALL-PLANTS AGGREGATE VIEW (superadmin, no plant selected) -->
 <div id="allPlantsView">
   <div class="ap-card">
-    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:14px">
-      <div class="ap-card-title" id="allPlantsTitle" style="margin-bottom:0">All Plants — Daily Summary</div>
-      <button class="btn btn-card-outline" onclick="exportAllPlantsMonth()" title="Export every plant's full detail for a chosen month, in one file">⬇ Export All Plants (Month)</button>
-    </div>
+    <div class="ap-card-title" id="allPlantsTitle">All Plants — Daily Summary</div>
     <div id="allPlantsTable"></div>
   </div>
 </div>
@@ -1533,6 +1531,7 @@ async function initApp() {
   const isSuperadmin = currentRole === 'superadmin';
   document.getElementById('navVendors').style.display = (!isAllPlants && isSuperadmin) ? '' : 'none';
   document.getElementById('kgProcessingCard').style.display = isJaipur ? 'none' : '';
+  { const eab = document.getElementById('exportAllPlantsBtn'); if (eab) eab.style.display = (isAllPlants && isSuperadmin) ? 'block' : 'none'; }
 
   if (isAllPlants) {
     loadHistory();
