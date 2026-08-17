@@ -40,6 +40,9 @@ body {
   box-shadow: 2px 0 10px rgba(0,0,0,.14);
 }
 #plantSelector option { background: #1e6b45; color: #fff; }
+#plantSelector optgroup {
+  background: #14382a; color: #8fe3b4; font-weight: 700; font-size: 11px;
+}
 .sidebar-brand {
   padding: 16px 18px; font-weight: 800; font-size: 16px; color: #fff;
   display: flex; align-items: center; gap: 8px; letter-spacing: -.3px;
@@ -1429,8 +1432,10 @@ async function checkAuth() {
       { const nr = document.getElementById('navReport'); if (nr) nr.style.display = isSuperadmin ? '' : 'none'; }
       document.getElementById('loginOverlay').style.display = 'none';
       await setupPlantSelector();
-      // All-plants users land on the business picker unless they already chose one this session
-      if (!currentPlantId && !sessionStorage.getItem('activeBizType')) {
+      // All-plants users land on the business picker unless they already made a choice this
+      // session — 'activeBizType' alone can't tell "never chosen" apart from "chose Combined"
+      // (both are ''), so a separate flag records that a choice was actually made.
+      if (!currentPlantId && !sessionStorage.getItem('bizTypeChosen')) {
         openBizTypePicker();
         return;
       }
@@ -1540,6 +1545,7 @@ async function doLogout() {
   sessionStorage.removeItem('activePlantId');
   sessionStorage.removeItem('activeBizType');
   sessionStorage.removeItem('allPlantsBizType');
+  sessionStorage.removeItem('bizTypeChosen');
   document.getElementById('bizTypeOverlay').style.display = 'none';
   document.getElementById('bizSwitchField').style.display = 'none';
   document.getElementById('plantSelectorField').style.display = 'none';
@@ -1666,6 +1672,7 @@ function openBizTypePicker() {
 async function selectBizType(type) {
   activeBizType = type || '';
   sessionStorage.setItem('activeBizType', activeBizType);
+  sessionStorage.setItem('bizTypeChosen', '1');
   document.getElementById('bizTypeOverlay').style.display = 'none';
   // Keep every business-type filter in the app in sync with the chosen scope
   allPlantsBizType = activeBizType;
