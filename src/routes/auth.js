@@ -108,7 +108,7 @@ router.post('/plants', authenticateToken, async (req, res) => {
   if (req.user.role !== 'superadmin') return res.status(403).json({ error: 'Superadmin only' });
   const { name, businessType, hasKgProcessing } = req.body || {};
   if (!name || !businessType) return res.status(400).json({ error: 'name and businessType are required' });
-  const validTypes = ['FmV', 'RTE', 'Beverage', 'Coco-Sutra'];
+  const validTypes = ['FnV', 'RTE', 'Beverage', 'Coco-Sutra'];
   if (!validTypes.includes(businessType)) return res.status(400).json({ error: 'Invalid businessType' });
   try {
     const { rows } = await db.query(

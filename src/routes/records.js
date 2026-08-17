@@ -274,7 +274,7 @@ router.get('/report', async (req, res) => {
     const daysInMonth = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
 
     // A day counts as COMPLETE only when attendance cost, sale qty AND per-kg cost
-    // are all filled. Plants with has_kg_processing=false (e.g. Jaipur-FmV) are exempt from the KG check.
+    // are all filled. Plants with has_kg_processing=false (e.g. Jaipur-FnV) are exempt from the KG check.
     // (Fixed SQL fragment — no user input, safe to interpolate.)
     const COMPLETE = "dr.attendance_cost > 0 AND dr.sale_qty > 0 AND (NOT p.has_kg_processing OR dr.kg_cost > 0)";
 

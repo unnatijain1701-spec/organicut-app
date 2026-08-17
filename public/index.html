@@ -518,6 +518,44 @@ td input[type="number"]:hover { border-color: #7dbf99; }
 .ap-table tr.ap-total td { border-top:2px solid var(--border); border-bottom:none; }
 .ap-empty { color:var(--muted); font-size:13px; text-align:center; padding:20px 0; }
 
+/* ── BUSINESS TYPE PICKER (landing screen) ────────────── */
+#bizTypeOverlay {
+  position: fixed; inset: 0; z-index: 900;
+  background: linear-gradient(160deg, #0d2318 0%, #1e6b45 100%);
+  display: none; flex-direction: column; align-items: center; justify-content: center;
+  padding: 24px; overflow-y: auto;
+}
+.bt-brand { font-size: 26px; font-weight: 800; color: #fff; margin-bottom: 6px; letter-spacing: -.3px; }
+.bt-brand em { font-style: normal; color: #8fe3b4; }
+.bt-sub { font-size: 13.5px; color: rgba(255,255,255,.7); margin-bottom: 28px; text-align: center; }
+.bt-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 16px; width: 100%; max-width: 900px; }
+.bt-card {
+  background: rgba(255,255,255,.07); border: 1.5px solid rgba(255,255,255,.18);
+  border-radius: 16px; padding: 26px 20px; text-align: center; cursor: pointer;
+  transition: transform .14s, background .14s, border-color .14s; color: #fff;
+}
+.bt-card:hover { background: rgba(255,255,255,.15); border-color: #8fe3b4; transform: translateY(-3px); }
+.bt-card:disabled, .bt-card.empty { cursor: not-allowed; opacity: .45; }
+.bt-card.empty:hover { transform: none; background: rgba(255,255,255,.07); border-color: rgba(255,255,255,.18); }
+.bt-ico { font-size: 38px; line-height: 1; margin-bottom: 12px; }
+.bt-name { font-size: 18px; font-weight: 800; margin-bottom: 4px; }
+.bt-count { font-size: 12px; color: rgba(255,255,255,.65); }
+.bt-all {
+  margin-top: 22px; background: none; border: 1px solid rgba(255,255,255,.35);
+  color: rgba(255,255,255,.9); border-radius: 9px; padding: 9px 20px;
+  font-size: 13px; font-weight: 700; cursor: pointer; transition: background .14s;
+}
+.bt-all:hover { background: rgba(255,255,255,.14); }
+.bt-foot { margin-top: 18px; font-size: 12px; color: rgba(255,255,255,.55); }
+.bt-foot button { background: none; border: none; color: #8fe3b4; font-size: 12px; font-weight: 700; cursor: pointer; text-decoration: underline; }
+#bizSwitchField { padding: 10px 14px; border-top: 1px solid rgba(255,255,255,.12); }
+#bizSwitchBtn {
+  width: 100%; background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.25);
+  color: #fff; border-radius: 7px; padding: 7px 8px; font-size: 12px; font-weight: 700;
+  cursor: pointer; text-align: left; transition: background .14s;
+}
+#bizSwitchBtn:hover { background: rgba(255,255,255,.2); }
+
 /* ── DASHBOARD OVERLAY ────────────────────────────────── */
 #dashboardOverlay, #reportOverlay {
   position: fixed; top: 0; right: 0; bottom: 0; left: 210px; z-index: 400;
@@ -834,7 +872,7 @@ tr.dash-row-alt td { background: #f7fdf9; }
     </select>
     <select class="users-input" id="newUserBizType" style="cursor:pointer;display:none" onchange="onNewUserBizTypeChange(this.value)">
       <option value="">— Select Business Type —</option>
-      <option value="FmV">FmV</option>
+      <option value="FnV">FnV</option>
       <option value="RTE">RTE</option>
       <option value="Beverage">Beverage</option>
       <option value="Coco-Sutra">Coco-Sutra</option>
@@ -1040,7 +1078,7 @@ tr.dash-row-alt td { background: #f7fdf9; }
         <span style="font-size:12px;font-weight:700;color:var(--muted);margin-left:6px">BUSINESS TYPE</span>
         <select id="dashCompBizType" onchange="loadDashCompare()" style="border:1px solid var(--border);border-radius:6px;padding:5px 9px;font-size:13px;color:var(--text);cursor:pointer">
           <option value="">All Business Types</option>
-          <option value="FmV">FmV</option>
+          <option value="FnV">FnV</option>
           <option value="RTE">RTE</option>
           <option value="Beverage">Beverage</option>
           <option value="Coco-Sutra">Coco-Sutra</option>
@@ -1096,7 +1134,7 @@ tr.dash-row-alt td { background: #f7fdf9; }
       <span style="font-size:12px;font-weight:700;color:var(--muted);margin-left:6px">BUSINESS TYPE</span>
       <select id="repBizType" onchange="loadReportView()" style="border:1px solid var(--border);border-radius:6px;padding:5px 9px;font-size:13px;color:var(--text);cursor:pointer">
         <option value="">All Business Types</option>
-        <option value="FmV">FmV</option>
+        <option value="FnV">FnV</option>
         <option value="RTE">RTE</option>
         <option value="Beverage">Beverage</option>
         <option value="Coco-Sutra">Coco-Sutra</option>
@@ -1115,6 +1153,15 @@ tr.dash-row-alt td { background: #f7fdf9; }
   <span class="mt-brand">🌿 Organicut&nbsp;<em>Fresh</em></span>
   <button class="hamburger" onclick="toggleMobileNav()" aria-label="Menu">☰</button>
 </div>
+<!-- ═══════════ BUSINESS TYPE PICKER (landing screen) ═══════════ -->
+<div id="bizTypeOverlay">
+  <div class="bt-brand">🌿 Organicut <em>Fresh</em></div>
+  <div class="bt-sub">Select a business to continue</div>
+  <div class="bt-grid" id="bizTypeGrid"></div>
+  <button class="bt-all" onclick="selectBizType('')">View All Businesses Combined →</button>
+  <div class="bt-foot">Signed in as <strong id="btUserName"></strong> · <button onclick="doLogout()">Logout</button></div>
+</div>
+
 <div class="nav-backdrop" id="navBackdrop" onclick="toggleMobileNav(false)"></div>
 
 <nav class="sidebar">
@@ -1126,6 +1173,12 @@ tr.dash-row-alt td { background: #f7fdf9; }
     <button class="nav-item" id="navHistory" onclick="navTo('history')"><span class="nav-ico">📋</span> History</button>
     <button class="nav-item" id="navVendors" onclick="navTo('vendors')"><span class="nav-ico">⚙</span> Vendors</button>
     <button class="nav-item" id="navUsers" style="display:none" onclick="navTo('users')"><span class="nav-ico">👤</span> Users</button>
+  </div>
+  <div id="bizSwitchField" style="display:none">
+    <button id="bizSwitchBtn" onclick="openBizTypePicker()" title="Switch to a different business">
+      <span style="opacity:.6;font-size:10px;letter-spacing:.6px;display:block">BUSINESS</span>
+      <span id="bizSwitchLabel">All Businesses</span> ⇄
+    </button>
   </div>
   <div id="plantSelectorField" style="display:none;padding:10px 14px;border-top:1px solid rgba(255,255,255,.12)">
     <div style="font-size:10px;font-weight:700;color:rgba(255,255,255,.5);letter-spacing:.6px;margin-bottom:6px">SELECT PLANT</div>
@@ -1206,7 +1259,7 @@ tr.dash-row-alt td { background: #f7fdf9; }
       <select id="allPlantsBizType" style="font-size:12px;padding:5px 8px;border-radius:8px;border:1px solid var(--border);cursor:pointer"
         onchange="onAllPlantsBizTypeChange(this.value)">
         <option value="">All Business Types</option>
-        <option value="FmV">FmV</option>
+        <option value="FnV">FnV</option>
         <option value="RTE">RTE</option>
         <option value="Beverage">Beverage</option>
         <option value="Coco-Sutra">Coco-Sutra</option>
@@ -1286,6 +1339,9 @@ let currentPlantId   = null;
 let currentPlantName = null;
 let activePlantId    = null;  // null for superadmin until a plant is selected
 let activePlantName  = null;
+// Active business type scope ('' = all businesses). Only meaningful for all-plants users;
+// single-location users are implicitly scoped by their own plant's business type.
+let activeBizType    = sessionStorage.getItem('activeBizType') || '';
 
 /* ═══════════════════════════════════════════════════════
    SKU CONFIGURATION
@@ -1373,6 +1429,12 @@ async function checkAuth() {
       { const nr = document.getElementById('navReport'); if (nr) nr.style.display = isSuperadmin ? '' : 'none'; }
       document.getElementById('loginOverlay').style.display = 'none';
       await setupPlantSelector();
+      // All-plants users land on the business picker unless they already chose one this session
+      if (!currentPlantId && !sessionStorage.getItem('activeBizType')) {
+        openBizTypePicker();
+        return;
+      }
+      if (!currentPlantId) renderPlantSelector();
       await initApp();
     } else {
       await checkIfSetupNeeded();
@@ -1438,6 +1500,8 @@ async function doLogin() {
     document.getElementById('histBulkLockBtns').style.display = isSuperadmin ? 'flex' : 'none';
     document.getElementById('loginOverlay').style.display = 'none';
     await setupPlantSelector();
+    // Fresh login for an all-plants user always starts at the business picker
+    if (!currentPlantId) { openBizTypePicker(); return; }
     await initApp();
   } catch (e) {
     errEl.textContent = e.message;
@@ -1469,8 +1533,16 @@ async function doLogout() {
   currentRole      = '';
   currentPlantId   = null;
   currentPlantName = null;
+  activePlantId    = null;
+  activePlantName  = null;
+  activeBizType    = '';
   _isDirty = false;
   sessionStorage.removeItem('activePlantId');
+  sessionStorage.removeItem('activeBizType');
+  sessionStorage.removeItem('allPlantsBizType');
+  document.getElementById('bizTypeOverlay').style.display = 'none';
+  document.getElementById('bizSwitchField').style.display = 'none';
+  document.getElementById('plantSelectorField').style.display = 'none';
   document.getElementById('navUsers').style.display = 'none';
   document.getElementById('navDashboard').style.display = 'none';
   document.getElementById('navVendors').style.display = 'none';
@@ -1506,18 +1578,43 @@ async function setupPlantSelector() {
     const plants = await fetch('/api/auth/plants', { credentials: 'include' }).then(r => r.json());
     PLANTS_BY_ID = Object.fromEntries(plants.map(p => [p.id, p]));
     if (currentPlantId) return; // locked-plant users don't get the selector, just the cache above
-    const sel = document.getElementById('plantSelector');
-    sel.innerHTML = '<option value="">All Plants</option>';
-    // Restore last selected plant from sessionStorage
-    const saved = parseInt(sessionStorage.getItem('activePlantId'));
-    if (saved && !activePlantId) {
-      const match = plants.find(p => p.id === saved);
-      if (match) { activePlantId = saved; activePlantName = match.name; }
-    }
+    renderPlantSelector(plants);
+  } catch (e) {
+    console.error('Failed to load plants:', e.message);
+  }
+}
+
+// Populates the sidebar plant dropdown, limited to the active business scope.
+function renderPlantSelector(plants) {
+  plants = plants || Object.values(PLANTS_BY_ID);
+  const scoped = activeBizType ? plants.filter(p => p.business_type === activeBizType) : plants;
+  const sel = document.getElementById('plantSelector');
+  sel.innerHTML = `<option value="">${activeBizType ? 'All ' + activeBizType + ' Locations' : 'All Plants'}</option>`;
+  // Restore last selected plant from sessionStorage
+  const saved = parseInt(sessionStorage.getItem('activePlantId'));
+  if (saved && !activePlantId) {
+    const match = scoped.find(p => p.id === saved);
+    if (match) { activePlantId = saved; activePlantName = match.name; }
+  }
+  // Drop the active plant if it falls outside the current business scope
+  if (activePlantId && !scoped.some(p => p.id === activePlantId)) {
+    activePlantId = null; activePlantName = null;
+    sessionStorage.removeItem('activePlantId');
+  }
+  if (activeBizType) {
+    // Already scoped to one business — a flat list is clearer than a single optgroup
+    scoped.forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p.id;
+      opt.textContent = p.name;
+      if (p.id === activePlantId) opt.selected = true;
+      sel.appendChild(opt);
+    });
+  } else {
     // Group by business type so the list stays navigable as locations grow
     const byType = {};
     const typeOrder = [];
-    plants.forEach(p => {
+    scoped.forEach(p => {
       const t = p.business_type || 'Other';
       if (!byType[t]) { byType[t] = []; typeOrder.push(t); }
       byType[t].push(p);
@@ -1534,14 +1631,52 @@ async function setupPlantSelector() {
       });
       sel.appendChild(grp);
     });
-    document.getElementById('plantSelectorField').style.display = '';
-    // Update badge if a plant was restored
-    if (activePlantId) {
-      document.getElementById('userBadge').textContent = currentUsername + ' • ' + activePlantName;
-    }
-  } catch (e) {
-    console.error('Failed to load plants:', e.message);
   }
+  document.getElementById('plantSelectorField').style.display = '';
+  document.getElementById('bizSwitchField').style.display = '';
+  document.getElementById('bizSwitchLabel').textContent = activeBizType || 'All Businesses';
+  document.getElementById('userBadge').textContent =
+    currentUsername + (activePlantId ? ' • ' + activePlantName
+                                     : activeBizType ? ' • All ' + activeBizType : ' • All Plants');
+}
+
+/* ── Business type picker ───────────────────────────────── */
+const BIZ_TYPES = [
+  { key: 'FnV',        icon: '🥬', label: 'FnV' },
+  { key: 'RTE',        icon: '🍱', label: 'RTE' },
+  { key: 'Beverage',   icon: '🥤', label: 'Beverage' },
+  { key: 'Coco-Sutra', icon: '🥥', label: 'Coco-Sutra' },
+];
+
+function openBizTypePicker() {
+  const plants = Object.values(PLANTS_BY_ID);
+  document.getElementById('btUserName').textContent = currentUsername;
+  document.getElementById('bizTypeGrid').innerHTML = BIZ_TYPES.map(bt => {
+    const n = plants.filter(p => p.business_type === bt.key).length;
+    const countTxt = n === 0 ? 'No locations yet' : n === 1 ? '1 location' : n + ' locations';
+    return `<div class="bt-card${n ? '' : ' empty'}" ${n ? `onclick="selectBizType('${bt.key}')"` : ''}>
+      <div class="bt-ico">${bt.icon}</div>
+      <div class="bt-name">${bt.label}</div>
+      <div class="bt-count">${countTxt}</div>
+    </div>`;
+  }).join('');
+  document.getElementById('bizTypeOverlay').style.display = 'flex';
+}
+
+async function selectBizType(type) {
+  activeBizType = type || '';
+  sessionStorage.setItem('activeBizType', activeBizType);
+  document.getElementById('bizTypeOverlay').style.display = 'none';
+  // Keep every business-type filter in the app in sync with the chosen scope
+  allPlantsBizType = activeBizType;
+  sessionStorage.setItem('allPlantsBizType', activeBizType);
+  ['allPlantsBizType', 'dashCompBizType', 'repBizType', 'prBizType'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = activeBizType;
+  });
+  renderPlantSelector();
+  clearForm();
+  await initApp();
 }
 
 async function onPlantChange(val) {
@@ -2096,7 +2231,7 @@ function renderUnloadingTable() {
 // hidden for records dated ON/AFTER `from`. No data is deleted — old records
 // keep their own rate snapshots regardless of tab visibility.
 const LEGACY_VENDOR_CUTOFFS = [
-  { plant: 'Bangalore-FmV', name: 'Vendor', from: '2026-07-03' },
+  { plant: 'Bangalore-FnV', name: 'Vendor', from: '2026-07-03' },
 ];
 function isHiddenLegacyVendor(v) {
   const plant = currentPlantName || activePlantName;
@@ -3007,7 +3142,7 @@ async function deleteHistoryRecord(date) {
 // Convert "YYYY-MM-DD" string to a JS Date that SheetJS writes as a real Excel date
 function xlDate(str) { return str ? new Date(str + 'T00:00:00') : str; }
 
-// Filesystem-safe plant name for export filenames, e.g. "Rai-FmV" or "AllPlants"
+// Filesystem-safe plant name for export filenames, e.g. "Rai-FnV" or "AllPlants"
 function _exportPlantTag() {
   const name = currentPlantName || activePlantName;
   return name ? name.replace(/[^a-zA-Z0-9-]+/g, '') : 'AllPlants';
@@ -3107,7 +3242,7 @@ function openPlantReport() {
       <label style="font-size:12px;font-weight:700;color:#334">Business Type</label>
       <select id="prBizType" style="width:100%;padding:8px 10px;border:1px solid #ccc;border-radius:8px;margin:4px 0 18px;font-size:14px;cursor:pointer">
         <option value="">All Business Types</option>
-        <option value="FmV">FmV</option>
+        <option value="FnV">FnV</option>
         <option value="RTE">RTE</option>
         <option value="Beverage">Beverage</option>
         <option value="Coco-Sutra">Coco-Sutra</option>
@@ -3125,11 +3260,11 @@ function openPlantReport() {
 // Cost in rupees (lakhs × 1e5), qty in kg (MT × 1e3).
 const LAST_MONTH_BASELINE = {
   '2026-06': {
-    'Rai-FmV':       { cost: 66.52e5, qty: 628.92e3 },
-    'Jaipur-FmV':    { cost:  2.18e5, qty:  25.99e3 },
-    'Bangalore-FmV': { cost: 22.21e5, qty: 174.21e3 },
-    'Mumbai-FmV':    { cost: 15.44e5, qty: 170.51e3 },
-    'Hyderabad-FmV': { cost: 12.26e5, qty: 131.24e3 },
+    'Rai-FnV':       { cost: 66.52e5, qty: 628.92e3 },
+    'Jaipur-FnV':    { cost:  2.18e5, qty:  25.99e3 },
+    'Bangalore-FnV': { cost: 22.21e5, qty: 174.21e3 },
+    'Mumbai-FnV':    { cost: 15.44e5, qty: 170.51e3 },
+    'Hyderabad-FnV': { cost: 12.26e5, qty: 131.24e3 },
   },
 };
 
@@ -3166,7 +3301,7 @@ function _computeReport(data) {
     if (lmQty)  tLQty  += lmQty;
 
     return { name: p.name, days: p.days, cost: p.total_cost, qty: p.total_qty, mpk: p.mpk,
-             lmMPK, changePct, status, projCost, projQty, projMPK };
+             lmQty, lmMPK, changePct, status, projCost, projQty, projMPK };
   });
 
   const totMPK  = tQty  > 0 ? tCost  / tQty  : 0;
@@ -3177,7 +3312,7 @@ function _computeReport(data) {
     totChangePct = ((totMPK - totLMPK) / totLMPK) * 100;
     totStatus = totMPK < totLMPK ? 'improving' : (totMPK > totLMPK ? 'worsening' : 'same');
   }
-  const totals = { cost: tCost, qty: tQty, mpk: totMPK, lmMPK: totLMPK,
+  const totals = { cost: tCost, qty: tQty, mpk: totMPK, lmQty: tLQty, lmMPK: totLMPK,
                    changePct: totChangePct, status: totStatus,
                    projCost: tPCost, projQty: tPQty, projMPK: totPMPK };
   return { rows, totals };
@@ -3207,11 +3342,12 @@ async function generatePlantReport(from, to, businessType) {
     const rangeDays = Math.round((new Date(to) - new Date(from)) / 86400000) + 1;
 
     const header = ['Plant','Days Recorded','Total Cost (L)','Total Tonnage (MT)','Avg MPK (₹)',
-                    'Last Month MPK (₹)','MPK Change','Status',
+                    'Last Month Tonnage (MT)','Last Month MPK (₹)','MPK Change','Status',
                     'Proj. Month-End Cost (L)','Proj. Tonnage (MT)','Proj. MPK (₹)'];
     const rowFor = r => [
       r.name, r.days != null ? `${r.days} / ${rangeDays}` : `${rangeDays} days`,
       _repL(r.cost), _repMT(r.qty), +r.mpk.toFixed(2),
+      r.lmQty > 0 ? _repMT(r.lmQty) : '—',
       r.lmMPK != null ? +r.lmMPK.toFixed(2) : '—',
       _repChangeText(r.status, r.changePct || 0), _repStatusText(r.status),
       _repL(r.projCost), _repMT(r.projQty), +r.projMPK.toFixed(2),
@@ -3227,7 +3363,7 @@ async function generatePlantReport(from, to, businessType) {
       rowFor({ ...T, name: 'TOTAL' }),
     ];
     const ws = XLSX.utils.aoa_to_sheet(aoa);
-    ws['!cols'] = [14,14,15,17,12,17,12,18,20,17,14].map(w => ({ wch: w }));
+    ws['!cols'] = [14,14,15,17,12,17,17,12,18,20,17,14].map(w => ({ wch: w }));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Multi-Plant Report');
     XLSX.writeFile(wb, `Organicut_MultiPlant_Report_${from}_to_${to}.xlsx`);
@@ -3302,6 +3438,7 @@ function _renderReportView(data) {
     row('Total Cost (₹ L)',           p => L(p.cost),  L(T.cost)),
     row('Total Tonnage (MT)',         p => MT(p.qty),  MT(T.qty)),
     row('Avg MPK (₹)',                p => p.mpk.toFixed(2), T.mpk.toFixed(2)),
+    row('Last Month Tonnage (MT)',    p => p.lmQty > 0 ? MT(p.lmQty) : '—', T.lmQty > 0 ? MT(T.lmQty) : '—'),
     row('Last Month MPK (₹)',         p => p.lmMPK != null ? p.lmMPK.toFixed(2) : '—', T.lmMPK != null ? T.lmMPK.toFixed(2) : '—'),
     row('MPK Change',                 p => `<span class="${cls(p.status)}">${chg(p.status, p.changePct || 0)}</span>`, `<span class="${cls(T.status)}">${chg(T.status, T.changePct || 0)}</span>`),
     row('Status',                     p => `<span class="${cls(p.status)}">${stat(p.status)}</span>`, `<span class="${cls(T.status)}">${stat(T.status)}</span>`),
@@ -4006,7 +4143,10 @@ async function loadDashboard() {
   _setActiveChip('dashPresetChips', _dashPreset);
   _setActiveChip('dashCompPresetChips', _dashCompPreset);
   try {
-    const data = await api('GET', '/api/records/analytics');
+    // Scope the aggregate to the active business when no single plant is selected
+    const btQs = (!currentPlantId && !activePlantId && activeBizType)
+      ? '?businessType=' + encodeURIComponent(activeBizType) : '';
+    const data = await api('GET', '/api/records/analytics' + btQs);
     _dashData = data;
     _applyDashData();
   } catch (e) {
