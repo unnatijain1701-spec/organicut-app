@@ -43,6 +43,18 @@ body {
 #plantSelector optgroup {
   background: #14382a; color: #8fe3b4; font-weight: 700; font-size: 11px;
 }
+
+/* ── Business type chip selector (replaces <select> everywhere except plant/location) ── */
+.biz-chips { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+.biz-chip {
+  border: 1.5px solid var(--border); background: #fff; color: var(--text);
+  border-radius: 20px; padding: 5px 13px; font-size: 12.5px; font-weight: 700;
+  cursor: pointer; transition: all .12s; white-space: nowrap;
+}
+.biz-chip:hover { border-color: var(--accent); }
+.biz-chip.active { background: var(--primary); border-color: var(--primary); color: #fff; }
+.biz-chips.on-dark .biz-chip { background: rgba(255,255,255,.08); border-color: rgba(255,255,255,.3); color: #fff; }
+.biz-chips.on-dark .biz-chip.active { background: #8fe3b4; border-color: #8fe3b4; color: #0d2318; }
 .sidebar-brand {
   padding: 16px 18px; font-weight: 800; font-size: 16px; color: #fff;
   display: flex; align-items: center; gap: 8px; letter-spacing: -.3px;
@@ -329,7 +341,7 @@ td input[type="number"]:hover { border-color: #7dbf99; }
 #loginOverlay {
   position: fixed; inset: 0; z-index: 9000;
   background: rgba(13,35,24,.72); backdrop-filter: blur(5px);
-  display: flex; align-items: center; justify-content: center; padding: 16px;
+  display: none; align-items: center; justify-content: center; padding: 16px;
 }
 .login-box {
   background: #fff; border-radius: 16px; padding: 40px 44px;
@@ -558,6 +570,48 @@ td input[type="number"]:hover { border-color: #7dbf99; }
   cursor: pointer; text-align: left; transition: background .14s;
 }
 #bizSwitchBtn:hover { background: rgba(255,255,255,.2); }
+
+/* ── PRE-LOGIN BUSINESS TILES (first screen, before login) ──────── */
+#preLoginOverlay {
+  position: fixed; inset: 0; z-index: 9500;
+  background: #0d2318;
+  display: flex; flex-direction: column;
+  padding: clamp(16px, 4vw, 48px);
+}
+.pl-brand { font-size: clamp(20px, 3vw, 30px); font-weight: 800; color: #fff; margin-bottom: clamp(16px, 3vh, 32px); letter-spacing: -.3px; flex: 0 0 auto; }
+.pl-brand em { font-style: normal; color: #8fe3b4; }
+.pl-grid {
+  flex: 1 1 auto; min-height: 0;
+  display: grid; gap: clamp(10px, 1.6vw, 20px);
+  grid-template-columns: repeat(12, 1fr);
+  grid-template-rows: 1fr 1fr;
+}
+.pl-tile {
+  border: none; border-radius: 18px; cursor: pointer; position: relative;
+  display: flex; align-items: flex-end; padding: clamp(18px, 3vw, 34px);
+  text-align: left; transition: transform .15s, box-shadow .15s; overflow: hidden;
+  min-height: 100px;
+}
+.pl-tile:hover { transform: translateY(-4px) scale(1.01); box-shadow: 0 16px 40px rgba(0,0,0,.35); }
+.pl-tile:disabled, .pl-tile.empty { cursor: not-allowed; filter: grayscale(.6); opacity: .5; }
+.pl-tile:disabled:hover, .pl-tile.empty:hover { transform: none; box-shadow: none; }
+.pl-tile-1 { grid-column: 1 / 6;  grid-row: 1; background: linear-gradient(135deg, #1e6b45, #155233); }
+.pl-tile-2 { grid-column: 6 / 13; grid-row: 1; background: linear-gradient(135deg, #3aaa6b, #1e6b45); }
+.pl-tile-3 { grid-column: 1 / 8;  grid-row: 2; background: linear-gradient(135deg, #e0813a, #b8621f); }
+.pl-tile-4 { grid-column: 8 / 13; grid-row: 2; background: linear-gradient(135deg, #14382a, #0d2318); border: 1.5px solid rgba(255,255,255,.15); }
+.pl-tile-name { font-size: clamp(20px, 2.6vw, 34px); font-weight: 800; color: #fff; line-height: 1.1; }
+.pl-tile-count { font-size: 12.5px; color: rgba(255,255,255,.75); margin-top: 6px; font-weight: 600; }
+.pl-foot { flex: 0 0 auto; text-align: center; margin-top: clamp(12px, 2vh, 20px); }
+.pl-admin-link {
+  background: none; border: none; color: rgba(255,255,255,.55); font-size: 12.5px;
+  font-weight: 700; cursor: pointer; text-decoration: underline;
+}
+.pl-admin-link:hover { color: #8fe3b4; }
+@media (max-width: 640px) {
+  .pl-grid { grid-template-columns: 1fr; grid-template-rows: repeat(4, minmax(90px, 1fr)); }
+  .pl-tile-1, .pl-tile-2, .pl-tile-3, .pl-tile-4 { grid-column: 1; }
+  .pl-tile-1 { grid-row: 1; } .pl-tile-2 { grid-row: 2; } .pl-tile-3 { grid-row: 3; } .pl-tile-4 { grid-row: 4; }
+}
 
 /* ── DASHBOARD OVERLAY ────────────────────────────────── */
 #dashboardOverlay, #reportOverlay {
@@ -826,6 +880,15 @@ tr.dash-row-alt td { background: #f7fdf9; }
 </head>
 <body>
 
+<!-- ═══════════════════ PRE-LOGIN BUSINESS PICKER (first screen) ═══════════════════ -->
+<div id="preLoginOverlay">
+  <div class="pl-brand">🌿 Organicut <em>Fresh</em></div>
+  <div class="pl-grid" id="preLoginGrid"></div>
+  <div class="pl-foot">
+    <button class="pl-admin-link" onclick="choosePreLoginBiz('ADMIN')">Admin Sign In →</button>
+  </div>
+</div>
+
 <!-- ═══════════════════ LOGIN OVERLAY ═══════════════════ -->
 <div id="loginOverlay">
   <div class="login-box">
@@ -843,6 +906,7 @@ tr.dash-row-alt td { background: #f7fdf9; }
       <div class="login-switch" id="loginSwitch" onclick="showSetup()" style="display:none">
         First time? <span>Create admin account →</span>
       </div>
+      <div class="login-switch" onclick="backToPreLogin()">← <span>Back to business selection</span></div>
     </div>
 
     <div id="setupForm" style="display:none">
@@ -873,13 +937,10 @@ tr.dash-row-alt td { background: #f7fdf9; }
       <option value="admin">Admin (full access)</option>
       <option value="superadmin">Superadmin (all plants, no restrictions)</option>
     </select>
-    <select class="users-input" id="newUserBizType" style="cursor:pointer;display:none" onchange="onNewUserBizTypeChange(this.value)">
-      <option value="">— Select Business Type —</option>
-      <option value="FnV">FnV</option>
-      <option value="RTE">RTE</option>
-      <option value="Beverage">Beverage</option>
-      <option value="Coco-Sutra">Coco-Sutra</option>
-    </select>
+    <div id="newUserBizTypeField" style="display:none;margin-bottom:8px">
+      <div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:5px">BUSINESS TYPE</div>
+      <span id="newUserBizType"></span>
+    </div>
     <select class="users-input" id="newUserPlant" style="cursor:pointer;display:none">
       <option value="">— Select Location —</option>
     </select>
@@ -1079,13 +1140,7 @@ tr.dash-row-alt td { background: #f7fdf9; }
         <span style="font-size:13px;color:var(--muted)">to</span>
         <input type="date" id="dashCompToDate" onchange="applyDashCompPreset('custom')" style="border:1px solid var(--border);border-radius:6px;padding:5px 9px;font-size:13px;color:var(--text)">
         <span style="font-size:12px;font-weight:700;color:var(--muted);margin-left:6px">BUSINESS TYPE</span>
-        <select id="dashCompBizType" onchange="loadDashCompare()" style="border:1px solid var(--border);border-radius:6px;padding:5px 9px;font-size:13px;color:var(--text);cursor:pointer">
-          <option value="">All Business Types</option>
-          <option value="FnV">FnV</option>
-          <option value="RTE">RTE</option>
-          <option value="Beverage">Beverage</option>
-          <option value="Coco-Sutra">Coco-Sutra</option>
-        </select>
+        <span id="dashCompBizTypeWrap"></span>
         <span style="font-size:11px;color:var(--muted);margin-left:4px" id="dashCompareHint">Lines show each plant's 7-day rolling average MPK — click a plant in the legend to show/hide it</span>
       </div>
 
@@ -1135,14 +1190,8 @@ tr.dash-row-alt td { background: #f7fdf9; }
       <span style="font-size:13px;color:var(--muted)">to</span>
       <input type="date" id="repTo" onchange="loadReportView()" style="border:1px solid var(--border);border-radius:6px;padding:5px 9px;font-size:13px;color:var(--text)">
       <span style="font-size:12px;font-weight:700;color:var(--muted);margin-left:6px">BUSINESS TYPE</span>
-      <select id="repBizType" onchange="loadReportView()" style="border:1px solid var(--border);border-radius:6px;padding:5px 9px;font-size:13px;color:var(--text);cursor:pointer">
-        <option value="">All Business Types</option>
-        <option value="FnV">FnV</option>
-        <option value="RTE">RTE</option>
-        <option value="Beverage">Beverage</option>
-        <option value="Coco-Sutra">Coco-Sutra</option>
-      </select>
-      <button onclick="generatePlantReport(document.getElementById('repFrom').value, document.getElementById('repTo').value, document.getElementById('repBizType').value)"
+      <span id="repBizTypeWrap"></span>
+      <button onclick="generatePlantReport(document.getElementById('repFrom').value, document.getElementById('repTo').value, bizChipValue('repBizType'))"
         style="border:none;border-radius:7px;padding:6px 12px;font-size:12px;font-weight:700;background:#1e6b45;color:#fff;cursor:pointer">↓ Excel</button>
       <span id="repCompareLabel" style="font-size:12px;color:var(--primary);font-weight:600;margin-left:2px"></span>
     </div>
@@ -1259,14 +1308,7 @@ tr.dash-row-alt td { background: #f7fdf9; }
   <div class="ap-card">
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
       <div class="ap-card-title" id="allPlantsTitle">All Plants — Daily Summary</div>
-      <select id="allPlantsBizType" style="font-size:12px;padding:5px 8px;border-radius:8px;border:1px solid var(--border);cursor:pointer"
-        onchange="onAllPlantsBizTypeChange(this.value)">
-        <option value="">All Business Types</option>
-        <option value="FnV">FnV</option>
-        <option value="RTE">RTE</option>
-        <option value="Beverage">Beverage</option>
-        <option value="Coco-Sutra">Coco-Sutra</option>
-      </select>
+      <span id="allPlantsBizTypeWrap"></span>
     </div>
     <div id="allPlantsTable"></div>
   </div>
@@ -1345,6 +1387,9 @@ let activePlantName  = null;
 // Active business type scope ('' = all businesses). Only meaningful for all-plants users;
 // single-location users are implicitly scoped by their own plant's business type.
 let activeBizType    = sessionStorage.getItem('activeBizType') || '';
+// Which pre-login tile (or 'ADMIN') was clicked to reach the login form — applied once
+// login succeeds, for all-plants users only; plant-locked users' access ignores it.
+let pendingBizType   = null;
 
 /* ═══════════════════════════════════════════════════════
    SKU CONFIGURATION
@@ -1430,23 +1475,34 @@ async function checkAuth() {
       document.getElementById('histBulkLockBtns').style.display = isSuperadmin ? 'flex' : 'none';
       { const rb = document.getElementById('reportMenuBtn'); if (rb) rb.style.display = isSuperadmin ? 'block' : 'none'; }
       { const nr = document.getElementById('navReport'); if (nr) nr.style.display = isSuperadmin ? '' : 'none'; }
+      document.getElementById('preLoginOverlay').style.display = 'none';
       document.getElementById('loginOverlay').style.display = 'none';
       await setupPlantSelector();
-      // All-plants users land on the business picker unless they already made a choice this
-      // session — 'activeBizType' alone can't tell "never chosen" apart from "chose Combined"
-      // (both are ''), so a separate flag records that a choice was actually made.
-      if (!currentPlantId && !sessionStorage.getItem('bizTypeChosen')) {
-        openBizTypePicker();
-        return;
+      // Returning session (cookie already valid) — no picker, just resume wherever
+      // sessionStorage left off, defaulting an all-plants user to "combined" if uncached.
+      if (!currentPlantId) {
+        activeBizType = sessionStorage.getItem('activeBizType') || '';
+        renderPlantSelector();
       }
-      if (!currentPlantId) renderPlantSelector();
       await initApp();
-    } else {
-      await checkIfSetupNeeded();
     }
+    // else: not logged in — leave the pre-login business tiles showing (their default state)
   } catch {
-    await checkIfSetupNeeded();
+    // Network hiccup on the /me check — leave the pre-login tiles showing rather than
+    // forcing straight to a login form the user hasn't chosen a business for yet.
   }
+}
+
+function choosePreLoginBiz(type) {
+  pendingBizType = type;
+  document.getElementById('preLoginOverlay').style.display = 'none';
+  checkIfSetupNeeded();
+}
+
+function backToPreLogin() {
+  pendingBizType = null;
+  document.getElementById('loginOverlay').style.display = 'none';
+  document.getElementById('preLoginOverlay').style.display = 'flex';
 }
 
 async function checkIfSetupNeeded() {
@@ -1505,8 +1561,20 @@ async function doLogin() {
     document.getElementById('histBulkLockBtns').style.display = isSuperadmin ? 'flex' : 'none';
     document.getElementById('loginOverlay').style.display = 'none';
     await setupPlantSelector();
-    // Fresh login for an all-plants user always starts at the business picker
-    if (!currentPlantId) { openBizTypePicker(); return; }
+    // The pre-login tile (or 'Admin Sign In') the user clicked decides the starting scope —
+    // for a plant-locked account this doesn't grant or restrict anything (the account's own
+    // plant_id already does that); it's purely which view they land on.
+    if (!currentPlantId) {
+      activeBizType = (pendingBizType && pendingBizType !== 'ADMIN') ? pendingBizType : '';
+      sessionStorage.setItem('activeBizType', activeBizType);
+      sessionStorage.setItem('bizTypeChosen', '1');
+      renderPlantSelector();
+    } else if (pendingBizType && pendingBizType !== 'ADMIN') {
+      const actualType = PLANTS_BY_ID[currentPlantId]?.business_type;
+      if (actualType && actualType !== pendingBizType) {
+        showToast(`Note: your account is scoped to ${actualType}, not ${pendingBizType}.`, false);
+      }
+    }
     await initApp();
   } catch (e) {
     errEl.textContent = e.message;
@@ -1541,6 +1609,7 @@ async function doLogout() {
   activePlantId    = null;
   activePlantName  = null;
   activeBizType    = '';
+  pendingBizType   = null;
   _isDirty = false;
   sessionStorage.removeItem('activePlantId');
   sessionStorage.removeItem('activeBizType');
@@ -1557,7 +1626,8 @@ async function doLogout() {
   toggleUsersPanel(false);
   document.getElementById('loginUser').value = '';
   document.getElementById('loginPass').value = '';
-  document.getElementById('loginOverlay').style.display = 'flex';
+  document.getElementById('loginOverlay').style.display = 'none';
+  document.getElementById('preLoginOverlay').style.display = 'flex';
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -1654,6 +1724,50 @@ const BIZ_TYPES = [
   { key: 'Coco-Sutra', icon: '🥥', label: 'Coco-Sutra' },
 ];
 
+/* ── Pre-login business tiles (first screen) ─────────────── */
+function renderPreLoginTiles() {
+  const grid = document.getElementById('preLoginGrid');
+  grid.innerHTML = BIZ_TYPES.map((bt, i) => `
+    <button type="button" class="pl-tile pl-tile-${i + 1}" onclick="choosePreLoginBiz('${bt.key}')">
+      <div>
+        <div class="pl-tile-name">${bt.icon}&nbsp; ${bt.label}</div>
+        <div class="pl-tile-count">Enter ${bt.label}</div>
+      </div>
+    </button>
+  `).join('');
+}
+renderPreLoginTiles();
+
+/* ── Business type chip selector (replaces <select> for business-type filters) ──
+   Renders a row of click buttons into containerId; selected value lives in the
+   container's data-value attribute (read via bizChipValue). onChangeFn is called
+   by name (a global function with no args) whenever the selection changes. */
+function bizChipsHTML(containerId, currentValue, onChangeFn, opts) {
+  opts = opts || {};
+  const dark = opts.dark ? ' on-dark' : '';
+  const chip = (v, label) =>
+    `<button type="button" class="biz-chip${v === currentValue ? ' active' : ''}"
+      onclick="setBizChip('${containerId}','${v}','${onChangeFn}')">${label}</button>`;
+  return `<div class="biz-chips${dark}" id="${containerId}" data-value="${currentValue || ''}">` +
+    (opts.noAll ? '' : chip('', 'All')) +
+    BIZ_TYPES.map(bt => chip(bt.key, bt.label)).join('') +
+    `</div>`;
+}
+function bizChipValue(containerId) {
+  return document.getElementById(containerId)?.dataset.value || '';
+}
+function setBizChip(containerId, value, onChangeFn) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  el.dataset.value = value;
+  el.querySelectorAll('.biz-chip').forEach(btn => {
+    const label = btn.textContent;
+    const btnValue = label === 'All' ? '' : (BIZ_TYPES.find(bt => bt.label === label)?.key ?? '');
+    btn.classList.toggle('active', btnValue === value);
+  });
+  if (onChangeFn && window[onChangeFn]) window[onChangeFn]();
+}
+
 function openBizTypePicker() {
   const plants = Object.values(PLANTS_BY_ID);
   document.getElementById('btUserName').textContent = currentUsername;
@@ -1674,13 +1788,12 @@ async function selectBizType(type) {
   sessionStorage.setItem('activeBizType', activeBizType);
   sessionStorage.setItem('bizTypeChosen', '1');
   document.getElementById('bizTypeOverlay').style.display = 'none';
-  // Keep every business-type filter in the app in sync with the chosen scope
+  // Keep every business-type filter in the app in sync with the chosen scope — each
+  // surface re-renders its own chip row from these variables next time it loads.
   allPlantsBizType = activeBizType;
   sessionStorage.setItem('allPlantsBizType', activeBizType);
-  ['allPlantsBizType', 'dashCompBizType', 'repBizType', 'prBizType'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.value = activeBizType;
-  });
+  dashCompBizType = activeBizType;
+  repBizType = activeBizType;
   renderPlantSelector();
   clearForm();
   await initApp();
@@ -1749,9 +1862,9 @@ async function initApp() {
 
 let allPlantsBizType = sessionStorage.getItem('allPlantsBizType') || '';
 
-function onAllPlantsBizTypeChange(val) {
-  allPlantsBizType = val;
-  sessionStorage.setItem('allPlantsBizType', val);
+function onAllPlantsBizTypeChange() {
+  allPlantsBizType = bizChipValue('allPlantsBizType');
+  sessionStorage.setItem('allPlantsBizType', allPlantsBizType);
   const date = document.getElementById('dateInput').value;
   if (date) loadAllPlantsView(date);
 }
@@ -1759,8 +1872,8 @@ function onAllPlantsBizTypeChange(val) {
 async function loadAllPlantsView(date) {
   const tableEl = document.getElementById('allPlantsTable');
   const titleEl = document.getElementById('allPlantsTitle');
-  const bizSel = document.getElementById('allPlantsBizType');
-  if (bizSel) bizSel.value = allPlantsBizType;
+  const bizWrap = document.getElementById('allPlantsBizTypeWrap');
+  if (bizWrap) bizWrap.innerHTML = bizChipsHTML('allPlantsBizType', allPlantsBizType, 'onAllPlantsBizTypeChange');
   if (!date) { tableEl.innerHTML = '<div class="ap-empty">Select a date to view the summary.</div>'; return; }
   const d = new Date(date);
   const dateStr = d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
@@ -3246,14 +3359,8 @@ function openPlantReport() {
       <input type="date" id="prFrom" value="${firstOfMonth}" style="width:100%;padding:8px 10px;border:1px solid #ccc;border-radius:8px;margin:4px 0 12px;font-size:14px">
       <label style="font-size:12px;font-weight:700;color:#334">To</label>
       <input type="date" id="prTo" value="${iso}" style="width:100%;padding:8px 10px;border:1px solid #ccc;border-radius:8px;margin:4px 0 12px;font-size:14px">
-      <label style="font-size:12px;font-weight:700;color:#334">Business Type</label>
-      <select id="prBizType" style="width:100%;padding:8px 10px;border:1px solid #ccc;border-radius:8px;margin:4px 0 18px;font-size:14px;cursor:pointer">
-        <option value="">All Business Types</option>
-        <option value="FnV">FnV</option>
-        <option value="RTE">RTE</option>
-        <option value="Beverage">Beverage</option>
-        <option value="Coco-Sutra">Coco-Sutra</option>
-      </select>
+      <label style="font-size:12px;font-weight:700;color:#334;display:block;margin-bottom:6px">Business Type</label>
+      <div style="margin-bottom:18px">${bizChipsHTML('prBizType', '', 'null')}</div>
       <button onclick="generatePlantReport()" style="width:100%;padding:11px;background:#1e6b45;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">↓ Generate Excel Report</button>
     </div>
   </div>`;
@@ -3339,7 +3446,7 @@ async function generatePlantReport(from, to, businessType) {
   from = from || document.getElementById('prFrom')?.value;
   to   = to   || document.getElementById('prTo')?.value;
   if (!from || !to) { showToast('⚠ Pick both dates', true); return; }
-  if (businessType === undefined) businessType = document.getElementById('prBizType')?.value || '';
+  if (businessType === undefined) businessType = bizChipValue('prBizType');
   const btParam = businessType ? `&businessType=${encodeURIComponent(businessType)}` : '';
   showToast('⏳ Building report…', false);
   try {
@@ -3397,15 +3504,20 @@ function closeReport() {
   if (el) el.style.display = 'none';
 }
 
+let repBizType = '';
+
 async function loadReportView() {
   const from = document.getElementById('repFrom')?.value;
   const to   = document.getElementById('repTo')?.value;
   const el   = document.getElementById('reportContent');
   if (!el) return;
+  repBizType = bizChipValue('repBizType') || repBizType;
+  const bizWrap = document.getElementById('repBizTypeWrap');
+  if (bizWrap) bizWrap.innerHTML = bizChipsHTML('repBizType', repBizType, 'loadReportView');
   if (!from || !to) { el.innerHTML = '<p style="color:var(--muted);text-align:center;padding:20px">Pick a date range.</p>'; return; }
   el.innerHTML = '<p style="color:var(--muted);text-align:center;padding:20px">Loading…</p>';
   try {
-    const businessType = document.getElementById('repBizType')?.value || '';
+    const businessType = repBizType;
     const btParam = businessType ? `&businessType=${encodeURIComponent(businessType)}` : '';
     const data = await api('GET', `/api/records/report?from=${from}&to=${to}${btParam}`);
     if (!data.plants || !data.plants.length) {
@@ -3876,23 +3988,26 @@ function toggleUsersPanel(force) {
 let allPlantsCache = null;
 
 async function loadUsersPanel() {
-  // Show/hide business-type + plant dropdowns based on role
-  const bizSel   = document.getElementById('newUserBizType');
+  // Show/hide business-type + plant selectors based on role
+  const bizField = document.getElementById('newUserBizTypeField');
   const plantSel = document.getElementById('newUserPlant');
   if (currentRole === 'superadmin') {
-    bizSel.style.display = '';
+    bizField.style.display = '';
     plantSel.style.display = '';
     if (!allPlantsCache) {
       try { allPlantsCache = await api('GET', '/api/auth/plants'); } catch { allPlantsCache = []; }
     }
+    document.getElementById('newUserBizType').innerHTML =
+      bizChipsHTML('newUserBizType', '', 'onNewUserBizTypeChange', { noAll: true });
   } else {
-    bizSel.style.display = 'none';
+    bizField.style.display = 'none';
     plantSel.style.display = 'none';
   }
   loadUsers();
 }
 
-function onNewUserBizTypeChange(businessType) {
+function onNewUserBizTypeChange() {
+  const businessType = bizChipValue('newUserBizType');
   const plantSel = document.getElementById('newUserPlant');
   plantSel.innerHTML = '<option value="">— Select Location —</option>';
   (allPlantsCache || []).filter(p => p.business_type === businessType).forEach(p => {
@@ -3973,11 +4088,11 @@ async function loadUsers() {
 }
 
 function onNewUserRoleChange(role) {
-  const bizSel   = document.getElementById('newUserBizType');
+  const bizField = document.getElementById('newUserBizTypeField');
   const plantSel = document.getElementById('newUserPlant');
   // Show business-type + plant selectors when creating non-superadmin users and current user has no plant (all-plants access)
   const show = (!currentPlantId && role !== 'superadmin');
-  bizSel.style.display = show ? '' : 'none';
+  bizField.style.display = show ? '' : 'none';
   plantSel.style.display = show ? '' : 'none';
 }
 
@@ -3998,7 +4113,8 @@ async function addUser() {
     document.getElementById('newUsername').value = '';
     document.getElementById('newPassword').value = '';
     document.getElementById('newUserRole').value = 'user';
-    document.getElementById('newUserBizType').value = '';
+    document.getElementById('newUserBizType').innerHTML =
+      bizChipsHTML('newUserBizType', '', 'onNewUserBizTypeChange', { noAll: true });
     document.getElementById('newUserPlant').innerHTML = '<option value="">— Select Location —</option>';
     showToast('✓ User "' + username + '" created as ' + (role === 'admin' ? 'Admin' : 'Operator'), false);
     loadUsers();
@@ -4210,14 +4326,18 @@ function switchDashView(view) {
 let _dashCompare = null;
 let _dashCompareData = null;
 let _dashCompareDetail = null;
+let dashCompBizType = '';
 
 async function loadDashCompare() {
   const from = _dashCompFromDate || document.getElementById('dashCompFromDate').value;
   const to   = _dashCompToDate   || document.getElementById('dashCompToDate').value;
   if (!from || !to) return;
   closeDashCompareDetail();
+  dashCompBizType = bizChipValue('dashCompBizType') || dashCompBizType;
+  const bizWrap = document.getElementById('dashCompBizTypeWrap');
+  if (bizWrap) bizWrap.innerHTML = bizChipsHTML('dashCompBizType', dashCompBizType, 'loadDashCompare');
   try {
-    const businessType = document.getElementById('dashCompBizType')?.value || '';
+    const businessType = dashCompBizType;
     const btParam = businessType ? `&businessType=${encodeURIComponent(businessType)}` : '';
     const data = await api('GET', `/api/records/compare?from=${from}&to=${to}${btParam}`);
     _dashCompareData = data;
