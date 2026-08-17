@@ -388,6 +388,12 @@ td input[type="number"]:hover { border-color: #7dbf99; }
   font-size: 11px; font-weight: 700; text-transform: uppercase;
   letter-spacing: .6px; color: var(--muted); margin-bottom: 10px;
 }
+.users-group + .users-group { margin-top: 14px; }
+.users-group-title {
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .6px; color: var(--muted); padding: 4px 6px 6px;
+  border-bottom: 1px solid var(--border); margin-bottom: 4px;
+}
 .users-input {
   width: 100%; padding: 8px 12px; border: 1.5px solid var(--border); border-radius: 8px;
   font-size: 13px; color: var(--text); outline: none; margin-bottom: 8px;
@@ -826,8 +832,15 @@ tr.dash-row-alt td { background: #f7fdf9; }
       <option value="admin">Admin (full access)</option>
       <option value="superadmin">Superadmin (all plants, no restrictions)</option>
     </select>
+    <select class="users-input" id="newUserBizType" style="cursor:pointer;display:none" onchange="onNewUserBizTypeChange(this.value)">
+      <option value="">— Select Business Type —</option>
+      <option value="FmV">FmV</option>
+      <option value="RTE">RTE</option>
+      <option value="Beverage">Beverage</option>
+      <option value="Coco-Sutra">Coco-Sutra</option>
+    </select>
     <select class="users-input" id="newUserPlant" style="cursor:pointer;display:none">
-      <option value="">— Select Plant —</option>
+      <option value="">— Select Location —</option>
     </select>
     <div id="usersFormErr" class="users-form-err"></div>
     <button class="users-add-btn" onclick="addUser()">Add User</button>
@@ -1024,6 +1037,14 @@ tr.dash-row-alt td { background: #f7fdf9; }
         <input type="date" id="dashCompFromDate" onchange="applyDashCompPreset('custom')" style="border:1px solid var(--border);border-radius:6px;padding:5px 9px;font-size:13px;color:var(--text)">
         <span style="font-size:13px;color:var(--muted)">to</span>
         <input type="date" id="dashCompToDate" onchange="applyDashCompPreset('custom')" style="border:1px solid var(--border);border-radius:6px;padding:5px 9px;font-size:13px;color:var(--text)">
+        <span style="font-size:12px;font-weight:700;color:var(--muted);margin-left:6px">BUSINESS TYPE</span>
+        <select id="dashCompBizType" onchange="loadDashCompare()" style="border:1px solid var(--border);border-radius:6px;padding:5px 9px;font-size:13px;color:var(--text);cursor:pointer">
+          <option value="">All Business Types</option>
+          <option value="FmV">FmV</option>
+          <option value="RTE">RTE</option>
+          <option value="Beverage">Beverage</option>
+          <option value="Coco-Sutra">Coco-Sutra</option>
+        </select>
         <span style="font-size:11px;color:var(--muted);margin-left:4px" id="dashCompareHint">Lines show each plant's 7-day rolling average MPK — click a plant in the legend to show/hide it</span>
       </div>
 
@@ -1072,7 +1093,15 @@ tr.dash-row-alt td { background: #f7fdf9; }
       <input type="date" id="repFrom" onchange="loadReportView()" style="border:1px solid var(--border);border-radius:6px;padding:5px 9px;font-size:13px;color:var(--text)">
       <span style="font-size:13px;color:var(--muted)">to</span>
       <input type="date" id="repTo" onchange="loadReportView()" style="border:1px solid var(--border);border-radius:6px;padding:5px 9px;font-size:13px;color:var(--text)">
-      <button onclick="generatePlantReport(document.getElementById('repFrom').value, document.getElementById('repTo').value)"
+      <span style="font-size:12px;font-weight:700;color:var(--muted);margin-left:6px">BUSINESS TYPE</span>
+      <select id="repBizType" onchange="loadReportView()" style="border:1px solid var(--border);border-radius:6px;padding:5px 9px;font-size:13px;color:var(--text);cursor:pointer">
+        <option value="">All Business Types</option>
+        <option value="FmV">FmV</option>
+        <option value="RTE">RTE</option>
+        <option value="Beverage">Beverage</option>
+        <option value="Coco-Sutra">Coco-Sutra</option>
+      </select>
+      <button onclick="generatePlantReport(document.getElementById('repFrom').value, document.getElementById('repTo').value, document.getElementById('repBizType').value)"
         style="border:none;border-radius:7px;padding:6px 12px;font-size:12px;font-weight:700;background:#1e6b45;color:#fff;cursor:pointer">↓ Excel</button>
       <span id="repCompareLabel" style="font-size:12px;color:var(--primary);font-weight:600;margin-left:2px"></span>
     </div>
@@ -1172,7 +1201,17 @@ tr.dash-row-alt td { background: #f7fdf9; }
 <!-- ALL-PLANTS AGGREGATE VIEW (superadmin, no plant selected) -->
 <div id="allPlantsView">
   <div class="ap-card">
-    <div class="ap-card-title" id="allPlantsTitle">All Plants — Daily Summary</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+      <div class="ap-card-title" id="allPlantsTitle">All Plants — Daily Summary</div>
+      <select id="allPlantsBizType" style="font-size:12px;padding:5px 8px;border-radius:8px;border:1px solid var(--border);cursor:pointer"
+        onchange="onAllPlantsBizTypeChange(this.value)">
+        <option value="">All Business Types</option>
+        <option value="FmV">FmV</option>
+        <option value="RTE">RTE</option>
+        <option value="Beverage">Beverage</option>
+        <option value="Coco-Sutra">Coco-Sutra</option>
+      </select>
+    </div>
     <div id="allPlantsTable"></div>
   </div>
 </div>
@@ -1333,7 +1372,7 @@ async function checkAuth() {
       { const rb = document.getElementById('reportMenuBtn'); if (rb) rb.style.display = isSuperadmin ? 'block' : 'none'; }
       { const nr = document.getElementById('navReport'); if (nr) nr.style.display = isSuperadmin ? '' : 'none'; }
       document.getElementById('loginOverlay').style.display = 'none';
-      if (!currentPlantId) await setupPlantSelector();
+      await setupPlantSelector();
       await initApp();
     } else {
       await checkIfSetupNeeded();
@@ -1398,7 +1437,7 @@ async function doLogin() {
     document.getElementById('navVendors').style.display = isSuperadmin ? '' : 'none';
     document.getElementById('histBulkLockBtns').style.display = isSuperadmin ? 'flex' : 'none';
     document.getElementById('loginOverlay').style.display = 'none';
-    if (!currentPlantId) await setupPlantSelector();
+    await setupPlantSelector();
     await initApp();
   } catch (e) {
     errEl.textContent = e.message;
@@ -1460,9 +1499,13 @@ async function loadSKURateOverrides() {
   }
 }
 
+let PLANTS_BY_ID = {};
+
 async function setupPlantSelector() {
   try {
     const plants = await fetch('/api/auth/plants', { credentials: 'include' }).then(r => r.json());
+    PLANTS_BY_ID = Object.fromEntries(plants.map(p => [p.id, p]));
+    if (currentPlantId) return; // locked-plant users don't get the selector, just the cache above
     const sel = document.getElementById('plantSelector');
     sel.innerHTML = '<option value="">All Plants</option>';
     // Restore last selected plant from sessionStorage
@@ -1471,12 +1514,25 @@ async function setupPlantSelector() {
       const match = plants.find(p => p.id === saved);
       if (match) { activePlantId = saved; activePlantName = match.name; }
     }
+    // Group by business type so the list stays navigable as locations grow
+    const byType = {};
+    const typeOrder = [];
     plants.forEach(p => {
-      const opt = document.createElement('option');
-      opt.value = p.id;
-      opt.textContent = p.name;
-      if (p.id === activePlantId) opt.selected = true;
-      sel.appendChild(opt);
+      const t = p.business_type || 'Other';
+      if (!byType[t]) { byType[t] = []; typeOrder.push(t); }
+      byType[t].push(p);
+    });
+    typeOrder.forEach(t => {
+      const grp = document.createElement('optgroup');
+      grp.label = t;
+      byType[t].forEach(p => {
+        const opt = document.createElement('option');
+        opt.value = p.id;
+        opt.textContent = p.name;
+        if (p.id === activePlantId) opt.selected = true;
+        grp.appendChild(opt);
+      });
+      sel.appendChild(grp);
     });
     document.getElementById('plantSelectorField').style.display = '';
     // Update badge if a plant was restored
@@ -1519,8 +1575,8 @@ async function initApp() {
     d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
 
   const isAllPlants = !currentPlantId && !activePlantId;
-  const effectivePlantName = currentPlantName || activePlantName;
-  const isJaipur = effectivePlantName === 'Jaipur';
+  const effectivePlantId = currentPlantId || activePlantId;
+  const hasKgProcessing = PLANTS_BY_ID[effectivePlantId]?.has_kg_processing !== false;
   document.getElementById('allPlantsView').style.display  = isAllPlants ? '' : 'none';
   document.getElementById('entryCards').style.display     = isAllPlants ? 'none' : 'block';
   document.querySelector('.sumbar').style.display         = isAllPlants ? 'none' : '';
@@ -1530,7 +1586,7 @@ async function initApp() {
   // Vendors are plant-specific — hide the tab whenever no single plant is in context
   const isSuperadmin = currentRole === 'superadmin';
   document.getElementById('navVendors').style.display = (!isAllPlants && isSuperadmin) ? '' : 'none';
-  document.getElementById('kgProcessingCard').style.display = isJaipur ? 'none' : '';
+  document.getElementById('kgProcessingCard').style.display = hasKgProcessing ? '' : 'none';
   { const eab = document.getElementById('exportAllPlantsBtn'); if (eab) eab.style.display = (isAllPlants && isSuperadmin) ? 'block' : 'none'; }
 
   if (isAllPlants) {
@@ -1549,16 +1605,28 @@ async function initApp() {
   loadHistory();
 }
 
+let allPlantsBizType = sessionStorage.getItem('allPlantsBizType') || '';
+
+function onAllPlantsBizTypeChange(val) {
+  allPlantsBizType = val;
+  sessionStorage.setItem('allPlantsBizType', val);
+  const date = document.getElementById('dateInput').value;
+  if (date) loadAllPlantsView(date);
+}
+
 async function loadAllPlantsView(date) {
   const tableEl = document.getElementById('allPlantsTable');
   const titleEl = document.getElementById('allPlantsTitle');
+  const bizSel = document.getElementById('allPlantsBizType');
+  if (bizSel) bizSel.value = allPlantsBizType;
   if (!date) { tableEl.innerHTML = '<div class="ap-empty">Select a date to view the summary.</div>'; return; }
   const d = new Date(date);
   const dateStr = d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
-  titleEl.textContent = `All Plants — Summary for ${dateStr}`;
+  titleEl.textContent = `All Plants — Summary for ${dateStr}` + (allPlantsBizType ? ` (${allPlantsBizType})` : '');
   tableEl.innerHTML = '<div class="ap-empty">Loading…</div>';
   try {
-    const rows = await fetch('/api/records/allplants/' + date, { credentials: 'include' }).then(r => r.json());
+    const qs = allPlantsBizType ? '?businessType=' + encodeURIComponent(allPlantsBizType) : '';
+    const rows = await fetch('/api/records/allplants/' + date + qs, { credentials: 'include' }).then(r => r.json());
     if (!rows.length) { tableEl.innerHTML = '<div class="ap-empty">No data saved for this date across any plant.</div>'; return; }
     const fc = v => '₹ ' + parseFloat(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     const fn2 = v => parseFloat(v || 0) > 0 ? '₹ ' + parseFloat(v).toFixed(2) : '—';
@@ -2028,7 +2096,7 @@ function renderUnloadingTable() {
 // hidden for records dated ON/AFTER `from`. No data is deleted — old records
 // keep their own rate snapshots regardless of tab visibility.
 const LEGACY_VENDOR_CUTOFFS = [
-  { plant: 'Bangalore', name: 'Vendor', from: '2026-07-03' },
+  { plant: 'Bangalore-FmV', name: 'Vendor', from: '2026-07-03' },
 ];
 function isHiddenLegacyVendor(v) {
   const plant = currentPlantName || activePlantName;
@@ -2939,10 +3007,10 @@ async function deleteHistoryRecord(date) {
 // Convert "YYYY-MM-DD" string to a JS Date that SheetJS writes as a real Excel date
 function xlDate(str) { return str ? new Date(str + 'T00:00:00') : str; }
 
-// Filesystem-safe plant name for export filenames, e.g. "Rai" or "AllPlants"
+// Filesystem-safe plant name for export filenames, e.g. "Rai-FmV" or "AllPlants"
 function _exportPlantTag() {
   const name = currentPlantName || activePlantName;
-  return name ? name.replace(/[^a-zA-Z0-9]+/g, '') : 'AllPlants';
+  return name ? name.replace(/[^a-zA-Z0-9-]+/g, '') : 'AllPlants';
 }
 
 function exportExcel() {
@@ -3035,7 +3103,15 @@ function openPlantReport() {
       <label style="font-size:12px;font-weight:700;color:#334">From</label>
       <input type="date" id="prFrom" value="${firstOfMonth}" style="width:100%;padding:8px 10px;border:1px solid #ccc;border-radius:8px;margin:4px 0 12px;font-size:14px">
       <label style="font-size:12px;font-weight:700;color:#334">To</label>
-      <input type="date" id="prTo" value="${iso}" style="width:100%;padding:8px 10px;border:1px solid #ccc;border-radius:8px;margin:4px 0 18px;font-size:14px">
+      <input type="date" id="prTo" value="${iso}" style="width:100%;padding:8px 10px;border:1px solid #ccc;border-radius:8px;margin:4px 0 12px;font-size:14px">
+      <label style="font-size:12px;font-weight:700;color:#334">Business Type</label>
+      <select id="prBizType" style="width:100%;padding:8px 10px;border:1px solid #ccc;border-radius:8px;margin:4px 0 18px;font-size:14px;cursor:pointer">
+        <option value="">All Business Types</option>
+        <option value="FmV">FmV</option>
+        <option value="RTE">RTE</option>
+        <option value="Beverage">Beverage</option>
+        <option value="Coco-Sutra">Coco-Sutra</option>
+      </select>
       <button onclick="generatePlantReport()" style="width:100%;padding:11px;background:#1e6b45;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">↓ Generate Excel Report</button>
     </div>
   </div>`;
@@ -3049,11 +3125,11 @@ function openPlantReport() {
 // Cost in rupees (lakhs × 1e5), qty in kg (MT × 1e3).
 const LAST_MONTH_BASELINE = {
   '2026-06': {
-    'Rai':       { cost: 66.52e5, qty: 628.92e3 },
-    'Jaipur':    { cost:  2.18e5, qty:  25.99e3 },
-    'Bangalore': { cost: 22.21e5, qty: 174.21e3 },
-    'Mumbai':    { cost: 15.44e5, qty: 170.51e3 },
-    'Hyderabad': { cost: 12.26e5, qty: 131.24e3 },
+    'Rai-FmV':       { cost: 66.52e5, qty: 628.92e3 },
+    'Jaipur-FmV':    { cost:  2.18e5, qty:  25.99e3 },
+    'Bangalore-FmV': { cost: 22.21e5, qty: 174.21e3 },
+    'Mumbai-FmV':    { cost: 15.44e5, qty: 170.51e3 },
+    'Hyderabad-FmV': { cost: 12.26e5, qty: 131.24e3 },
   },
 };
 
@@ -3116,14 +3192,16 @@ function _repChangeText(status, pct) {
   return status === 'no-data' ? '—' : (pct >= 0 ? '+' : '') + pct.toFixed(1) + '%';
 }
 
-async function generatePlantReport(from, to) {
+async function generatePlantReport(from, to, businessType) {
   if (typeof XLSX === 'undefined') { alert('Excel library not loaded — reload the page.'); return; }
   from = from || document.getElementById('prFrom')?.value;
   to   = to   || document.getElementById('prTo')?.value;
   if (!from || !to) { showToast('⚠ Pick both dates', true); return; }
+  if (businessType === undefined) businessType = document.getElementById('prBizType')?.value || '';
+  const btParam = businessType ? `&businessType=${encodeURIComponent(businessType)}` : '';
   showToast('⏳ Building report…', false);
   try {
-    const data = await api('GET', `/api/records/report?from=${from}&to=${to}`);
+    const data = await api('GET', `/api/records/report?from=${from}&to=${to}${btParam}`);
     if (!data.plants || !data.plants.length) { showToast('⚠ No data in this range', true); return; }
     const { rows: R, totals: T } = _computeReport(data);
     const rangeDays = Math.round((new Date(to) - new Date(from)) / 86400000) + 1;
@@ -3184,7 +3262,9 @@ async function loadReportView() {
   if (!from || !to) { el.innerHTML = '<p style="color:var(--muted);text-align:center;padding:20px">Pick a date range.</p>'; return; }
   el.innerHTML = '<p style="color:var(--muted);text-align:center;padding:20px">Loading…</p>';
   try {
-    const data = await api('GET', `/api/records/report?from=${from}&to=${to}`);
+    const businessType = document.getElementById('repBizType')?.value || '';
+    const btParam = businessType ? `&businessType=${encodeURIComponent(businessType)}` : '';
+    const data = await api('GET', `/api/records/report?from=${from}&to=${to}${btParam}`);
     if (!data.plants || !data.plants.length) {
       el.innerHTML = '<p style="color:var(--muted);text-align:center;padding:24px">No records found in this range.</p>';
       return;
@@ -3649,26 +3729,34 @@ function toggleUsersPanel(force) {
   else setActiveNav('daily');
 }
 
+let allPlantsCache = null;
+
 async function loadUsersPanel() {
-  // Show/hide plant dropdown based on role
+  // Show/hide business-type + plant dropdowns based on role
+  const bizSel   = document.getElementById('newUserBizType');
   const plantSel = document.getElementById('newUserPlant');
   if (currentRole === 'superadmin') {
+    bizSel.style.display = '';
     plantSel.style.display = '';
-    if (plantSel.options.length <= 1) {
-      try {
-        const plants = await api('GET', '/api/auth/plants');
-        plants.forEach(p => {
-          const opt = document.createElement('option');
-          opt.value = p.id;
-          opt.textContent = p.name;
-          plantSel.appendChild(opt);
-        });
-      } catch {}
+    if (!allPlantsCache) {
+      try { allPlantsCache = await api('GET', '/api/auth/plants'); } catch { allPlantsCache = []; }
     }
   } else {
+    bizSel.style.display = 'none';
     plantSel.style.display = 'none';
   }
   loadUsers();
+}
+
+function onNewUserBizTypeChange(businessType) {
+  const plantSel = document.getElementById('newUserPlant');
+  plantSel.innerHTML = '<option value="">— Select Location —</option>';
+  (allPlantsCache || []).filter(p => p.business_type === businessType).forEach(p => {
+    const opt = document.createElement('option');
+    opt.value = p.id;
+    opt.textContent = p.name;
+    plantSel.appendChild(opt);
+  });
 }
 
 async function loadUsers() {
@@ -3680,12 +3768,16 @@ async function loadUsers() {
       list.innerHTML = '<div class="hist-empty">No users found.</div>';
       return;
     }
-    list.innerHTML = users.map(u => {
+    const renderUserRow = u => {
       const isYou   = u.username === currentUsername;
-      const isAdmin = u.role === 'admin';
-      const roleLbl = isAdmin ? 'ADMIN' : 'OPERATOR';
-      const badge   = `<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;margin-left:6px;
-        background:${isAdmin ? '#1e6b45' : '#e4f3ea'};color:${isAdmin ? '#fff' : '#4a7a5e'}">${roleLbl}</span>`;
+      const roleStyles = {
+        superadmin: { label: 'SUPERADMIN', bg: '#7a1e5e', fg: '#fff' },
+        admin:      { label: 'ADMIN',      bg: '#1e6b45', fg: '#fff' },
+        user:       { label: 'OPERATOR',   bg: '#e4f3ea', fg: '#4a7a5e' },
+      };
+      const rs = roleStyles[u.role] || roleStyles.user;
+      const badge = `<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;margin-left:6px;
+        background:${rs.bg};color:${rs.fg}">${rs.label}</span>`;
       const plantBadge = u.plant_name
         ? `<span style="font-size:10px;padding:2px 7px;border-radius:10px;margin-left:4px;background:#f0f7f4;color:#4a7a5e">${u.plant_name}</span>`
         : `<span style="font-size:10px;padding:2px 7px;border-radius:10px;margin-left:4px;background:#fff3cd;color:#856404">All Plants</span>`;
@@ -3708,16 +3800,41 @@ async function loadUsers() {
         <div class="user-row-name">${u.username}${badge}${plantBadge}${isYou ? '<span class="user-row-you"> (you)</span>' : ''}</div>
         ${actionsRow}
       </div>`;
-    }).join('');
+    };
+
+    if (currentRole !== 'superadmin') {
+      // Single-location users only ever see their own group — no grouping needed
+      list.innerHTML = users.map(renderUserRow).join('');
+      return;
+    }
+
+    const groups = {};
+    const groupOrder = [];
+    users.forEach(u => {
+      const key = u.business_type || 'All Business Types';
+      if (!groups[key]) { groups[key] = []; groupOrder.push(key); }
+      groups[key].push(u);
+    });
+    groupOrder.sort((a, b) => a === 'All Business Types' ? 1 : b === 'All Business Types' ? -1 : a.localeCompare(b));
+
+    list.innerHTML = groupOrder.map(key => `
+      <div class="users-group">
+        <div class="users-group-title">${key}</div>
+        ${groups[key].map(renderUserRow).join('')}
+      </div>
+    `).join('');
   } catch (e) {
     list.innerHTML = '<div class="hist-empty">Failed to load users.</div>';
   }
 }
 
 function onNewUserRoleChange(role) {
+  const bizSel   = document.getElementById('newUserBizType');
   const plantSel = document.getElementById('newUserPlant');
-  // Show plant selector when creating non-superadmin users and current user has no plant (all-plants access)
-  plantSel.style.display = (!currentPlantId && role !== 'superadmin') ? '' : 'none';
+  // Show business-type + plant selectors when creating non-superadmin users and current user has no plant (all-plants access)
+  const show = (!currentPlantId && role !== 'superadmin');
+  bizSel.style.display = show ? '' : 'none';
+  plantSel.style.display = show ? '' : 'none';
 }
 
 async function addUser() {
@@ -3737,7 +3854,8 @@ async function addUser() {
     document.getElementById('newUsername').value = '';
     document.getElementById('newPassword').value = '';
     document.getElementById('newUserRole').value = 'user';
-    document.getElementById('newUserPlant').value = '';
+    document.getElementById('newUserBizType').value = '';
+    document.getElementById('newUserPlant').innerHTML = '<option value="">— Select Location —</option>';
     showToast('✓ User "' + username + '" created as ' + (role === 'admin' ? 'Admin' : 'Operator'), false);
     loadUsers();
   } catch (e) {
@@ -3952,7 +4070,9 @@ async function loadDashCompare() {
   if (!from || !to) return;
   closeDashCompareDetail();
   try {
-    const data = await api('GET', `/api/records/compare?from=${from}&to=${to}`);
+    const businessType = document.getElementById('dashCompBizType')?.value || '';
+    const btParam = businessType ? `&businessType=${encodeURIComponent(businessType)}` : '';
+    const data = await api('GET', `/api/records/compare?from=${from}&to=${to}${btParam}`);
     _dashCompareData = data;
     _renderDashCompare(data);
   } catch (e) {

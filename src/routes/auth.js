@@ -95,8 +95,29 @@ router.post('/setup', async (req, res) => {
 // GET /api/auth/plants — list all plants (used by superadmin when creating users)
 router.get('/plants', authenticateToken, async (req, res) => {
   try {
-    const { rows } = await db.query('SELECT id, name FROM plants ORDER BY display_order');
+    const { rows } = await db.query('SELECT id, name, business_type, has_kg_processing FROM plants ORDER BY display_order');
     res.json(rows);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// POST /api/auth/plants — create a new location (superadmin only)
+router.post('/plants', authenticateToken, async (req, res) => {
+  if (req.user.role !== 'superadmin') return res.status(403).json({ error: 'Superadmin only' });
+  const { name, businessType, hasKgProcessing } = req.body || {};
+  if (!name || !businessType) return res.status(400).json({ error: 'name and businessType are required' });
+  const validTypes = ['FmV', 'RTE', 'Beverage', 'Coco-Sutra'];
+  if (!validTypes.includes(businessType)) return res.status(400).json({ error: 'Invalid businessType' });
+  try {
+    const { rows } = await db.query(
+      `INSERT INTO plants (name, business_type, has_kg_processing, display_order)
+       VALUES ($1, $2, $3, COALESCE((SELECT MAX(display_order)+1 FROM plants), 1))
+       RETURNING id, name, business_type, has_kg_processing, display_order`,
+      [name.trim(), businessType, hasKgProcessing !== false]
+    );
+    res.json(rows[0]);
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: 'Server error' });
@@ -109,14 +130,14 @@ router.get('/users', authenticateToken, async (req, res) => {
     let rows;
     if (req.user.role === 'superadmin') {
       ({ rows } = await db.query(`
-        SELECT u.id, u.username, u.role, u.plant_id, p.name AS plant_name
+        SELECT u.id, u.username, u.role, u.plant_id, p.name AS plant_name, p.business_type
         FROM users u
         LEFT JOIN plants p ON p.id = u.plant_id
         ORDER BY u.plant_id NULLS FIRST, u.id
       `));
     } else {
       ({ rows } = await db.query(`
-        SELECT u.id, u.username, u.role, u.plant_id, p.name AS plant_name
+        SELECT u.id, u.username, u.role, u.plant_id, p.name AS plant_name, p.business_type
         FROM users u
         LEFT JOIN plants p ON p.id = u.plant_id
         WHERE u.plant_id = $1

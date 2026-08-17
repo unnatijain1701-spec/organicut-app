@@ -17,7 +17,7 @@ router.get('/', async (req, res) => {
     if (!pid) {
       // Superadmin "All Plants" — aggregate per date across all plants, include per-plant rows
       const { rows } = await db.query(`
-        SELECT dr.id, dr.record_date, dr.attendance_cost, dr.kg_cost, dr.total_cost, dr.sale_qty, dr.mpk, dr.updated_at, dr.locked, p.name AS plant_name
+        SELECT dr.id, dr.record_date, dr.attendance_cost, dr.kg_cost, dr.total_cost, dr.sale_qty, dr.mpk, dr.updated_at, dr.locked, p.name AS plant_name, p.business_type
         FROM daily_records dr JOIN plants p ON p.id = dr.plant_id
         ORDER BY dr.record_date DESC, p.display_order
       `);
@@ -90,7 +90,7 @@ router.get('/export-all', async (req, res) => {
     return res.status(400).json({ error: 'month is required (YYYY-MM)' });
   try {
     const { rows: records } = await db.query(`
-      SELECT dr.*, p.name AS plant_name, p.display_order
+      SELECT dr.*, p.name AS plant_name, p.display_order, p.business_type
       FROM daily_records dr JOIN plants p ON p.id = dr.plant_id
       WHERE TO_CHAR(dr.record_date, 'YYYY-MM') = $1
       ORDER BY p.display_order, dr.record_date ASC
@@ -138,9 +138,18 @@ router.get('/export-all', async (req, res) => {
 // GET /api/records/analytics  — monthly + daily aggregates for dashboard
 router.get('/analytics', async (req, res) => {
   const pid = getPlantId(req);
+  const businessType = req.query.businessType || null;
   try {
     if (!pid) {
-      // Superadmin "All Plants" — aggregate across all plants
+      // Superadmin "All Plants" — aggregate across all plants (optionally scoped to one business type)
+      const params = [];
+      let btJoin = '';
+      let btFilter = '';
+      if (businessType) {
+        params.push(businessType);
+        btJoin = 'JOIN plants p ON p.id = daily_records.plant_id';
+        btFilter = `WHERE p.business_type = $${params.length}`;
+      }
       const { rows: daily } = await db.query(`
         SELECT TO_CHAR(record_date, 'YYYY-MM-DD') AS date,
           SUM(attendance_cost)::NUMERIC(12,2) AS attendance_cost,
@@ -148,18 +157,18 @@ router.get('/analytics', async (req, res) => {
           SUM(total_cost)::NUMERIC(12,2)      AS total_cost,
           SUM(sale_qty)::NUMERIC(12,2)        AS sale_qty,
           CASE WHEN SUM(sale_qty) > 0 THEN (SUM(total_cost)/SUM(sale_qty))::NUMERIC(10,4) ELSE 0 END AS mpk
-        FROM daily_records GROUP BY record_date ORDER BY record_date ASC
-      `);
+        FROM daily_records ${btJoin} ${btFilter} GROUP BY record_date ORDER BY record_date ASC
+      `, params);
       const { rows: monthly } = await db.query(`
         SELECT TO_CHAR(record_date, 'YYYY-MM') AS month,
           CASE WHEN SUM(sale_qty) > 0 THEN (SUM(total_cost)/SUM(sale_qty))::NUMERIC(10,4) ELSE 0 END AS avg_mpk,
           AVG(attendance_cost)::NUMERIC(12,2) AS avg_attendance_cost,
           AVG(kg_cost)::NUMERIC(12,2)         AS avg_kg_cost,
           COUNT(DISTINCT record_date)         AS days
-        FROM daily_records
+        FROM daily_records ${btJoin} ${btFilter}
         GROUP BY TO_CHAR(record_date, 'YYYY-MM')
         ORDER BY month ASC
-      `);
+      `, params);
       return res.json({ daily, monthly });
     }
     const { rows: daily } = await db.query(`
@@ -185,26 +194,30 @@ router.get('/analytics', async (req, res) => {
   }
 });
 
-// GET /api/records/compare?from=&to=  — superadmin: daily cost+qty per plant, for cross-plant MPK comparison
+// GET /api/records/compare?from=&to=&businessType=  — superadmin: daily cost+qty per plant, for cross-plant MPK comparison
 router.get('/compare', async (req, res) => {
   if (req.user.role !== 'superadmin')
     return res.status(403).json({ error: 'Superadmin only' });
   const from = (req.query.from || '').slice(0, 10);
   const to   = (req.query.to   || '').slice(0, 10);
+  const businessType = req.query.businessType || null;
   if (!from || !to) return res.status(400).json({ error: 'from and to dates are required' });
   try {
+    const params = [from, to];
+    let btFilter = '';
+    if (businessType) { params.push(businessType); btFilter = `AND p.business_type = $${params.length}`; }
     const { rows } = await db.query(`
-      SELECT p.id AS plant_id, p.name AS plant_name, p.display_order,
+      SELECT p.id AS plant_id, p.name AS plant_name, p.display_order, p.business_type,
         TO_CHAR(dr.record_date, 'YYYY-MM-DD') AS date,
         dr.total_cost, dr.attendance_cost, dr.kg_cost, dr.sale_qty
       FROM daily_records dr JOIN plants p ON p.id = dr.plant_id
-      WHERE dr.record_date BETWEEN $1 AND $2
+      WHERE dr.record_date BETWEEN $1 AND $2 ${btFilter}
       ORDER BY p.display_order, dr.record_date ASC
-    `, [from, to]);
+    `, params);
 
     const plantMap = {};
     rows.forEach(r => {
-      if (!plantMap[r.plant_id]) plantMap[r.plant_id] = { name: r.plant_name, daily: [] };
+      if (!plantMap[r.plant_id]) plantMap[r.plant_id] = { name: r.plant_name, businessType: r.business_type, daily: [] };
       plantMap[r.plant_id].daily.push({
         date: r.date,
         cost: parseFloat(r.total_cost),
@@ -221,16 +234,20 @@ router.get('/compare', async (req, res) => {
   }
 });
 
-// GET /api/records/allplants/:date  — per-plant summary for a date (all-plants users only)
+// GET /api/records/allplants/:date?businessType=  — per-plant summary for a date (all-plants users only)
 router.get('/allplants/:date', async (req, res) => {
   if (req.user.plant_id != null) return res.status(403).json({ error: 'Forbidden' });
   try {
+    const businessType = req.query.businessType || null;
+    const params = [req.params.date];
+    let btFilter = '';
+    if (businessType) { params.push(businessType); btFilter = `AND p.business_type = $${params.length}`; }
     const { rows } = await db.query(`
-      SELECT dr.attendance_cost, dr.kg_cost, dr.total_cost, dr.sale_qty, dr.mpk, p.name AS plant_name, p.display_order
+      SELECT dr.attendance_cost, dr.kg_cost, dr.total_cost, dr.sale_qty, dr.mpk, p.name AS plant_name, p.display_order, p.business_type
       FROM daily_records dr JOIN plants p ON p.id = dr.plant_id
-      WHERE dr.record_date = $1
+      WHERE dr.record_date = $1 ${btFilter}
       ORDER BY p.display_order
-    `, [req.params.date]);
+    `, params);
     res.json(rows);
   } catch (e) {
     console.error(e);
@@ -238,7 +255,7 @@ router.get('/allplants/:date', async (req, res) => {
   }
 });
 
-// GET /api/records/report?from=&to=  — superadmin: per-plant multi-facility report
+// GET /api/records/report?from=&to=&businessType=  — superadmin: per-plant multi-facility report
 // Returns, for the selected range: per-plant cost/tonnage/MPK, plus each plant's
 // previous-calendar-month MPK (for the improving/worsening comparison).
 router.get('/report', async (req, res) => {
@@ -246,6 +263,7 @@ router.get('/report', async (req, res) => {
     return res.status(403).json({ error: 'Superadmin only' });
   const from = (req.query.from || '').slice(0, 10);
   const to   = (req.query.to   || '').slice(0, 10);
+  const businessType = req.query.businessType || null;
   if (!from || !to) return res.status(400).json({ error: 'from and to dates are required' });
   try {
     // Previous calendar month relative to the report's "from" month
@@ -256,12 +274,16 @@ router.get('/report', async (req, res) => {
     const daysInMonth = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
 
     // A day counts as COMPLETE only when attendance cost, sale qty AND per-kg cost
-    // are all filled. Jaipur has no per-kg processing, so it's exempt from the KG check.
+    // are all filled. Plants with has_kg_processing=false (e.g. Jaipur-FmV) are exempt from the KG check.
     // (Fixed SQL fragment — no user input, safe to interpolate.)
-    const COMPLETE = "dr.attendance_cost > 0 AND dr.sale_qty > 0 AND (p.name = 'Jaipur' OR dr.kg_cost > 0)";
+    const COMPLETE = "dr.attendance_cost > 0 AND dr.sale_qty > 0 AND (NOT p.has_kg_processing OR dr.kg_cost > 0)";
+
+    const currentParams = [from, to];
+    let btFilterCurrent = '';
+    if (businessType) { currentParams.push(businessType); btFilterCurrent = `AND p.business_type = $${currentParams.length}`; }
 
     const { rows: current } = await db.query(`
-      SELECT p.id, p.name, p.display_order,
+      SELECT p.id, p.name, p.display_order, p.business_type,
         COUNT(*) FILTER (WHERE ${COMPLETE})                    AS days,
         COUNT(*)                                               AS days_saved,
         COALESCE(SUM(dr.total_cost) FILTER (WHERE ${COMPLETE}), 0)::NUMERIC(14,2) AS total_cost,
@@ -270,10 +292,14 @@ router.get('/report', async (req, res) => {
           THEN (SUM(dr.total_cost) FILTER (WHERE ${COMPLETE}) / SUM(dr.sale_qty) FILTER (WHERE ${COMPLETE}))::NUMERIC(10,4)
           ELSE 0 END AS mpk
       FROM daily_records dr JOIN plants p ON p.id = dr.plant_id
-      WHERE dr.record_date BETWEEN $1 AND $2
-      GROUP BY p.id, p.name, p.display_order
+      WHERE dr.record_date BETWEEN $1 AND $2 ${btFilterCurrent}
+      GROUP BY p.id, p.name, p.display_order, p.business_type
       ORDER BY p.display_order
-    `, [from, to]);
+    `, currentParams);
+
+    const prevParams = [iso(prevFirst), iso(prevLast)];
+    let btFilterPrev = '';
+    if (businessType) { prevParams.push(businessType); btFilterPrev = `AND p.business_type = $${prevParams.length}`; }
 
     const { rows: prev } = await db.query(`
       SELECT p.id,
@@ -283,14 +309,15 @@ router.get('/report', async (req, res) => {
           THEN (SUM(dr.total_cost) FILTER (WHERE ${COMPLETE}) / SUM(dr.sale_qty) FILTER (WHERE ${COMPLETE}))::NUMERIC(10,4)
           ELSE 0 END AS mpk
       FROM daily_records dr JOIN plants p ON p.id = dr.plant_id
-      WHERE dr.record_date BETWEEN $1 AND $2
+      WHERE dr.record_date BETWEEN $1 AND $2 ${btFilterPrev}
       GROUP BY p.id
-    `, [iso(prevFirst), iso(prevLast)]);
+    `, prevParams);
 
     const prevMap = {};
     prev.forEach(r => { prevMap[r.id] = { mpk: parseFloat(r.mpk), cost: parseFloat(r.total_cost), qty: parseFloat(r.total_qty) }; });
     const plants = current.map(r => ({
       name: r.name,
+      businessType: r.business_type,
       days: parseInt(r.days),
       total_cost: parseFloat(r.total_cost),
       total_qty:  parseFloat(r.total_qty),
