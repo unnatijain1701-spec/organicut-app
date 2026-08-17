@@ -373,16 +373,36 @@ td input[type="number"]:hover { border-color: #7dbf99; }
 
 /* ── USERS PANEL ─────────────────────────────────────── */
 #usersPanel {
-  position: fixed; top: 0; right: 0; bottom: 0; width: 320px; z-index: 500;
-  background: #fff; border-left: 1px solid var(--border);
-  box-shadow: -4px 0 24px rgba(0,0,0,.1);
-  transform: translateX(100%); transition: transform .25s ease;
+  position: fixed; top: 0; right: 0; bottom: 0; left: 210px; z-index: 500;
+  background: var(--bg); overflow-y: auto;
   display: flex; flex-direction: column;
 }
-#usersPanel.open { transform: translateX(0); }
+.users-toolbar {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 16px 24px; background: #fff; border-bottom: 1px solid var(--border);
+}
+.users-search {
+  flex: 1 1 220px; max-width: 320px; padding: 8px 14px; border: 1.5px solid var(--border);
+  border-radius: 20px; font-size: 13.5px; color: var(--text); outline: none;
+}
+.users-search:focus { border-color: var(--accent); }
+.users-body { flex: 1; display: flex; gap: 20px; padding: 20px 24px; align-items: flex-start; }
+.users-main { flex: 1; min-width: 0; }
+.users-side { flex: 0 0 300px; position: sticky; top: 0; }
+.user-card-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px;
+}
+.users-side-card {
+  background: #fff; border: 1px solid var(--border); border-radius: 12px; overflow: hidden;
+}
+.users-side-card .users-add-form { border-top: none; background: #f9fdf9; }
+@media (max-width: 900px) {
+  .users-body { flex-direction: column; }
+  .users-side { position: static; flex: 1 1 auto; width: 100%; }
+}
 .user-row {
   display: flex; flex-direction: column; gap: 6px;
-  padding: 10px 14px; border-radius: 9px; margin-bottom: 4px;
+  padding: 10px 14px; border-radius: 9px;
   border: 1px solid var(--border); background: #fff;
 }
 .user-row-actions {
@@ -770,7 +790,7 @@ tr.dash-row-alt td { background: #f7fdf9; }
   .sidebar-foot { margin-top: 0; margin-left: auto; border-top: none; border-left: 1px solid rgba(255,255,255,.12); padding: 0; display: flex; align-items: center; }
   .sidebar-user { display: none; }
   .topbar, .sumbar, .main { margin-left: 0; }
-  #dashboardOverlay, #reportOverlay { left: 0; }
+  #dashboardOverlay, #reportOverlay, #usersPanel { left: 0; }
 
   .topbar-main { padding: 6px 12px; min-height: 48px; gap: 6px; }
   .field input[type="date"]   { min-width: 120px; }
@@ -825,7 +845,7 @@ tr.dash-row-alt td { background: #f7fdf9; }
   .card { padding: 12px; }
   .att-table th, .att-table td { padding: 6px 4px; font-size: 12px; }
   .kg-cat-tabs { flex-wrap: wrap; }
-  .hist-panel, #vendorsPanel, #usersPanel { width: 100%; }
+  .hist-panel, #vendorsPanel { width: 100%; }
   .dashboardOverlay, #dashboardOverlay { padding: 8px; }
   .ap-table th, .ap-table td { font-size: 11px; padding: 5px 4px; }
 }
@@ -922,30 +942,42 @@ tr.dash-row-alt td { background: #f7fdf9; }
 </div>
 
 <!-- ═══════════════════ USERS PANEL ════════════════════ -->
-<div id="usersPanel">
-  <div class="hist-header">
-    <span class="hist-title">Manage Users</span>
-    <button class="hist-close" onclick="toggleUsersPanel(false)">×</button>
+<div id="usersPanel" style="display:none">
+  <div class="dash-header">
+    <span class="dash-header-title">👤 Manage <em>Users</em></span>
+    <button class="dash-close" onclick="toggleUsersPanel(false)">×</button>
   </div>
-  <div id="usersList" style="flex:1;overflow-y:auto;padding:8px;"></div>
-  <div class="users-add-form">
-    <div class="users-add-title">Add New User</div>
-    <input class="users-input" id="newUsername" type="text" placeholder="Username" autocomplete="off">
-    <input class="users-input" id="newPassword" type="password" placeholder="Password (min 6 chars)" autocomplete="new-password">
-    <select class="users-input" id="newUserRole" style="cursor:pointer" onchange="onNewUserRoleChange(this.value)">
-      <option value="user">Operator (can enter data)</option>
-      <option value="admin">Admin (full access)</option>
-      <option value="superadmin">Superadmin (all plants, no restrictions)</option>
-    </select>
-    <div id="newUserBizTypeField" style="display:none;margin-bottom:8px">
-      <div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:5px">BUSINESS TYPE</div>
-      <span id="newUserBizType"></span>
+  <div class="users-toolbar">
+    <input class="users-search" id="usersSearchInput" type="text" placeholder="🔍 Search by username…" oninput="applyUsersFilter()">
+    <span id="usersRoleTabs"></span>
+  </div>
+  <div class="users-body">
+    <div class="users-main">
+      <div id="usersList"></div>
     </div>
-    <select class="users-input" id="newUserPlant" style="cursor:pointer;display:none">
-      <option value="">— Select Location —</option>
-    </select>
-    <div id="usersFormErr" class="users-form-err"></div>
-    <button class="users-add-btn" onclick="addUser()">Add User</button>
+    <div class="users-side">
+      <div class="users-side-card">
+        <div class="users-add-form">
+          <div class="users-add-title">Add New User</div>
+          <input class="users-input" id="newUsername" type="text" placeholder="Username" autocomplete="off">
+          <input class="users-input" id="newPassword" type="password" placeholder="Password (min 6 chars)" autocomplete="new-password">
+          <select class="users-input" id="newUserRole" style="cursor:pointer" onchange="onNewUserRoleChange(this.value)">
+            <option value="user">Operator (can enter data)</option>
+            <option value="admin">Admin (full access)</option>
+            <option value="superadmin">Superadmin (all plants, no restrictions)</option>
+          </select>
+          <div id="newUserBizTypeField" style="display:none;margin-bottom:8px">
+            <div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:5px">BUSINESS TYPE</div>
+            <span id="newUserBizType"></span>
+          </div>
+          <select class="users-input" id="newUserPlant" style="cursor:pointer;display:none">
+            <option value="">— Select Location —</option>
+          </select>
+          <div id="usersFormErr" class="users-form-err"></div>
+          <button class="users-add-btn" onclick="addUser()">Add User</button>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -3980,7 +4012,7 @@ let usersPanelOpen = false;
 
 function toggleUsersPanel(force) {
   usersPanelOpen = (force !== undefined) ? force : !usersPanelOpen;
-  document.getElementById('usersPanel').classList.toggle('open', usersPanelOpen);
+  document.getElementById('usersPanel').style.display = usersPanelOpen ? 'flex' : 'none';
   if (usersPanelOpen) loadUsersPanel();
   else setActiveNav('daily');
 }
@@ -4018,73 +4050,111 @@ function onNewUserBizTypeChange() {
   });
 }
 
+let _allUsersCache = null;
+let usersRoleFilter = '';   // '' = all roles
+
+const ROLE_TABS = [
+  { key: '',           label: 'All' },
+  { key: 'user',        label: 'Operators' },
+  { key: 'admin',       label: 'Admins' },
+  { key: 'superadmin',  label: 'Superadmins' },
+];
+
+function renderUsersRoleTabs() {
+  const wrap = document.getElementById('usersRoleTabs');
+  if (!wrap) return;
+  wrap.innerHTML = `<div class="biz-chips">` +
+    ROLE_TABS.map(t => `<button type="button" class="biz-chip${t.key === usersRoleFilter ? ' active' : ''}"
+      onclick="setUsersRoleFilter('${t.key}')">${t.label}</button>`).join('') +
+    `</div>`;
+}
+function setUsersRoleFilter(role) {
+  usersRoleFilter = role;
+  renderUsersRoleTabs();
+  applyUsersFilter();
+}
+
 async function loadUsers() {
   const list = document.getElementById('usersList');
   list.innerHTML = '<div class="hist-empty">Loading…</div>';
+  renderUsersRoleTabs();
   try {
-    const users = await api('GET', '/api/auth/users');
-    if (!users.length) {
-      list.innerHTML = '<div class="hist-empty">No users found.</div>';
-      return;
-    }
-    const renderUserRow = u => {
-      const isYou   = u.username === currentUsername;
-      const roleStyles = {
-        superadmin: { label: 'SUPERADMIN', bg: '#7a1e5e', fg: '#fff' },
-        admin:      { label: 'ADMIN',      bg: '#1e6b45', fg: '#fff' },
-        user:       { label: 'OPERATOR',   bg: '#e4f3ea', fg: '#4a7a5e' },
-      };
-      const rs = roleStyles[u.role] || roleStyles.user;
-      const badge = `<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;margin-left:6px;
-        background:${rs.bg};color:${rs.fg}">${rs.label}</span>`;
-      const plantBadge = u.plant_name
-        ? `<span style="font-size:10px;padding:2px 7px;border-radius:10px;margin-left:4px;background:#f0f7f4;color:#4a7a5e">${u.plant_name}</span>`
-        : `<span style="font-size:10px;padding:2px 7px;border-radius:10px;margin-left:4px;background:#fff3cd;color:#856404">All Plants</span>`;
-      const safeName = u.username.replace(/'/g,"\\'");
-      const roleOpts = currentRole === 'superadmin'
-        ? [['user','Operator'],['admin','Admin'],['superadmin','Superadmin']]
-        : [['user','Operator'],['admin','Admin']];
-      const roleSelect = isYou ? '' : `<select onchange="changeUserRole(${u.id},'${safeName}',this.value,'${u.role}')"
-        style="font-size:11px;padding:2px 4px;border-radius:6px;border:1px solid var(--border);cursor:pointer;margin-right:2px">
-        ${roleOpts.map(([v,l]) => `<option value="${v}"${u.role===v?' selected':''}>${l}</option>`).join('')}
-      </select>`;
-      const actionsRow = isYou ? '' : `<div class="user-row-actions">
-        ${roleSelect}
-        <span style="display:flex;gap:4px">
-          <button class="user-del-btn" style="background:#e8f4ed;color:#1e6b45;border:none" onclick="resetUserPassword(${u.id},'${safeName}')">🔑</button>
-          <button class="user-del-btn" onclick="deleteUser(${u.id},'${safeName}')">Delete</button>
-        </span>
-      </div>`;
-      return `<div class="user-row">
-        <div class="user-row-name">${u.username}${badge}${plantBadge}${isYou ? '<span class="user-row-you"> (you)</span>' : ''}</div>
-        ${actionsRow}
-      </div>`;
-    };
-
-    if (currentRole !== 'superadmin') {
-      // Single-location users only ever see their own group — no grouping needed
-      list.innerHTML = users.map(renderUserRow).join('');
-      return;
-    }
-
-    const groups = {};
-    const groupOrder = [];
-    users.forEach(u => {
-      const key = u.business_type || 'All Business Types';
-      if (!groups[key]) { groups[key] = []; groupOrder.push(key); }
-      groups[key].push(u);
-    });
-    groupOrder.sort((a, b) => a === 'All Business Types' ? 1 : b === 'All Business Types' ? -1 : a.localeCompare(b));
-
-    list.innerHTML = groupOrder.map(key => `
-      <div class="users-group">
-        <div class="users-group-title">${key}</div>
-        ${groups[key].map(renderUserRow).join('')}
-      </div>
-    `).join('');
+    _allUsersCache = await api('GET', '/api/auth/users');
+    applyUsersFilter();
   } catch (e) {
     list.innerHTML = '<div class="hist-empty">Failed to load users.</div>';
   }
+}
+
+function applyUsersFilter() {
+  const list = document.getElementById('usersList');
+  if (!_allUsersCache) return;
+  const q = (document.getElementById('usersSearchInput')?.value || '').trim().toLowerCase();
+
+  let users = _allUsersCache;
+  if (usersRoleFilter) users = users.filter(u => u.role === usersRoleFilter);
+  if (q) users = users.filter(u => u.username.toLowerCase().includes(q));
+
+  if (!users.length) {
+    list.innerHTML = `<div class="hist-empty">${_allUsersCache.length ? 'No users match your filters.' : 'No users found.'}</div>`;
+    return;
+  }
+
+  const renderUserRow = u => {
+    const isYou   = u.username === currentUsername;
+    const roleStyles = {
+      superadmin: { label: 'SUPERADMIN', bg: '#7a1e5e', fg: '#fff' },
+      admin:      { label: 'ADMIN',      bg: '#1e6b45', fg: '#fff' },
+      user:       { label: 'OPERATOR',   bg: '#e4f3ea', fg: '#4a7a5e' },
+    };
+    const rs = roleStyles[u.role] || roleStyles.user;
+    const badge = `<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;margin-left:6px;
+      background:${rs.bg};color:${rs.fg}">${rs.label}</span>`;
+    const plantBadge = u.plant_name
+      ? `<span style="font-size:10px;padding:2px 7px;border-radius:10px;margin-left:4px;background:#f0f7f4;color:#4a7a5e">${u.plant_name}</span>`
+      : `<span style="font-size:10px;padding:2px 7px;border-radius:10px;margin-left:4px;background:#fff3cd;color:#856404">All Plants</span>`;
+    const safeName = u.username.replace(/'/g,"\\'");
+    const roleOpts = currentRole === 'superadmin'
+      ? [['user','Operator'],['admin','Admin'],['superadmin','Superadmin']]
+      : [['user','Operator'],['admin','Admin']];
+    const roleSelect = isYou ? '' : `<select onchange="changeUserRole(${u.id},'${safeName}',this.value,'${u.role}')"
+      style="font-size:11px;padding:2px 4px;border-radius:6px;border:1px solid var(--border);cursor:pointer;margin-right:2px">
+      ${roleOpts.map(([v,l]) => `<option value="${v}"${u.role===v?' selected':''}>${l}</option>`).join('')}
+    </select>`;
+    const actionsRow = isYou ? '' : `<div class="user-row-actions">
+      ${roleSelect}
+      <span style="display:flex;gap:4px">
+        <button class="user-del-btn" style="background:#e8f4ed;color:#1e6b45;border:none" onclick="resetUserPassword(${u.id},'${safeName}')">🔑</button>
+        <button class="user-del-btn" onclick="deleteUser(${u.id},'${safeName}')">Delete</button>
+      </span>
+    </div>`;
+    return `<div class="user-row">
+      <div class="user-row-name">${u.username}${badge}${plantBadge}${isYou ? '<span class="user-row-you"> (you)</span>' : ''}</div>
+      ${actionsRow}
+    </div>`;
+  };
+
+  if (currentRole !== 'superadmin') {
+    // Single-location users only ever see their own group — no grouping needed
+    list.innerHTML = `<div class="user-card-grid">${users.map(renderUserRow).join('')}</div>`;
+    return;
+  }
+
+  const groups = {};
+  const groupOrder = [];
+  users.forEach(u => {
+    const key = u.business_type || 'All Business Types';
+    if (!groups[key]) { groups[key] = []; groupOrder.push(key); }
+    groups[key].push(u);
+  });
+  groupOrder.sort((a, b) => a === 'All Business Types' ? 1 : b === 'All Business Types' ? -1 : a.localeCompare(b));
+
+  list.innerHTML = groupOrder.map(key => `
+    <div class="users-group">
+      <div class="users-group-title">${key}</div>
+      <div class="user-card-grid">${groups[key].map(renderUserRow).join('')}</div>
+    </div>
+  `).join('');
 }
 
 function onNewUserRoleChange(role) {
