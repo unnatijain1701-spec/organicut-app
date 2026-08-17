@@ -977,6 +977,20 @@ tr.dash-row-alt td { background: #f7fdf9; }
           <button class="users-add-btn" onclick="addUser()">Add User</button>
         </div>
       </div>
+      <div class="users-side-card" id="addLocationCard" style="display:none;margin-top:14px">
+        <div class="users-add-form">
+          <div class="users-add-title">Add New Location</div>
+          <input class="users-input" id="newLocationName" type="text" placeholder="Location name, e.g. Rai-522-FnV" autocomplete="off">
+          <div style="font-size:11px;font-weight:700;color:var(--muted);margin:0 0 5px">BUSINESS TYPE</div>
+          <div id="newLocationBizType" style="margin-bottom:10px"></div>
+          <label style="display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--text);margin-bottom:10px;cursor:pointer">
+            <input type="checkbox" id="newLocationHasKg" checked style="cursor:pointer">
+            Has per-KG processing cost
+          </label>
+          <div id="locationFormErr" class="users-form-err"></div>
+          <button class="users-add-btn" onclick="addLocation()">Add Location</button>
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -4023,19 +4037,46 @@ async function loadUsersPanel() {
   // Show/hide business-type + plant selectors based on role
   const bizField = document.getElementById('newUserBizTypeField');
   const plantSel = document.getElementById('newUserPlant');
+  const locCard  = document.getElementById('addLocationCard');
   if (currentRole === 'superadmin') {
     bizField.style.display = '';
     plantSel.style.display = '';
+    locCard.style.display = '';
     if (!allPlantsCache) {
       try { allPlantsCache = await api('GET', '/api/auth/plants'); } catch { allPlantsCache = []; }
     }
     document.getElementById('newUserBizType').innerHTML =
       bizChipsHTML('newUserBizType', '', 'onNewUserBizTypeChange', { noAll: true });
+    document.getElementById('newLocationBizType').innerHTML =
+      bizChipsHTML('newLocationBizType', '', 'null', { noAll: true });
   } else {
     bizField.style.display = 'none';
     plantSel.style.display = 'none';
+    locCard.style.display = 'none';
   }
   loadUsers();
+}
+
+async function addLocation() {
+  const name = document.getElementById('newLocationName').value.trim();
+  const businessType = bizChipValue('newLocationBizType');
+  const hasKgProcessing = document.getElementById('newLocationHasKg').checked;
+  const errEl = document.getElementById('locationFormErr');
+  errEl.textContent = '';
+  if (!name) { errEl.textContent = 'Location name is required.'; return; }
+  if (!businessType) { errEl.textContent = 'Please select a business type.'; return; }
+  try {
+    const plant = await api('POST', '/api/auth/plants', { name, businessType, hasKgProcessing });
+    allPlantsCache = null;
+    PLANTS_BY_ID[plant.id] = plant;
+    document.getElementById('newLocationName').value = '';
+    document.getElementById('newLocationBizType').innerHTML =
+      bizChipsHTML('newLocationBizType', '', 'null', { noAll: true });
+    showToast(`✓ Location "${plant.name}" created`, false);
+    loadUsersPanel();
+  } catch (e) {
+    errEl.textContent = e.message;
+  }
 }
 
 function onNewUserBizTypeChange() {
