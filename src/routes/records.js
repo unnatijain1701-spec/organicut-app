@@ -15,12 +15,17 @@ router.get('/', async (req, res) => {
   const pid = getPlantId(req);
   try {
     if (!pid) {
-      // Superadmin "All Plants" — aggregate per date across all plants, include per-plant rows
+      // Superadmin "All Plants" (optionally scoped to one business type) — aggregate per date
+      const businessType = req.query.businessType || null;
+      const params = [];
+      let btFilter = '';
+      if (businessType) { params.push(businessType); btFilter = `WHERE p.business_type = $${params.length}`; }
       const { rows } = await db.query(`
         SELECT dr.id, dr.record_date, dr.attendance_cost, dr.kg_cost, dr.total_cost, dr.sale_qty, dr.mpk, dr.updated_at, dr.locked, p.name AS plant_name, p.business_type
         FROM daily_records dr JOIN plants p ON p.id = dr.plant_id
+        ${btFilter}
         ORDER BY dr.record_date DESC, p.display_order
-      `);
+      `, params);
       return res.json(rows);
     }
     const { rows } = await db.query(`
