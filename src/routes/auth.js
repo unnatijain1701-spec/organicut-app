@@ -92,6 +92,17 @@ router.post('/setup', async (req, res) => {
   }
 });
 
+// GET /api/auth/needs-setup — true only when the users table is genuinely empty
+router.get('/needs-setup', async (req, res) => {
+  try {
+    const { rows } = await db.query('SELECT COUNT(*) AS n FROM users');
+    res.json({ needed: parseInt(rows[0].n, 10) === 0 });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // GET /api/auth/plants — list all plants (used by superadmin when creating users)
 router.get('/plants', authenticateToken, async (req, res) => {
   try {

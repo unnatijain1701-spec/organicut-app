@@ -73,6 +73,9 @@ body {
 .nav-item .nav-ico { font-size: 16px; width: 20px; text-align: center; flex-shrink: 0; }
 .nav-item:hover { background: rgba(255,255,255,.08); color: #fff; }
 .nav-item.active { background: rgba(255,255,255,.14); color: #fff; border-left-color: #96e0bb; }
+.nav-admin-chevron { margin-left: auto; font-size: 11px; transition: transform .15s; }
+.nav-admin-toggle.expanded .nav-admin-chevron { transform: rotate(90deg); }
+.nav-admin-item { padding-left: 30px; font-size: 12.5px; }
 .sidebar-foot { margin-top: auto; padding: 12px 0; border-top: 1px solid rgba(255,255,255,.12); }
 .sidebar-user {
   padding: 6px 18px 10px; font-size: 12.5px; font-weight: 700;
@@ -1267,10 +1270,17 @@ tr.dash-row-alt td { background: #f7fdf9; }
   <div class="sidebar-nav">
     <button class="nav-item active" id="navDaily" onclick="navTo('daily')"><span class="nav-ico">📝</span> Daily Entry</button>
     <button class="nav-item" id="navDashboard" style="display:none" onclick="navTo('dashboard')"><span class="nav-ico">📊</span> Dashboard</button>
-    <button class="nav-item" id="navReport" style="display:none" onclick="navTo('report')"><span class="nav-ico">📑</span> Report</button>
     <button class="nav-item" id="navHistory" onclick="navTo('history')"><span class="nav-ico">📋</span> History</button>
-    <button class="nav-item" id="navVendors" onclick="navTo('vendors')"><span class="nav-ico">⚙</span> Vendors</button>
-    <button class="nav-item" id="navUsers" style="display:none" onclick="navTo('users')"><span class="nav-ico">👤</span> Users</button>
+    <div id="navAdminToggle" style="display:none">
+      <button class="nav-item nav-admin-toggle" onclick="toggleAdminGroup()">
+        <span class="nav-ico">🛠</span> Admin <span class="nav-admin-chevron" id="navAdminChevron">▸</span>
+      </button>
+      <div id="navAdminItems" style="display:none">
+        <button class="nav-item nav-admin-item" id="navReport" onclick="navTo('report')"><span class="nav-ico">📑</span> Report</button>
+        <button class="nav-item nav-admin-item" id="navVendors" onclick="navTo('vendors')"><span class="nav-ico">⚙</span> Vendors</button>
+        <button class="nav-item nav-admin-item" id="navUsers" onclick="navTo('users')"><span class="nav-ico">👤</span> Users</button>
+      </div>
+    </div>
   </div>
   <div id="bizSwitchField" style="display:none">
     <button id="bizSwitchBtn" onclick="openBizTypePicker()" title="Switch to a different business">
@@ -1521,6 +1531,8 @@ async function checkAuth() {
       document.getElementById('histBulkLockBtns').style.display = isSuperadmin ? 'flex' : 'none';
       { const rb = document.getElementById('reportMenuBtn'); if (rb) rb.style.display = isSuperadmin ? 'block' : 'none'; }
       { const nr = document.getElementById('navReport'); if (nr) nr.style.display = isSuperadmin ? '' : 'none'; }
+      document.getElementById('navAdminToggle').style.display = isSuperadmin ? '' : 'none';
+      if (isSuperadmin) setAdminGroupOpen(sessionStorage.getItem('navAdminOpen') === '1');
       document.getElementById('preLoginOverlay').style.display = 'none';
       document.getElementById('loginOverlay').style.display = 'none';
       await setupPlantSelector();
@@ -1554,17 +1566,14 @@ function backToPreLogin() {
 async function checkIfSetupNeeded() {
   document.getElementById('loginOverlay').style.display = 'flex';
   try {
-    const r = await fetch('/api/auth/setup', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: '', password: '' })
-    });
+    const r = await fetch('/api/auth/needs-setup');
     const d = await r.json();
-    if (d.error === 'Setup already complete — an admin already exists') {
-      showLogin();
-    } else {
+    if (d.needed) {
       document.getElementById('loginSubText').textContent = 'Create your admin account to get started';
       showSetup();
       document.getElementById('loginSwitch').style.display = 'none';
+    } else {
+      showLogin();
     }
   } catch {
     showLogin();
@@ -1604,6 +1613,9 @@ async function doLogin() {
     document.getElementById('navUsers').style.display = isSuperadmin ? '' : 'none';
     document.getElementById('navDashboard').style.display = canSeeDashboard ? '' : 'none';
     document.getElementById('navVendors').style.display = isSuperadmin ? '' : 'none';
+    { const nr = document.getElementById('navReport'); if (nr) nr.style.display = isSuperadmin ? '' : 'none'; }
+    document.getElementById('navAdminToggle').style.display = isSuperadmin ? '' : 'none';
+    if (isSuperadmin) setAdminGroupOpen(false);
     document.getElementById('histBulkLockBtns').style.display = isSuperadmin ? 'flex' : 'none';
     document.getElementById('loginOverlay').style.display = 'none';
     await setupPlantSelector();
@@ -1667,6 +1679,9 @@ async function doLogout() {
   document.getElementById('navUsers').style.display = 'none';
   document.getElementById('navDashboard').style.display = 'none';
   document.getElementById('navVendors').style.display = 'none';
+  { const nr = document.getElementById('navReport'); if (nr) nr.style.display = 'none'; }
+  document.getElementById('navAdminToggle').style.display = 'none';
+  setAdminGroupOpen(false);
   setActiveNav('daily');
   closeDashboard();
   toggleUsersPanel(false);
@@ -3069,7 +3084,20 @@ async function toggleRecordLock(date, lock) {
 function setActiveNav(section) {
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   const el = document.getElementById('nav' + section.charAt(0).toUpperCase() + section.slice(1));
-  if (el) el.classList.add('active');
+  if (el) {
+    el.classList.add('active');
+    // Navigating straight to an Admin-group item (e.g. via a link) should reveal it
+    if (el.classList.contains('nav-admin-item')) setAdminGroupOpen(true);
+  }
+}
+
+function setAdminGroupOpen(open) {
+  document.getElementById('navAdminItems').style.display = open ? '' : 'none';
+  document.getElementById('navAdminToggle').querySelector('.nav-admin-toggle').classList.toggle('expanded', open);
+  sessionStorage.setItem('navAdminOpen', open ? '1' : '');
+}
+function toggleAdminGroup() {
+  setAdminGroupOpen(document.getElementById('navAdminItems').style.display === 'none');
 }
 
 function toggleMobileNav(force) {
