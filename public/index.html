@@ -399,6 +399,13 @@ td input[type="number"]:hover { border-color: #7dbf99; }
   background: #fff; border: 1px solid var(--border); border-radius: 12px; overflow: hidden;
 }
 .users-side-card .users-add-form { border-top: none; background: #f9fdf9; }
+.users-collapsible-toggle {
+  width: 100%; display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 16px; background: none; border: none; cursor: pointer;
+  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px;
+  color: var(--muted); transition: background .12s;
+}
+.users-collapsible-toggle:hover { background: #f9fdf9; }
 @media (max-width: 900px) {
   .users-body { flex-direction: column; }
   .users-side { position: static; flex: 1 1 auto; width: 100%; }
@@ -410,7 +417,14 @@ td input[type="number"]:hover { border-color: #7dbf99; }
 }
 .user-row-actions {
   display: flex; align-items: center; justify-content: space-between; gap: 4px;
+  padding-top: 6px; border-top: 1px solid #f0f5f2; margin-top: 2px;
 }
+.user-row-top { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.user-row-menu-btn {
+  background: none; border: none; color: var(--muted); font-size: 16px; font-weight: 700;
+  cursor: pointer; padding: 0 6px; line-height: 1; border-radius: 5px; flex-shrink: 0;
+}
+.user-row-menu-btn:hover { background: #f0f7f4; color: var(--text); }
 .user-row-name { font-size: 13px; font-weight: 600; color: var(--text); }
 .user-row-you  { font-size: 11px; color: var(--muted); margin-left: 6px; font-weight: 400; }
 .user-del-btn {
@@ -448,13 +462,15 @@ td input[type="number"]:hover { border-color: #7dbf99; }
 
 /* ── VENDORS PANEL ───────────────────────────────────── */
 #vendorsPanel {
-  position: fixed; top: 0; right: 0; bottom: 0; width: 320px; z-index: 500;
-  background: #fff; border-left: 1px solid var(--border);
-  box-shadow: -4px 0 24px rgba(0,0,0,.1);
-  transform: translateX(100%); transition: transform .25s ease;
+  position: fixed; top: 0; right: 0; bottom: 0; left: 210px; z-index: 500;
+  background: var(--bg); overflow-y: auto;
   display: flex; flex-direction: column;
 }
-#vendorsPanel.open { transform: translateX(0); }
+.vendor-card-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 12px;
+  align-items: start;
+}
+.vendor-card-grid .vendor-section { margin-bottom: 0; background: #fff; }
 
 /* ── HISTORY PANEL ────────────────────────────────────── */
 #historyPanel {
@@ -793,7 +809,7 @@ tr.dash-row-alt td { background: #f7fdf9; }
   .sidebar-foot { margin-top: 0; margin-left: auto; border-top: none; border-left: 1px solid rgba(255,255,255,.12); padding: 0; display: flex; align-items: center; }
   .sidebar-user { display: none; }
   .topbar, .sumbar, .main { margin-left: 0; }
-  #dashboardOverlay, #reportOverlay, #usersPanel { left: 0; }
+  #dashboardOverlay, #reportOverlay, #usersPanel, #vendorsPanel { left: 0; }
 
   .topbar-main { padding: 6px 12px; min-height: 48px; gap: 6px; }
   .field input[type="date"]   { min-width: 120px; }
@@ -848,7 +864,7 @@ tr.dash-row-alt td { background: #f7fdf9; }
   .card { padding: 12px; }
   .att-table th, .att-table td { padding: 6px 4px; font-size: 12px; }
   .kg-cat-tabs { flex-wrap: wrap; }
-  .hist-panel, #vendorsPanel { width: 100%; }
+  .hist-panel { width: 100%; }
   .dashboardOverlay, #dashboardOverlay { padding: 8px; }
   .ap-table th, .ap-table td { font-size: 11px; padding: 5px 4px; }
 }
@@ -981,17 +997,21 @@ tr.dash-row-alt td { background: #f7fdf9; }
         </div>
       </div>
       <div class="users-side-card" id="addLocationCard" style="display:none;margin-top:14px">
-        <div class="users-add-form">
-          <div class="users-add-title">Add New Location</div>
-          <input class="users-input" id="newLocationName" type="text" placeholder="Location name, e.g. Rai-522-FnV" autocomplete="off">
-          <div style="font-size:11px;font-weight:700;color:var(--muted);margin:0 0 5px">BUSINESS TYPE</div>
-          <div id="newLocationBizType" style="margin-bottom:10px"></div>
-          <label style="display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--text);margin-bottom:10px;cursor:pointer">
-            <input type="checkbox" id="newLocationHasKg" checked style="cursor:pointer">
-            Has per-KG processing cost
-          </label>
-          <div id="locationFormErr" class="users-form-err"></div>
-          <button class="users-add-btn" onclick="addLocation()">Add Location</button>
+        <button class="users-collapsible-toggle" onclick="toggleAddLocationForm()">
+          <span>+ Add Location</span> <span id="addLocationChevron">▸</span>
+        </button>
+        <div id="addLocationFormBody" style="display:none">
+          <div class="users-add-form">
+            <input class="users-input" id="newLocationName" type="text" placeholder="Location name, e.g. Rai-522-FnV" autocomplete="off">
+            <div style="font-size:11px;font-weight:700;color:var(--muted);margin:0 0 5px">BUSINESS TYPE</div>
+            <div id="newLocationBizType" style="margin-bottom:10px"></div>
+            <label style="display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--text);margin-bottom:10px;cursor:pointer">
+              <input type="checkbox" id="newLocationHasKg" checked style="cursor:pointer">
+              Has per-unit processing cost
+            </label>
+            <div id="locationFormErr" class="users-form-err"></div>
+            <button class="users-add-btn" onclick="addLocation()">Add Location</button>
+          </div>
         </div>
       </div>
     </div>
@@ -999,17 +1019,28 @@ tr.dash-row-alt td { background: #f7fdf9; }
 </div>
 
 <!-- ═══════════════════ VENDORS PANEL ═══════════════════ -->
-<div id="vendorsPanel">
-  <div class="hist-header">
-    <span class="hist-title">KG Vendors</span>
-    <button class="hist-close" onclick="toggleVendorsPanel(false)">×</button>
+<div id="vendorsPanel" style="display:none">
+  <div class="dash-header">
+    <span class="dash-header-title">⚙ KG <em>Vendors</em></span>
+    <button class="dash-close" onclick="toggleVendorsPanel(false)">×</button>
   </div>
-  <div id="vendorsList" style="flex:1;overflow-y:auto;padding:8px;"></div>
-  <div class="users-add-form">
-    <div class="users-add-title">Add New Vendor</div>
-    <input class="users-input" id="newVendorName" type="text" placeholder="Vendor name" autocomplete="off">
-    <div id="vendorsFormErr" class="users-form-err"></div>
-    <button class="users-add-btn" onclick="addVendor()">Add Vendor</button>
+  <div class="users-toolbar">
+    <input class="users-search" id="vendorsSearchInput" type="text" placeholder="🔍 Search vendors or SKUs…" oninput="applyVendorsFilter()">
+  </div>
+  <div class="users-body">
+    <div class="users-main">
+      <div id="vendorsList"></div>
+    </div>
+    <div class="users-side">
+      <div class="users-side-card">
+        <div class="users-add-form">
+          <div class="users-add-title">Add New Vendor</div>
+          <input class="users-input" id="newVendorName" type="text" placeholder="Vendor name" autocomplete="off">
+          <div id="vendorsFormErr" class="users-form-err"></div>
+          <button class="users-add-btn" onclick="addVendor()">Add Vendor</button>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -1074,12 +1105,12 @@ tr.dash-row-alt td { background: #f7fdf9; }
         <div class="dash-card-sub" id="dcDaysCount" style="margin-top:4px"></div>
       </div>
       <div class="dash-card">
-        <div class="dash-card-label">Total Tonnage</div>
+        <div class="dash-card-label" id="dcTotalVolLabel">Total Tonnage</div>
         <div class="dash-card-value" id="dcTotalVol">—</div>
         <div class="dash-card-sub" id="dcTotalVolMT"></div>
       </div>
       <div class="dash-card">
-        <div class="dash-card-label">Avg MPK</div>
+        <div class="dash-card-label" id="dcAvgMPKLabel">Avg MPK</div>
         <div class="dash-card-value green" id="dcAvgMPK">—</div>
       </div>
       <div class="dash-card">
@@ -1160,7 +1191,7 @@ tr.dash-row-alt td { background: #f7fdf9; }
             <tr>
               <th>Date</th>
               <th class="r">Prod. Attendance Cost</th>
-              <th class="r">Per KG Cost</th>
+              <th class="r" id="histKgCostHeader">Per KG Cost</th>
               <th class="r">Total Cost</th>
               <th class="r">Sale Qty</th>
               <th class="r">MPK</th>
@@ -1310,7 +1341,7 @@ tr.dash-row-alt td { background: #f7fdf9; }
         <span id="dateNice" style="font-size:13px;font-weight:800;color:#ffe08a;white-space:nowrap;margin-left:4px"></span>
       </div>
       <div class="field" id="saleQtyField">
-        <label>Sale&nbsp;Qty&nbsp;(kg)</label>
+        <label id="saleQtyLabel">Sale&nbsp;Qty&nbsp;(kg)</label>
         <input type="number" id="saleQtyInput" placeholder="0" min="0" step="0.01" oninput="markDirty();recalc()">
       </div>
     </div>
@@ -1343,7 +1374,7 @@ tr.dash-row-alt td { background: #f7fdf9; }
     <div class="si-value" id="sumAtt">₹ 0.00</div>
   </div>
   <div class="si">
-    <div class="si-label">Per KG Cost</div>
+    <div class="si-label" id="sumKGLabel">Per KG Cost</div>
     <div class="si-value" id="sumKG">₹ 0.00</div>
   </div>
   <div class="si">
@@ -1351,7 +1382,7 @@ tr.dash-row-alt td { background: #f7fdf9; }
     <div class="si-value" id="sumTotal">₹ 0.00</div>
   </div>
   <div class="si">
-    <div class="si-label">MPK (₹ / kg)</div>
+    <div class="si-label" id="sumMPKLabel">MPK (₹ / kg)</div>
     <div class="si-value green" id="sumMPK">—</div>
   </div>
 </div>
@@ -1410,7 +1441,7 @@ tr.dash-row-alt td { background: #f7fdf9; }
   <div class="card" id="kgProcessingCard">
     <div class="card-head">
       <div>
-        <div class="card-title">⚖ Per KG Processing Cost</div>
+        <div class="card-title" id="kgProcessingCardTitle">⚖ Per KG Processing Cost</div>
         <div style="font-size:11px;color:var(--muted);margin-top:2px">Enter quantities per vendor — costs calculated automatically</div>
       </div>
     </div>
@@ -1785,6 +1816,24 @@ const BIZ_TYPES = [
   { key: 'Coco-Sutra', icon: '🥥', label: 'Coco-Sutra' },
 ];
 
+/* ── Unit-of-measure helpers — Beverage is litre-based, everything else is kg-based ── */
+function bizUnitAbbr(businessType) { return businessType === 'Beverage' ? 'L' : 'kg'; }
+function bizUnitWord(businessType) { return businessType === 'Beverage' ? 'Litres' : 'Kg'; }
+function bizVolUnitAbbr(businessType) { return businessType === 'Beverage' ? 'KL' : 'MT'; }
+function bizMpkLabel(businessType) { return `MPK (₹/${bizUnitAbbr(businessType)})`; }
+// Best-guess business type for the current single-plant context (Daily Entry, History, SKU panels)
+function activePlantBizType() {
+  const pid = currentPlantId || activePlantId;
+  return PLANTS_BY_ID[pid]?.business_type || null;
+}
+// Same idea for Dashboard/Compare/Report views, which can be scoped to one plant OR
+// one business-type filter with no single plant — falls back to null (mixed/default kg).
+function dashboardBizType() {
+  const pid = currentPlantId || activePlantId;
+  if (pid) return PLANTS_BY_ID[pid]?.business_type || null;
+  return activeBizType || null;
+}
+
 /* ── Pre-login business tiles (first screen) ─────────────── */
 function renderPreLoginTiles() {
   const grid = document.getElementById('preLoginGrid');
@@ -1893,6 +1942,12 @@ async function initApp() {
   const isAllPlants = !currentPlantId && !activePlantId;
   const effectivePlantId = currentPlantId || activePlantId;
   const hasKgProcessing = PLANTS_BY_ID[effectivePlantId]?.has_kg_processing !== false;
+  const bizType = PLANTS_BY_ID[effectivePlantId]?.business_type || null;
+  const unitAbbr = bizUnitAbbr(bizType);
+  document.getElementById('saleQtyLabel').innerHTML = `Sale&nbsp;Qty&nbsp;(${unitAbbr})`;
+  document.getElementById('sumKGLabel').textContent = `Per ${bizUnitWord(bizType)} Cost`;
+  document.getElementById('sumMPKLabel').textContent = `MPK (₹ / ${unitAbbr})`;
+  document.getElementById('kgProcessingCardTitle').textContent = `⚖ Per ${bizUnitWord(bizType)} Processing Cost`;
   document.getElementById('allPlantsView').style.display  = isAllPlants ? '' : 'none';
   document.getElementById('entryCards').style.display     = isAllPlants ? 'none' : 'block';
   document.querySelector('.sumbar').style.display         = isAllPlants ? 'none' : '';
@@ -1951,9 +2006,10 @@ async function loadAllPlantsView(date) {
     const totTot = rows.reduce((s, r) => s + parseFloat(r.total_cost || 0), 0);
     const totQty = rows.reduce((s, r) => s + parseFloat(r.sale_qty || 0), 0);
     const totMPK = totQty > 0 ? totTot / totQty : null;
+    const hdrUnit = allPlantsBizType ? bizUnitAbbr(allPlantsBizType) : null;
     tableEl.innerHTML = `<table class="ap-table">
       <thead><tr>
-        <th>Plant</th><th>Prod. Att. Cost</th><th>Per KG Cost</th><th>Total Cost</th><th>Sale Qty (kg)</th><th>MPK (₹/kg)</th>
+        <th>Plant</th><th>Prod. Att. Cost</th><th>Per Unit Cost</th><th>Total Cost</th><th>Sale Qty${hdrUnit ? ` (${hdrUnit})` : ''}</th><th>MPK${hdrUnit ? ` (₹/${hdrUnit})` : ' (₹)'}</th>
       </tr></thead>
       <tbody>
         ${rows.map(r => `<tr>
@@ -1961,7 +2017,7 @@ async function loadAllPlantsView(date) {
           <td>${fc(r.attendance_cost)}</td>
           <td>${fc(r.kg_cost)}</td>
           <td>${fc(r.total_cost)}</td>
-          <td>${parseFloat(r.sale_qty || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+          <td>${parseFloat(r.sale_qty || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}${!hdrUnit ? ' ' + bizUnitAbbr(r.business_type) : ''}</td>
           <td>${fn2(r.mpk)}</td>
         </tr>`).join('')}
       </tbody>
@@ -2401,7 +2457,7 @@ function renderUnloadingTable() {
   ).join('');
 
   wrap.innerHTML = `<div class="table-wrap"><table class="unload-table">
-    <thead><tr><th>Activity</th><th class="r">₹/kg</th>${headerCols}</tr></thead>
+    <thead><tr><th>Activity</th><th class="r">₹/${bizUnitAbbr(activePlantBizType())}</th>${headerCols}</tr></thead>
     <tbody>${dataRows}</tbody>
     <tfoot><tr class="ft"><td colspan="2">Total KG Cost</td>${footerCells}</tr></tfoot>
   </table></div>`;
@@ -2466,7 +2522,7 @@ function buildPane(v) {
   return `<div class="tab-pane ${v===activeTab?'active':''}" id="kgPane_${vid_}">
     <div class="table-wrap">
       <table>
-        <thead><tr><th>SKU</th><th class="r">Rate (₹/kg)</th><th class="r">Qty (kg)</th><th class="r">Cost (₹)</th></tr></thead>
+        <thead><tr><th>SKU</th><th class="r">Rate (₹/${bizUnitAbbr(activePlantBizType())})</th><th class="r">Qty (${bizUnitAbbr(activePlantBizType())})</th><th class="r">Cost (₹)</th></tr></thead>
         <tbody>${defRows}${custRows}</tbody>
         <tfoot><tr class="ft"><td colspan="3">${v} — Total KG Cost</td>
           <td class="r cost-val" id="kgTot_${vid_}">${fc(vendorKG(v))}</td></tr></tfoot>
@@ -2817,11 +2873,11 @@ function previewRecord() {
               <th style="${thStyle}">Contractor</th><th style="${thStyle};text-align:center">Workers</th><th style="${thStyle};text-align:right">Cost</th>
             </tr></thead><tbody style="color:#2c3e30">${attRows.replace(/padding:6px 10px/g, tdStyle)}</tbody></table>` : '<div style="color:#aaa;font-size:13px;margin-bottom:16px">No attendance data entered.</div>'}
           ${kgRows.length ? `
-            <div style="font-size:12px;font-weight:700;color:#1e6b45;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Per KG Costs</div>
+            <div style="font-size:12px;font-weight:700;color:#1e6b45;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Per ${bizUnitWord(activePlantBizType())} Costs</div>
             <table style="${tblStyle}"><thead><tr>
               <th style="${thStyle}">Vendor</th><th style="${thStyle}">SKU</th><th style="${thStyle};text-align:center">Qty</th><th style="${thStyle};text-align:right">Cost</th>
-            </tr></thead><tbody style="color:#2c3e30">${kgRows.join('').replace(/padding:6px 10px/g, tdStyle)}</tbody></table>` : '<div style="color:#aaa;font-size:13px">No KG cost data entered.</div>'}
-          <div style="font-size:12px;color:#888;margin-top:4px">Sale Qty: <strong style="color:#1e3a28">${saleQty > 0 ? saleQty.toLocaleString('en-IN') + ' kg' : '—'}</strong></div>
+            </tr></thead><tbody style="color:#2c3e30">${kgRows.join('').replace(/padding:6px 10px/g, tdStyle)}</tbody></table>` : `<div style="color:#aaa;font-size:13px">No ${bizUnitWord(activePlantBizType())} cost data entered.</div>`}
+          <div style="font-size:12px;color:#888;margin-top:4px">Sale Qty: <strong style="color:#1e3a28">${saleQty > 0 ? saleQty.toLocaleString('en-IN') + ' ' + bizUnitAbbr(activePlantBizType()) : '—'}</strong></div>
         </div>
         <div style="padding:14px 22px;border-top:1px solid #eee;display:flex;justify-content:flex-end;gap:10px">
           <button onclick="closePreviewModal()" style="padding:8px 20px;border:1px solid #ddd;background:#fff;border-radius:8px;font-size:13px;cursor:pointer;color:#555">Close</button>
@@ -3359,8 +3415,9 @@ function exportExcel() {
   const xd = xlDate(date);
 
   // Sheet 1: Daily Summary
+  const _u = bizUnitAbbr(activePlantBizType());
   const ws1 = XLSX.utils.aoa_to_sheet([
-    ['Date','Attendance Cost','KG Cost','Total Cost','Sale Qty (kg)','MPK'],
+    ['Date','Attendance Cost','KG Cost','Total Cost',`Sale Qty (${_u})`,'MPK'],
     [xd, r2(attCost), r2(kgCost), r2(total), saleQty, mpk]
   ], {cellDates: true});
   ws1['!cols'] = [12,16,12,12,14,10].map(w => ({ wch: w }));
@@ -3374,7 +3431,7 @@ function exportExcel() {
   ws2['!cols'] = [12,32,10,12].map(w => ({ wch: w }));
 
   // Sheet 3: KG Detail
-  const kgRows = [['Date','Vendor','SKU','Rate (₹/kg)','Qty (kg)','Cost (₹)']];
+  const kgRows = [['Date','Vendor','SKU',`Rate (₹/${_u})`,`Qty (${_u})`,'Cost (₹)']];
   KG_VENDORS.forEach(v => {
     (SKU_CFG[v] || []).forEach(([name, rate], i) => {
       const qty = kgState[v]?.[i] || 0;
@@ -3483,13 +3540,20 @@ function _computeReport(data) {
       changePct = ((p.mpk - lmMPK) / lmMPK) * 100;
       status = p.mpk < lmMPK ? 'improving' : (p.mpk > lmMPK ? 'worsening' : 'same');
     }
+    // Tonnage change is framed the same way as MPK change, but "improving" means MORE
+    // volume (growth), not less — the opposite sense of a cost metric going down.
+    let qtyChangePct = null, qtyStatus = 'no-data';
+    if (lmQty != null && lmQty > 0) {
+      qtyChangePct = ((p.total_qty - lmQty) / lmQty) * 100;
+      qtyStatus = p.total_qty > lmQty ? 'improving' : (p.total_qty < lmQty ? 'worsening' : 'same');
+    }
 
     tCost += p.total_cost; tQty += p.total_qty; tPCost += projCost; tPQty += projQty;
     if (lmCost) tLCost += lmCost;
     if (lmQty)  tLQty  += lmQty;
 
-    return { name: p.name, days: p.days, cost: p.total_cost, qty: p.total_qty, mpk: p.mpk,
-             lmQty, lmMPK, changePct, status, projCost, projQty, projMPK };
+    return { name: p.name, businessType: p.businessType, days: p.days, cost: p.total_cost, qty: p.total_qty, mpk: p.mpk,
+             lmQty, lmMPK, changePct, status, qtyChangePct, qtyStatus, projCost, projQty, projMPK };
   });
 
   const totMPK  = tQty  > 0 ? tCost  / tQty  : 0;
@@ -3500,8 +3564,14 @@ function _computeReport(data) {
     totChangePct = ((totMPK - totLMPK) / totLMPK) * 100;
     totStatus = totMPK < totLMPK ? 'improving' : (totMPK > totLMPK ? 'worsening' : 'same');
   }
+  let totQtyChangePct = null, totQtyStatus = 'no-data';
+  if (tLQty > 0) {
+    totQtyChangePct = ((tQty - tLQty) / tLQty) * 100;
+    totQtyStatus = tQty > tLQty ? 'improving' : (tQty < tLQty ? 'worsening' : 'same');
+  }
   const totals = { cost: tCost, qty: tQty, mpk: totMPK, lmQty: tLQty, lmMPK: totLMPK,
                    changePct: totChangePct, status: totStatus,
+                   qtyChangePct: totQtyChangePct, qtyStatus: totQtyStatus,
                    projCost: tPCost, projQty: tPQty, projMPK: totPMPK };
   return { rows, totals };
 }
@@ -3529,13 +3599,15 @@ async function generatePlantReport(from, to, businessType) {
     const { rows: R, totals: T } = _computeReport(data);
     const rangeDays = Math.round((new Date(to) - new Date(from)) / 86400000) + 1;
 
-    const header = ['Plant','Days Recorded','Total Cost (L)','Total Tonnage (MT)','Avg MPK (₹)',
-                    'Last Month Tonnage (MT)','Last Month MPK (₹)','MPK Change','Status',
-                    'Proj. Month-End Cost (L)','Proj. Tonnage (MT)','Proj. MPK (₹)'];
+    const _vu = businessType ? bizVolUnitAbbr(businessType) : 'MT';
+    const header = ['Plant','Days Recorded','Total Cost (L)',`Total Tonnage (${_vu})`,'Avg MPK (₹)',
+                    `Last Month Tonnage (${_vu})`,'Tonnage Change','Last Month MPK (₹)','MPK Change','Status',
+                    'Proj. Month-End Cost (L)',`Proj. Tonnage (${_vu})`,'Proj. MPK (₹)'];
     const rowFor = r => [
       r.name, r.days != null ? `${r.days} / ${rangeDays}` : `${rangeDays} days`,
       _repL(r.cost), _repMT(r.qty), +r.mpk.toFixed(2),
       r.lmQty > 0 ? _repMT(r.lmQty) : '—',
+      _repChangeText(r.qtyStatus, r.qtyChangePct || 0),
       r.lmMPK != null ? +r.lmMPK.toFixed(2) : '—',
       _repChangeText(r.status, r.changePct || 0), _repStatusText(r.status),
       _repL(r.projCost), _repMT(r.projQty), +r.projMPK.toFixed(2),
@@ -3551,7 +3623,7 @@ async function generatePlantReport(from, to, businessType) {
       rowFor({ ...T, name: 'TOTAL' }),
     ];
     const ws = XLSX.utils.aoa_to_sheet(aoa);
-    ws['!cols'] = [14,14,15,17,12,17,17,12,18,20,17,14].map(w => ({ wch: w }));
+    ws['!cols'] = [14,14,15,17,12,17,15,17,12,18,20,17,14].map(w => ({ wch: w }));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Multi-Plant Report');
     XLSX.writeFile(wb, `Organicut_MultiPlant_Report_${from}_to_${to}.xlsx`);
@@ -3626,18 +3698,20 @@ function _renderReportView(data) {
     R.map(p => `<td>${cellFn(p)}</td>`).join('') +
     `<td class="rep-total-col">${totalHTML}</td></tr>`;
 
+  const vu = bizVolUnitAbbr(bizChipValue('repBizType') || null);
   const body = [
     row('Days Recorded',              p => `<span class="${p.days >= rangeDays ? '' : 'rep-down'}">${p.days} / ${rangeDays}</span>`, `${rangeDays} days`),
     row('Total Cost (₹ L)',           p => L(p.cost),  L(T.cost)),
-    row('Total Tonnage (MT)',         p => MT(p.qty),  MT(T.qty)),
+    row(`Total Tonnage (${vu})`,      p => MT(p.qty),  MT(T.qty)),
     row('Avg MPK (₹)',                p => p.mpk.toFixed(2), T.mpk.toFixed(2)),
-    row('Last Month Tonnage (MT)',    p => p.lmQty > 0 ? MT(p.lmQty) : '—', T.lmQty > 0 ? MT(T.lmQty) : '—'),
+    row(`Last Month Tonnage (${vu})`, p => p.lmQty > 0 ? MT(p.lmQty) : '—', T.lmQty > 0 ? MT(T.lmQty) : '—'),
+    row('Tonnage Change',             p => `<span class="${cls(p.qtyStatus)}">${chg(p.qtyStatus, p.qtyChangePct || 0)}</span>`, `<span class="${cls(T.qtyStatus)}">${chg(T.qtyStatus, T.qtyChangePct || 0)}</span>`),
     row('Last Month MPK (₹)',         p => p.lmMPK != null ? p.lmMPK.toFixed(2) : '—', T.lmMPK != null ? T.lmMPK.toFixed(2) : '—'),
     row('MPK Change',                 p => `<span class="${cls(p.status)}">${chg(p.status, p.changePct || 0)}</span>`, `<span class="${cls(T.status)}">${chg(T.status, T.changePct || 0)}</span>`),
     row('Status',                     p => `<span class="${cls(p.status)}">${stat(p.status)}</span>`, `<span class="${cls(T.status)}">${stat(T.status)}</span>`),
     row('Proj. Month-End MPK (₹)',    p => p.projMPK.toFixed(2), T.projMPK.toFixed(2)),
     row('Proj. Month-End Cost (₹ L)', p => L(p.projCost), L(T.projCost)),
-    row('Proj. Tonnage (MT)',         p => MT(p.projQty), MT(T.projQty)),
+    row(`Proj. Tonnage (${vu})`,      p => MT(p.projQty), MT(T.projQty)),
   ].join('');
 
   document.getElementById('reportContent').innerHTML =
@@ -3668,9 +3742,10 @@ async function exportMonthRecords() {
     });
     if (!records.length) { showToast('⚠ No records found for ' + month, true); return; }
 
-    const summaryRows = [['Date','Production Attendance Cost','Per KG Cost','Total Cost','Sale Qty (kg)','MPK','Last Saved By']];
+    const _u = bizUnitAbbr(activePlantBizType());
+    const summaryRows = [['Date','Production Attendance Cost','Per KG Cost','Total Cost',`Sale Qty (${_u})`,'MPK','Last Saved By']];
     const attRows     = [['Date','Contractor','Workers','Cost (₹)']];
-    const kgRows      = [['Date','Vendor','SKU','Rate (₹/kg)','Qty (kg)','Cost (₹)']];
+    const kgRows      = [['Date','Vendor','SKU',`Rate (₹/${_u})`,`Qty (${_u})`,'Cost (₹)']];
     for (const detail of records) {
       const dateStr = typeof detail.record_date === 'string' ? detail.record_date.slice(0, 10) : detail.record_date;
       const xd = xlDate(dateStr);
@@ -3717,9 +3792,11 @@ async function exportAllPlantsMonth() {
     const records = await api('GET', '/api/records/export-all?month=' + month);
     if (!records.length) { showToast('⚠ No records found for ' + month + ' across any plant', true); return; }
 
-    const summaryRows = [['Plant','Date','Production Attendance Cost','Per KG Cost','Total Cost','Sale Qty (kg)','MPK','Last Saved By']];
+    // Spans multiple plants that may use different units (kg vs litre) — headers stay
+    // unit-agnostic here rather than asserting one; each plant's own screens show its unit.
+    const summaryRows = [['Plant','Date','Production Attendance Cost','Per-Unit Cost','Total Cost','Sale Qty','MPK','Last Saved By']];
     const attRows     = [['Plant','Date','Contractor','Workers','Cost (₹)']];
-    const kgRows      = [['Plant','Date','Vendor','SKU','Rate (₹/kg)','Qty (kg)','Cost (₹)']];
+    const kgRows      = [['Plant','Date','Vendor','SKU','Rate (₹)','Qty','Cost (₹)']];
 
     let grandCost = 0, grandQty = 0;
     for (const detail of records) {
@@ -3769,9 +3846,10 @@ async function exportAllRecords() {
     const records = await api('GET', '/api/records/export');
     if (!records.length) { showToast('⚠ No records found.', true); return; }
 
-    const summaryRows = [['Date','Production Attendance Cost','Per KG Cost','Total Cost','Sale Qty (kg)','MPK','Last Saved By']];
+    const _u = bizUnitAbbr(activePlantBizType());
+    const summaryRows = [['Date','Production Attendance Cost','Per KG Cost','Total Cost',`Sale Qty (${_u})`,'MPK','Last Saved By']];
     const attRows     = [['Date','Contractor','Workers','Cost (₹)']];
-    const kgRows      = [['Date','Vendor','SKU','Rate (₹/kg)','Qty (kg)','Cost (₹)']];
+    const kgRows      = [['Date','Vendor','SKU',`Rate (₹/${_u})`,`Qty (${_u})`,'Cost (₹)']];
     const attTotals   = {};
     const vendorTotals = {};
 
@@ -3821,7 +3899,7 @@ async function exportAllRecords() {
     attSumRows.push(['TOTAL', '', '', r2(Object.values(attTotals).reduce((s,v) => s+v.cost, 0))]);
 
     // KG vendor summary
-    const kgSumRows = [['Vendor','Total Qty Processed (kg)','Total Amount Paid (₹)']];
+    const kgSumRows = [['Vendor', `Total Qty Processed (${_u})`, 'Total Amount Paid (₹)']];
     Object.entries(vendorTotals).sort((a,b) => b[1].cost - a[1].cost).forEach(([name, v]) => {
       kgSumRows.push([name, r2(v.qty), r2(v.cost)]);
     });
@@ -3874,18 +3952,34 @@ async function downloadBackup() {
 ═══════════════════════════════════════════════════════ */
 
 let vendorsPanelOpen = false;
+let _allVendorsCache = null;
 
 function toggleVendorsPanel(force) {
   vendorsPanelOpen = (force !== undefined) ? force : !vendorsPanelOpen;
-  document.getElementById('vendorsPanel').classList.toggle('open', vendorsPanelOpen);
+  document.getElementById('vendorsPanel').style.display = vendorsPanelOpen ? 'flex' : 'none';
   if (vendorsPanelOpen) loadVendorsList();
   else setActiveNav('daily');
 }
 
-function renderVendorsList(vendors) {
+function applyVendorsFilter() {
+  if (!_allVendorsCache) return;
+  const q = (document.getElementById('vendorsSearchInput')?.value || '').trim().toLowerCase();
+  const vendors = q
+    ? _allVendorsCache.filter(v =>
+        v.name.toLowerCase().includes(q) ||
+        (customSKUs[v.name] || []).some(s => s.name.toLowerCase().includes(q)))
+    : _allVendorsCache;
+  renderVendorsList(vendors, _allVendorsCache.length);
+}
+
+function renderVendorsList(vendors, totalCount) {
   const list = document.getElementById('vendorsList');
-  if (!vendors.length) { list.innerHTML = '<div class="hist-empty">No vendors yet.</div>'; return; }
-  list.innerHTML = vendors.map(v => {
+  totalCount = totalCount ?? vendors.length;
+  if (!vendors.length) {
+    list.innerHTML = `<div class="hist-empty">${totalCount ? 'No vendors match your search.' : 'No vendors yet.'}</div>`;
+    return;
+  }
+  const cards = vendors.map(v => {
     const vn = v.name, ve = vn.replace(/'/g, "\\'");
     const pvid = 'pv_' + vid(vn);
     const skus = customSKUs[vn] || [];
@@ -3893,7 +3987,7 @@ function renderVendorsList(vendors) {
       ? skus.map(s => `
           <div class="panel-sku-row" id="pskurow_${pvid}_${s.id}">
             <span class="panel-sku-name">${s.name}</span>
-            <span class="panel-sku-rate">₹${s.rate.toFixed(2)}/kg</span>
+            <span class="panel-sku-rate">₹${s.rate.toFixed(2)}/${bizUnitAbbr(activePlantBizType())}</span>
             <button class="btn-edit-sku" onclick="startEditSKUInPanel('${ve}',${s.id})" title="Edit">✎</button>
             <button class="btn-del"      onclick="deleteSKUFromPanel('${ve}',${s.id})"  title="Remove">×</button>
           </div>`).join('')
@@ -3902,7 +3996,7 @@ function renderVendorsList(vendors) {
       <div class="vendor-section">
         <div class="vendor-section-header">
           <span class="vendor-section-name">${vn}</span>
-          ${vendors.length > 1
+          ${totalCount > 1
             ? `<button class="user-del-btn" onclick="deleteVendor(${v.id},'${ve}')">Delete vendor</button>`
             : '<span style="font-size:11px;color:var(--muted)">last vendor</span>'}
         </div>
@@ -3911,7 +4005,7 @@ function renderVendorsList(vendors) {
           <div id="panelAddSkuForm_${pvid}" style="display:none" class="panel-add-sku-form">
             <input id="panelSkuName_${pvid}" placeholder="SKU name" style="flex:1;min-width:120px"
               onkeydown="if(event.key==='Enter')addSKUFromPanel('${ve}');if(event.key==='Escape')cancelPanelAddSKU('${ve}')">
-            <input id="panelSkuRate_${pvid}" type="number" placeholder="₹/kg" min="0" step="0.01" style="width:90px"
+            <input id="panelSkuRate_${pvid}" type="number" placeholder="₹/${bizUnitAbbr(activePlantBizType())}" min="0" step="0.01" style="width:90px"
               onkeydown="if(event.key==='Enter')addSKUFromPanel('${ve}');if(event.key==='Escape')cancelPanelAddSKU('${ve}')">
             <button class="btn-save"   onclick="addSKUFromPanel('${ve}')">Save</button>
             <button class="btn-cancel" onclick="cancelPanelAddSKU('${ve}')">Cancel</button>
@@ -3921,15 +4015,16 @@ function renderVendorsList(vendors) {
         </div>
       </div>`;
   }).join('');
+  list.innerHTML = `<div class="vendor-card-grid">${cards}</div>`;
 }
 
 async function loadVendorsList() {
   const list = document.getElementById('vendorsList');
   list.innerHTML = '<div class="hist-empty">Loading…</div>';
   try {
-    const vendors = await api('GET', '/api/vendors');
+    _allVendorsCache = await api('GET', '/api/vendors');
     try {
-      renderVendorsList(vendors);
+      applyVendorsFilter();
     } catch (re) {
       list.innerHTML = `<div class="hist-empty">Render error: ${re.message}</div>`;
     }
@@ -4085,6 +4180,14 @@ async function loadUsersPanel() {
   loadUsers();
 }
 
+function toggleAddLocationForm() {
+  const body = document.getElementById('addLocationFormBody');
+  const chevron = document.getElementById('addLocationChevron');
+  const opening = body.style.display === 'none';
+  body.style.display = opening ? '' : 'none';
+  chevron.style.transform = opening ? 'rotate(90deg)' : 'none';
+}
+
 async function addLocation() {
   const name = document.getElementById('newLocationName').value.trim();
   const businessType = bizChipValue('newLocationBizType');
@@ -4155,6 +4258,15 @@ async function loadUsers() {
   }
 }
 
+function toggleUserRowActions(userId) {
+  const el = document.getElementById('urow_' + userId + '_actions');
+  if (!el) return;
+  const opening = el.style.display === 'none';
+  // Only one row's actions open at a time, so the list doesn't grow unpredictably
+  document.querySelectorAll('.user-row-actions').forEach(a => a.style.display = 'none');
+  el.style.display = opening ? 'flex' : 'none';
+}
+
 function applyUsersFilter() {
   const list = document.getElementById('usersList');
   if (!_allUsersCache) return;
@@ -4190,15 +4302,20 @@ function applyUsersFilter() {
       style="font-size:11px;padding:2px 4px;border-radius:6px;border:1px solid var(--border);cursor:pointer;margin-right:2px">
       ${roleOpts.map(([v,l]) => `<option value="${v}"${u.role===v?' selected':''}>${l}</option>`).join('')}
     </select>`;
-    const actionsRow = isYou ? '' : `<div class="user-row-actions">
+    const rowId = 'urow_' + u.id;
+    const menuBtn = isYou ? '' : `<button class="user-row-menu-btn" onclick="toggleUserRowActions(${u.id})" title="Actions">⋮</button>`;
+    const actionsRow = isYou ? '' : `<div class="user-row-actions" id="${rowId}_actions" style="display:none">
       ${roleSelect}
       <span style="display:flex;gap:4px">
         <button class="user-del-btn" style="background:#e8f4ed;color:#1e6b45;border:none" onclick="resetUserPassword(${u.id},'${safeName}')">🔑</button>
         <button class="user-del-btn" onclick="deleteUser(${u.id},'${safeName}')">Delete</button>
       </span>
     </div>`;
-    return `<div class="user-row">
-      <div class="user-row-name">${u.username}${badge}${plantBadge}${isYou ? '<span class="user-row-you"> (you)</span>' : ''}</div>
+    return `<div class="user-row" id="${rowId}">
+      <div class="user-row-top">
+        <div class="user-row-name">${u.username}${badge}${plantBadge}${isYou ? '<span class="user-row-you"> (you)</span>' : ''}</div>
+        ${menuBtn}
+      </div>
       ${actionsRow}
     </div>`;
   };
@@ -4547,7 +4664,7 @@ function _renderDashCompare(data) {
         legend: { position: 'top', labels: { boxWidth: 12, font: { size: 11 } } },
       },
       scales: {
-        y: { title: { display: true, text: 'MPK (₹/kg)' } },
+        y: { title: { display: true, text: bizMpkLabel(dashCompBizType || null) } },
       },
     },
   });
@@ -4586,10 +4703,12 @@ function _renderDashCompareDetailChart() {
   const plant = _dashCompareData?.plants.find(p => p.name === _dashCompareDetailPlantName);
   if (!plant) return;
 
+  const _pbt = Object.values(PLANTS_BY_ID).find(p => p.name === plant.name)?.business_type || null;
+  const _pu = bizUnitAbbr(_pbt);
   const hintEl = document.getElementById('dashCompareDetailHint');
   hintEl.textContent = _dashCompareDetailMode === 'perKg'
-    ? 'Attendance cost/kg and KG cost/kg (left axis, ₹) vs Sale Qty (right axis, kg) — note: both cost/kg lines rise together if volume simply drops, even with no real cost change.'
-    : 'Absolute ₹ spent on attendance and KG processing (left axis) vs Sale Qty (right axis) — these lines are unaffected by volume, so a rise here means you actually spent more.';
+    ? `Attendance cost/${_pu} and KG cost/${_pu} (left axis, ₹) vs Sale Qty (right axis, ${_pu}) — note: both cost/${_pu} lines rise together if volume simply drops, even with no real cost change.`
+    : `Absolute ₹ spent on attendance and KG processing (left axis) vs Sale Qty (right axis) — these lines are unaffected by volume, so a rise here means you actually spent more.`;
 
   if (_dashCompareDetail) { _dashCompareDetail.destroy(); _dashCompareDetail = null; }
 
@@ -4610,11 +4729,11 @@ function _renderDashCompareDetailChart() {
     data: {
       labels: sorted.map(d => fmtLabel(d.date)),
       datasets: [
-        { label: isPerKg ? 'Attendance Cost/kg' : 'Attendance Cost (₹)', data: attData, borderColor: '#1e6b45', backgroundColor: '#1e6b45',
+        { label: isPerKg ? `Attendance Cost/${_pu}` : 'Attendance Cost (₹)', data: attData, borderColor: '#1e6b45', backgroundColor: '#1e6b45',
           yAxisID: 'y', spanGaps: true, tension: 0.3, pointRadius: 2, borderWidth: 2 },
-        { label: isPerKg ? 'KG Cost/kg' : 'KG Cost (₹)', data: kgData, borderColor: '#c2410c', backgroundColor: '#c2410c',
+        { label: isPerKg ? `KG Cost/${_pu}` : 'KG Cost (₹)', data: kgData, borderColor: '#c2410c', backgroundColor: '#c2410c',
           yAxisID: 'y', spanGaps: true, tension: 0.3, pointRadius: 2, borderWidth: 2 },
-        { label: 'Sale Qty (kg)', data: qty, borderColor: '#94a3b8', backgroundColor: '#94a3b8',
+        { label: `Sale Qty (${_pu})`, data: qty, borderColor: '#94a3b8', backgroundColor: '#94a3b8',
           yAxisID: 'y1', spanGaps: true, tension: 0.3, pointRadius: 2, borderWidth: 2, borderDash: [5, 3] },
       ],
     },
@@ -4623,8 +4742,8 @@ function _renderDashCompareDetailChart() {
       interaction: { mode: 'index', intersect: false },
       plugins: { legend: { position: 'top', labels: { boxWidth: 12, font: { size: 11 } } } },
       scales: {
-        y:  { position: 'left',  title: { display: true, text: isPerKg ? '₹ per kg' : '₹ (absolute)' } },
-        y1: { position: 'right', title: { display: true, text: 'Sale Qty (kg)' }, grid: { drawOnChartArea: false } },
+        y:  { position: 'left',  title: { display: true, text: isPerKg ? `₹ per ${_pu}` : '₹ (absolute)' } },
+        y1: { position: 'right', title: { display: true, text: `Sale Qty (${_pu})` }, grid: { drawOnChartArea: false } },
       },
     },
   });
@@ -4678,6 +4797,9 @@ function _renderDashCards(data) {
   const worst = valid.length ? valid.reduce((w, r) => parseFloat(r.mpk) > parseFloat(w.mpk) ? r : w) : null;
 
   const fmtD = d => new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+  const _dbt = dashboardBizType();
+  document.getElementById('dcAvgMPKLabel').textContent = bizMpkLabel(_dbt).replace('MPK ', 'Avg MPK ');
+  document.getElementById('dcTotalVolLabel').textContent = _dbt === 'Beverage' ? 'Total Volume' : 'Total Tonnage';
   document.getElementById('dcAvgMPK').textContent    = avgMPK !== null ? '₹ ' + avgMPK.toFixed(2) : '—';
   document.getElementById('dcBestMPK').textContent   = best  ? '₹ ' + parseFloat(best.mpk).toFixed(2)  : '—';
   document.getElementById('dcBestDate').textContent  = best  ? fmtD(best.date)  : '';
@@ -4686,8 +4808,8 @@ function _renderDashCards(data) {
   document.getElementById('dcDaysCount').textContent = recs.length + ' days recorded';
   document.getElementById('dcTotalAtt').textContent  = fcShort(totalCostSum);
   const mtVal = totalQtySum / 1000;
-  document.getElementById('dcTotalVol').textContent  = mtVal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' MT';
-  document.getElementById('dcTotalVolMT').textContent = totalQtySum.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) + ' kg';
+  document.getElementById('dcTotalVol').textContent  = mtVal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ' + bizVolUnitAbbr(_dbt);
+  document.getElementById('dcTotalVolMT').textContent = totalQtySum.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) + ' ' + bizUnitAbbr(_dbt);
 
   _renderDashPrediction(recs);
 }
@@ -4728,7 +4850,7 @@ function _renderDashPrediction(recs) {
 
   document.getElementById('dpPredCost').textContent    = fcShort(predCost);
   document.getElementById('dpPredBasis').textContent   = `avg ₹${Math.round(avgDailyCost).toLocaleString('en-IN')}/day × ${daysRemaining} days left`;
-  document.getElementById('dpPredVol').textContent     = (predQty/1000).toFixed(2) + ' MT';
+  document.getElementById('dpPredVol').textContent     = (predQty/1000).toFixed(2) + ' ' + bizVolUnitAbbr(dashboardBizType());
   document.getElementById('dpActualMPK').textContent   = actualMPK ? '₹ ' + actualMPK.toFixed(2) : '—';
   document.getElementById('dpPredMPK').textContent     = predMPK   ? '₹ ' + predMPK.toFixed(2)   : '—';
   document.getElementById('dpProgressBar').style.width = pct + '%';
@@ -4798,12 +4920,13 @@ function _renderLineChart() {
     ? filteredDaily.map(r => parseFloat(r.mpk))
     : _dashData.monthly.map(m => parseFloat(m.avg_mpk));
 
+  const _du = bizUnitAbbr(dashboardBizType());
   _dashLine = new Chart(ctx, {
     type: 'line',
     data: {
       labels,
       datasets: [{
-        label: 'MPK (₹/kg)',
+        label: `MPK (₹/${_du})`,
         data: values,
         borderColor: '#1e6b45',
         backgroundColor: 'rgba(30,107,69,.09)',
@@ -4819,7 +4942,7 @@ function _renderLineChart() {
       plugins: {
         legend: { display: false },
         tooltip: { mode: 'index', intersect: false,
-          callbacks: { label: ctx => '₹ ' + ctx.parsed.y.toFixed(2) + ' / kg' }
+          callbacks: { label: ctx => '₹ ' + ctx.parsed.y.toFixed(2) + ' / ' + _du }
         }
       },
       scales: {
@@ -4845,7 +4968,7 @@ function _renderBarChart() {
       datasets: [
         { label: 'Prod. Attendance Cost', data: months.map(m => parseFloat(m.avg_attendance_cost)),
           backgroundColor: '#1e6b45', borderRadius: 4 },
-        { label: 'Per KG Cost', data: months.map(m => parseFloat(m.avg_kg_cost)),
+        { label: `Per ${bizUnitWord(dashboardBizType())} Cost`, data: months.map(m => parseFloat(m.avg_kg_cost)),
           backgroundColor: '#3aaa6b', borderRadius: 4 }
       ]
     },
@@ -4869,6 +4992,7 @@ function _renderBarChart() {
 function _renderDashTable(data) {
   const tbody = document.getElementById('dashTableBody');
   const rows  = [...data.daily].reverse();
+  { const h = document.getElementById('histKgCostHeader'); if (h) h.textContent = `Per ${bizUnitWord(dashboardBizType())} Cost`; }
   if (!rows.length) {
     tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:28px">No records yet.</td></tr>';
     return;
@@ -4880,7 +5004,7 @@ function _renderDashTable(data) {
       <td class="r">₹ ${parseFloat(r.attendance_cost).toFixed(2)}</td>
       <td class="r">₹ ${parseFloat(r.kg_cost).toFixed(2)}</td>
       <td class="r">₹ ${parseFloat(r.total_cost).toFixed(2)}</td>
-      <td class="r">${parseFloat(r.sale_qty || 0).toFixed(0)} kg</td>
+      <td class="r">${parseFloat(r.sale_qty || 0).toFixed(0)} ${bizUnitAbbr(dashboardBizType())}</td>
       <td class="r">₹ ${parseFloat(r.mpk).toFixed(2)}</td>
       <td class="r">
         ${currentRole === 'superadmin' ? `<button class="dash-row-del" onclick="dashDeleteRecord('${r.date}')">🗑 Delete</button>` : ''}
