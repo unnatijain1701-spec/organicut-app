@@ -4219,16 +4219,21 @@ function renderLocationsList() {
 }
 
 function startRenameLocation(plantId) {
-  const nameEl = document.getElementById('locName_' + plantId);
-  if (!nameEl) return;
-  const current = nameEl.textContent;
-  nameEl.outerHTML = `<input class="loc-rename-input" id="locName_${plantId}" value="${current.replace(/"/g,'&quot;')}"
-    onkeydown="if(event.key==='Enter')saveRenameLocation(${plantId});if(event.key==='Escape')renderLocationsList()">`;
-  document.getElementById('locName_' + plantId).focus();
+  const row = document.getElementById('locRow_' + plantId);
+  if (!row) return;
+  const currentName = document.getElementById('locName_' + plantId).textContent;
+  row.innerHTML = `
+    <input class="loc-rename-input" id="locNameInput_${plantId}" value="${currentName.replace(/"/g,'&quot;')}"
+      onkeydown="if(event.key==='Enter')saveRenameLocation(${plantId});if(event.key==='Escape')renderLocationsList()">
+    <span style="display:flex;gap:4px;flex-shrink:0">
+      <button class="btn-save" onclick="saveRenameLocation(${plantId})" title="Save">✓ Save</button>
+      <button class="btn-cancel" onclick="renderLocationsList()" title="Cancel">✕</button>
+    </span>`;
+  document.getElementById('locNameInput_' + plantId).focus();
 }
 
 async function saveRenameLocation(plantId) {
-  const input = document.getElementById('locName_' + plantId);
+  const input = document.getElementById('locNameInput_' + plantId);
   const name = input?.value.trim();
   if (!name) { showToast('⚠ Location name cannot be empty', true); return; }
   try {
