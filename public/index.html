@@ -406,6 +406,21 @@ td input[type="number"]:hover { border-color: #7dbf99; }
   color: var(--muted); transition: background .12s;
 }
 .users-collapsible-toggle:hover { background: #f9fdf9; }
+.loc-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 7px 16px; font-size: 12.5px; border-bottom: 1px solid #f0f5f2;
+}
+.loc-row-name { font-weight: 600; color: var(--text); }
+.loc-row-type { font-size: 10px; color: var(--muted); margin-left: 6px; }
+.loc-rename-btn {
+  background: none; border: none; color: var(--muted); cursor: pointer;
+  font-size: 13px; padding: 2px 5px; border-radius: 5px; flex-shrink: 0;
+}
+.loc-rename-btn:hover { background: #f0f7f4; color: var(--text); }
+.loc-rename-input {
+  flex: 1; font-size: 12.5px; padding: 3px 7px; border: 1.5px solid var(--accent);
+  border-radius: 6px; outline: none; min-width: 0;
+}
 @media (max-width: 900px) {
   .users-body { flex-direction: column; }
   .users-side { position: static; flex: 1 1 auto; width: 100%; }
@@ -998,10 +1013,12 @@ tr.dash-row-alt td { background: #f7fdf9; }
       </div>
       <div class="users-side-card" id="addLocationCard" style="display:none;margin-top:14px">
         <button class="users-collapsible-toggle" onclick="toggleAddLocationForm()">
-          <span>+ Add Location</span> <span id="addLocationChevron">▸</span>
+          <span>📍 Locations</span> <span id="addLocationChevron">▸</span>
         </button>
         <div id="addLocationFormBody" style="display:none">
+          <div id="locationsListWrap"></div>
           <div class="users-add-form">
+            <div class="users-add-title">Add New Location</div>
             <input class="users-input" id="newLocationName" type="text" placeholder="Location name, e.g. Rai-522-FnV" autocomplete="off">
             <div style="font-size:11px;font-weight:700;color:var(--muted);margin:0 0 5px">BUSINESS TYPE</div>
             <div id="newLocationBizType" style="margin-bottom:10px"></div>
@@ -4176,12 +4193,55 @@ async function loadUsersPanel() {
       bizChipsHTML('newUserBizType', '', 'onNewUserBizTypeChange', { noAll: true });
     document.getElementById('newLocationBizType').innerHTML =
       bizChipsHTML('newLocationBizType', '', 'null', { noAll: true });
+    renderLocationsList();
   } else {
     bizField.style.display = 'none';
     plantSel.style.display = 'none';
     locCard.style.display = 'none';
   }
   loadUsers();
+}
+
+function renderLocationsList() {
+  const wrap = document.getElementById('locationsListWrap');
+  if (!wrap) return;
+  const plants = allPlantsCache || [];
+  if (!plants.length) { wrap.innerHTML = '<div class="hist-empty" style="padding:10px 16px">No locations yet.</div>'; return; }
+  wrap.innerHTML = plants.map(p => `
+    <div class="loc-row" id="locRow_${p.id}">
+      <span>
+        <span class="loc-row-name" id="locName_${p.id}">${p.name}</span>
+        <span class="loc-row-type">${p.business_type}</span>
+      </span>
+      <button class="loc-rename-btn" onclick="startRenameLocation(${p.id})" title="Rename">✎</button>
+    </div>
+  `).join('');
+}
+
+function startRenameLocation(plantId) {
+  const nameEl = document.getElementById('locName_' + plantId);
+  if (!nameEl) return;
+  const current = nameEl.textContent;
+  nameEl.outerHTML = `<input class="loc-rename-input" id="locName_${plantId}" value="${current.replace(/"/g,'&quot;')}"
+    onkeydown="if(event.key==='Enter')saveRenameLocation(${plantId});if(event.key==='Escape')renderLocationsList()">`;
+  document.getElementById('locName_' + plantId).focus();
+}
+
+async function saveRenameLocation(plantId) {
+  const input = document.getElementById('locName_' + plantId);
+  const name = input?.value.trim();
+  if (!name) { showToast('⚠ Location name cannot be empty', true); return; }
+  try {
+    const plant = await api('PATCH', '/api/auth/plants/' + plantId, { name });
+    const idx = allPlantsCache.findIndex(p => p.id === plantId);
+    if (idx !== -1) allPlantsCache[idx] = plant;
+    PLANTS_BY_ID[plantId] = plant;
+    renderLocationsList();
+    renderPlantSelector();
+    showToast(`✓ Renamed to "${plant.name}"`, false);
+  } catch (e) {
+    showToast('⚠ ' + e.message, true);
+  }
 }
 
 function toggleAddLocationForm() {

@@ -135,6 +135,27 @@ router.post('/plants', authenticateToken, async (req, res) => {
   }
 });
 
+// PATCH /api/auth/plants/:id — rename a location (superadmin only)
+router.patch('/plants/:id', authenticateToken, async (req, res) => {
+  if (req.user.role !== 'superadmin') return res.status(403).json({ error: 'Superadmin only' });
+  const plantId = parseInt(req.params.id, 10);
+  if (isNaN(plantId)) return res.status(400).json({ error: 'Invalid plant id' });
+  const { name } = req.body || {};
+  if (!name || !name.trim()) return res.status(400).json({ error: 'name is required' });
+  try {
+    const { rows } = await db.query(
+      `UPDATE plants SET name = $1 WHERE id = $2
+       RETURNING id, name, business_type, has_kg_processing, display_order`,
+      [name.trim(), plantId]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Location not found' });
+    res.json(rows[0]);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // GET /api/auth/users — list users
 router.get('/users', authenticateToken, async (req, res) => {
   try {
