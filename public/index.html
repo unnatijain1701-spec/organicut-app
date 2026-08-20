@@ -3561,12 +3561,14 @@ function _computeReport(data) {
       changePct = ((p.mpk - lmMPK) / lmMPK) * 100;
       status = p.mpk < lmMPK ? 'improving' : (p.mpk > lmMPK ? 'worsening' : 'same');
     }
-    // Tonnage change is framed the same way as MPK change, but "improving" means MORE
-    // volume (growth), not less — the opposite sense of a cost metric going down.
+    // Tonnage change compares against the PROJECTED month-end total, not the raw total
+    // so far — last month's figure is a full month, so comparing it to a partial-month
+    // total would always look artificially low. "Improving" means MORE volume (growth),
+    // the opposite sense of a cost metric going down.
     let qtyChangePct = null, qtyStatus = 'no-data';
     if (lmQty != null && lmQty > 0) {
-      qtyChangePct = ((p.total_qty - lmQty) / lmQty) * 100;
-      qtyStatus = p.total_qty > lmQty ? 'improving' : (p.total_qty < lmQty ? 'worsening' : 'same');
+      qtyChangePct = ((projQty - lmQty) / lmQty) * 100;
+      qtyStatus = projQty > lmQty ? 'improving' : (projQty < lmQty ? 'worsening' : 'same');
     }
 
     tCost += p.total_cost; tQty += p.total_qty; tPCost += projCost; tPQty += projQty;
@@ -3587,8 +3589,8 @@ function _computeReport(data) {
   }
   let totQtyChangePct = null, totQtyStatus = 'no-data';
   if (tLQty > 0) {
-    totQtyChangePct = ((tQty - tLQty) / tLQty) * 100;
-    totQtyStatus = tQty > tLQty ? 'improving' : (tQty < tLQty ? 'worsening' : 'same');
+    totQtyChangePct = ((tPQty - tLQty) / tLQty) * 100;
+    totQtyStatus = tPQty > tLQty ? 'improving' : (tPQty < tLQty ? 'worsening' : 'same');
   }
   const totals = { cost: tCost, qty: tQty, mpk: totMPK, lmQty: tLQty, lmMPK: totLMPK,
                    changePct: totChangePct, status: totStatus,
@@ -3622,7 +3624,7 @@ async function generatePlantReport(from, to, businessType) {
 
     const _vu = businessType ? bizVolUnitAbbr(businessType) : 'MT';
     const header = ['Plant','Days Recorded','Total Cost (L)',`Total Tonnage (${_vu})`,'Avg MPK (₹)',
-                    `Last Month Tonnage (${_vu})`,'Tonnage Change','Last Month MPK (₹)','MPK Change','Status',
+                    `Last Month Tonnage (${_vu})`,'Tonnage Change (Proj. vs LM)','Last Month MPK (₹)','MPK Change','Status',
                     'Proj. Month-End Cost (L)',`Proj. Tonnage (${_vu})`,'Proj. MPK (₹)'];
     const rowFor = r => [
       r.name, r.days != null ? `${r.days} / ${rangeDays}` : `${rangeDays} days`,
@@ -3726,7 +3728,7 @@ function _renderReportView(data) {
     row(`Total Tonnage (${vu})`,      p => MT(p.qty),  MT(T.qty)),
     row('Avg MPK (₹)',                p => p.mpk.toFixed(2), T.mpk.toFixed(2)),
     row(`Last Month Tonnage (${vu})`, p => p.lmQty > 0 ? MT(p.lmQty) : '—', T.lmQty > 0 ? MT(T.lmQty) : '—'),
-    row('Tonnage Change',             p => `<span class="${cls(p.qtyStatus)}">${chg(p.qtyStatus, p.qtyChangePct || 0)}</span>`, `<span class="${cls(T.qtyStatus)}">${chg(T.qtyStatus, T.qtyChangePct || 0)}</span>`),
+    row('Tonnage Change (Proj. vs LM)', p => `<span class="${cls(p.qtyStatus)}">${chg(p.qtyStatus, p.qtyChangePct || 0)}</span>`, `<span class="${cls(T.qtyStatus)}">${chg(T.qtyStatus, T.qtyChangePct || 0)}</span>`),
     row('Last Month MPK (₹)',         p => p.lmMPK != null ? p.lmMPK.toFixed(2) : '—', T.lmMPK != null ? T.lmMPK.toFixed(2) : '—'),
     row('MPK Change',                 p => `<span class="${cls(p.status)}">${chg(p.status, p.changePct || 0)}</span>`, `<span class="${cls(T.status)}">${chg(T.status, T.changePct || 0)}</span>`),
     row('Status',                     p => `<span class="${cls(p.status)}">${stat(p.status)}</span>`, `<span class="${cls(T.status)}">${stat(T.status)}</span>`),
