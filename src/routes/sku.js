@@ -20,7 +20,7 @@ router.get('/', async (req, res) => {
     const grouped = {};
     rows.forEach(r => {
       if (!grouped[r.vendor_name]) grouped[r.vendor_name] = [];
-      grouped[r.vendor_name].push({ id: r.id, name: r.sku_name, rate: parseFloat(r.rate) });
+      grouped[r.vendor_name].push({ id: r.id, name: r.sku_name, rate: parseFloat(r.rate), caseSize: r.case_size != null ? parseFloat(r.case_size) : 0 });
     });
     res.json(grouped);
   } catch (e) {
@@ -70,20 +70,20 @@ router.post('/', (req, res, next) => {
   if (req.user.role !== 'superadmin') return res.status(403).json({ error: 'Superadmin only' });
   next();
 }, async (req, res) => {
-  const { vendorName, skuName, rate } = req.body || {};
+  const { vendorName, skuName, rate, caseSize } = req.body || {};
   const pid = getPlantId(req);
   if (!vendorName || !skuName || rate == null)
     return res.status(400).json({ error: 'vendorName, skuName, and rate are required' });
 
   try {
     const { rows } = await db.query(`
-      INSERT INTO custom_skus (plant_id, vendor_name, sku_name, rate)
-      VALUES ($1, $2, $3, $4)
-      ON CONFLICT (plant_id, vendor_name, sku_name) DO UPDATE SET rate = EXCLUDED.rate
-      RETURNING id, vendor_name, sku_name, rate
-    `, [pid, vendorName, skuName.trim(), parseFloat(rate)]);
+      INSERT INTO custom_skus (plant_id, vendor_name, sku_name, rate, case_size)
+      VALUES ($1, $2, $3, $4, $5)
+      ON CONFLICT (plant_id, vendor_name, sku_name) DO UPDATE SET rate = EXCLUDED.rate, case_size = EXCLUDED.case_size
+      RETURNING id, vendor_name, sku_name, rate, case_size
+    `, [pid, vendorName, skuName.trim(), parseFloat(rate), caseSize ? parseFloat(caseSize) : null]);
     const r = rows[0];
-    res.json({ id: r.id, name: r.sku_name, rate: parseFloat(r.rate) });
+    res.json({ id: r.id, name: r.sku_name, rate: parseFloat(r.rate), caseSize: r.case_size != null ? parseFloat(r.case_size) : 0 });
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: 'Server error' });
@@ -95,14 +95,14 @@ router.patch('/:id', (req, res, next) => {
   if (req.user.role !== 'superadmin') return res.status(403).json({ error: 'Superadmin only' });
   next();
 }, async (req, res) => {
-  const { skuName, rate } = req.body || {};
+  const { skuName, rate, caseSize } = req.body || {};
   try {
     const { rows } = await db.query(`
-      UPDATE custom_skus SET sku_name = $1, rate = $2 WHERE id = $3 AND plant_id = $4
-      RETURNING id, sku_name, rate
-    `, [skuName.trim(), parseFloat(rate), req.params.id, getPlantId(req)]);
+      UPDATE custom_skus SET sku_name = $1, rate = $2, case_size = $3 WHERE id = $4 AND plant_id = $5
+      RETURNING id, sku_name, rate, case_size
+    `, [skuName.trim(), parseFloat(rate), caseSize ? parseFloat(caseSize) : null, req.params.id, getPlantId(req)]);
     if (!rows.length) return res.status(404).json({ error: 'SKU not found' });
-    res.json({ id: rows[0].id, name: rows[0].sku_name, rate: parseFloat(rows[0].rate) });
+    res.json({ id: rows[0].id, name: rows[0].sku_name, rate: parseFloat(rows[0].rate), caseSize: rows[0].case_size != null ? parseFloat(rows[0].case_size) : 0 });
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: 'Server error' });

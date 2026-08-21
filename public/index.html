@@ -339,6 +339,9 @@ td input[type="number"]:hover { border-color: #7dbf99; }
 .btn-del:hover { color: #ef4444; }
 .custom-sku-row td { background: #fdfaed; }
 .custom-sku-row td.sku-name { color: #7c5c1e; }
+.case-hint { font-size: 10.5px; color: var(--muted); font-weight: 400; }
+.qty-cell-inner { display: flex; align-items: center; gap: 5px; justify-content: flex-end; }
+.case-input { width: 62px !important; border-color: var(--accent) !important; }
 
 /* ── LOGIN OVERLAY ────────────────────────────────────── */
 #loginOverlay {
@@ -2079,7 +2082,7 @@ async function loadCustomSKUs() {
   try {
     const grouped = await api('GET', '/api/sku');
     KG_VENDORS.forEach(v => {
-      customSKUs[v] = (grouped[v] || []).map(s => ({ id: s.id, name: s.name, rate: s.rate, qty: 0 }));
+      customSKUs[v] = (grouped[v] || []).map(s => ({ id: s.id, name: s.name, rate: s.rate, qty: 0, caseSize: s.caseSize || 0, cases: 0 }));
     });
   } catch (e) {
     console.error('Failed to load custom SKUs:', e.message);
@@ -2526,11 +2529,15 @@ function buildPane(v) {
 
   const custRows = customSKUs[v].map((sku) => {
     const qty = sku.qty || 0, cost = qty * sku.rate;
+    const caseInput = sku.caseSize > 0
+      ? `<input type="number" min="0" step="0.01" value="${sku.cases||''}" placeholder="Cases" class="case-input" title="${sku.caseSize} ${bizUnitAbbr(activePlantBizType())} per case"
+          onchange="onCaseInput(this,${sku.caseSize},'${vid_}',${sku.id})">`
+      : '';
     return `<tr class="custom-sku-row" id="custrow_${vid_}_${sku.id}">
-      <td class="sku-name">${sku.name}</td>
+      <td class="sku-name">${sku.name}${sku.caseSize > 0 ? `<span class="case-hint"> (${sku.caseSize}/case)</span>` : ''}</td>
       <td class="r rate-cell">₹&nbsp;${sku.rate.toFixed(2)}</td>
-      <td class="r"><input type="number" min="0" step="0.001" value="${qty||''}" placeholder="—"
-        data-v="${vid_}" data-type="cust" data-ci="${sku.id}" data-rate="${sku.rate}" onchange="onKG(this)"></td>
+      <td class="r"><span class="qty-cell-inner">${caseInput}<input type="number" min="0" step="0.001" value="${qty||''}" placeholder="—"
+        id="qty_${vid_}_${sku.id}" data-v="${vid_}" data-type="cust" data-ci="${sku.id}" data-rate="${sku.rate}" onchange="onKG(this)"></span></td>
       <td class="r cost-val" id="kcc_${vid_}_${sku.id}">${cost>0?fc(cost):'<span class="zero">—</span>'}</td>
     </tr>`;
   }).join('');
@@ -2607,6 +2614,18 @@ function onKG(input) {
   const totCell = document.getElementById('kgTot_' + v_);
   if (totCell && rawV) totCell.textContent = fc(vendorKG(rawV));
   markDirty(); recalc();
+}
+
+// Case-count entry for SKUs sold in fixed-size cases (e.g. beverage cartons) — computes the
+// resulting litres/kg from cases × case size, writes it into the real qty input, and lets
+// onKG() do everything else exactly as if that quantity had been typed directly.
+function onCaseInput(input, caseSize, vid_, skuId) {
+  const cases = parseFloat(input.value) || 0;
+  const qty = +(cases * caseSize).toFixed(3);
+  const rawV = KG_VENDORS.find(k => vid(k) === vid_);
+  if (rawV) { const s = customSKUs[rawV].find(x => x.id === skuId); if (s) s.cases = cases; }
+  const qtyInput = document.getElementById('qty_' + vid_ + '_' + skuId);
+  if (qtyInput) { qtyInput.value = qty || ''; onKG(qtyInput); }
 }
 
 function onUnloadingCost(input) {
@@ -3035,7 +3054,12 @@ function applyRecord(record) {
       }
     } else {
       const cs = customSKUs[v]?.find(s => s.name === e.sku_name);
-      if (cs) { cs.qty = qty; if (e.rate) cs.rate = parseFloat(e.rate); }
+      if (cs) {
+        cs.qty = qty; if (e.rate) cs.rate = parseFloat(e.rate);
+        // Case count isn't stored server-side (only the resulting litres/kg are) — back-derive
+        // it from the saved qty so the "Cases" input shows something sensible on reload.
+        if (cs.caseSize > 0) cs.cases = +(qty / cs.caseSize).toFixed(3);
+      }
     }
   });
   _rateChangedOnLoad = rateChanged;
@@ -3055,7 +3079,7 @@ function applyRecord(record) {
 
 function customSKUs_resetQty() {
   KG_VENDORS.forEach(v => {
-    customSKUs[v].forEach(s => { s.qty = 0; });
+    customSKUs[v].forEach(s => { s.qty = 0; s.cases = 0; });
     unloadingCosts[v] = 0;
   });
 }
@@ -3067,7 +3091,7 @@ function clearForm() {
   // Reset KG quantities and unloading costs
   KG_VENDORS.forEach(v => {
     kgState[v] = new Array((SKU_CFG[v] || []).length).fill(0);
-    customSKUs[v].forEach(s => { s.qty = 0; });
+    customSKUs[v].forEach(s => { s.qty = 0; s.cases = 0; });
     unloadingCosts[v] = 0;
   });
   // Reset sale qty
@@ -3624,16 +3648,17 @@ async function generatePlantReport(from, to, businessType) {
 
     const _vu = businessType ? bizVolUnitAbbr(businessType) : 'MT';
     const header = ['Plant','Days Recorded','Total Cost (L)',`Total Tonnage (${_vu})`,'Avg MPK (₹)',
-                    `Last Month Tonnage (${_vu})`,'Tonnage Change (Proj. vs LM)','Last Month MPK (₹)','MPK Change','Status',
-                    'Proj. Month-End Cost (L)',`Proj. Tonnage (${_vu})`,'Proj. MPK (₹)'];
+                    `Last Month Tonnage (${_vu})`,'Last Month MPK (₹)','MPK Change','Status',
+                    'Proj. Month-End Cost (L)',`Proj. Tonnage (${_vu})`,'Tonnage Change (Proj. vs LM)','Proj. MPK (₹)'];
     const rowFor = r => [
       r.name, r.days != null ? `${r.days} / ${rangeDays}` : `${rangeDays} days`,
       _repL(r.cost), _repMT(r.qty), +r.mpk.toFixed(2),
       r.lmQty > 0 ? _repMT(r.lmQty) : '—',
-      _repChangeText(r.qtyStatus, r.qtyChangePct || 0),
       r.lmMPK != null ? +r.lmMPK.toFixed(2) : '—',
       _repChangeText(r.status, r.changePct || 0), _repStatusText(r.status),
-      _repL(r.projCost), _repMT(r.projQty), +r.projMPK.toFixed(2),
+      _repL(r.projCost), _repMT(r.projQty),
+      _repChangeText(r.qtyStatus, r.qtyChangePct || 0),
+      +r.projMPK.toFixed(2),
     ];
     const aoa = [
       ['MULTI-PLANT REPORT'],
@@ -3728,13 +3753,13 @@ function _renderReportView(data) {
     row(`Total Tonnage (${vu})`,      p => MT(p.qty),  MT(T.qty)),
     row('Avg MPK (₹)',                p => p.mpk.toFixed(2), T.mpk.toFixed(2)),
     row(`Last Month Tonnage (${vu})`, p => p.lmQty > 0 ? MT(p.lmQty) : '—', T.lmQty > 0 ? MT(T.lmQty) : '—'),
-    row('Tonnage Change (Proj. vs LM)', p => `<span class="${cls(p.qtyStatus)}">${chg(p.qtyStatus, p.qtyChangePct || 0)}</span>`, `<span class="${cls(T.qtyStatus)}">${chg(T.qtyStatus, T.qtyChangePct || 0)}</span>`),
     row('Last Month MPK (₹)',         p => p.lmMPK != null ? p.lmMPK.toFixed(2) : '—', T.lmMPK != null ? T.lmMPK.toFixed(2) : '—'),
     row('MPK Change',                 p => `<span class="${cls(p.status)}">${chg(p.status, p.changePct || 0)}</span>`, `<span class="${cls(T.status)}">${chg(T.status, T.changePct || 0)}</span>`),
     row('Status',                     p => `<span class="${cls(p.status)}">${stat(p.status)}</span>`, `<span class="${cls(T.status)}">${stat(T.status)}</span>`),
-    row('Proj. Month-End MPK (₹)',    p => p.projMPK.toFixed(2), T.projMPK.toFixed(2)),
     row('Proj. Month-End Cost (₹ L)', p => L(p.projCost), L(T.projCost)),
     row(`Proj. Tonnage (${vu})`,      p => MT(p.projQty), MT(T.projQty)),
+    row('Tonnage Change (Proj. vs LM)', p => `<span class="${cls(p.qtyStatus)}">${chg(p.qtyStatus, p.qtyChangePct || 0)}</span>`, `<span class="${cls(T.qtyStatus)}">${chg(T.qtyStatus, T.qtyChangePct || 0)}</span>`),
+    row('Proj. Month-End MPK (₹)',    p => p.projMPK.toFixed(2), T.projMPK.toFixed(2)),
   ].join('');
 
   document.getElementById('reportContent').innerHTML =
@@ -4009,7 +4034,7 @@ function renderVendorsList(vendors, totalCount) {
     const skuRows = skus.length
       ? skus.map(s => `
           <div class="panel-sku-row" id="pskurow_${pvid}_${s.id}">
-            <span class="panel-sku-name">${s.name}</span>
+            <span class="panel-sku-name">${s.name}${s.caseSize > 0 ? `<span class="case-hint"> (${s.caseSize}/case)</span>` : ''}</span>
             <span class="panel-sku-rate">₹${s.rate.toFixed(2)}/${bizUnitAbbr(activePlantBizType())}</span>
             <button class="btn-edit-sku" onclick="startEditSKUInPanel('${ve}',${s.id})" title="Edit">✎</button>
             <button class="btn-del"      onclick="deleteSKUFromPanel('${ve}',${s.id})"  title="Remove">×</button>
@@ -4029,6 +4054,8 @@ function renderVendorsList(vendors, totalCount) {
             <input id="panelSkuName_${pvid}" placeholder="SKU name" style="flex:1;min-width:120px"
               onkeydown="if(event.key==='Enter')addSKUFromPanel('${ve}');if(event.key==='Escape')cancelPanelAddSKU('${ve}')">
             <input id="panelSkuRate_${pvid}" type="number" placeholder="₹/${bizUnitAbbr(activePlantBizType())}" min="0" step="0.01" style="width:90px"
+              onkeydown="if(event.key==='Enter')addSKUFromPanel('${ve}');if(event.key==='Escape')cancelPanelAddSKU('${ve}')">
+            <input id="panelSkuCaseSize_${pvid}" type="number" placeholder="${bizUnitAbbr(activePlantBizType())}/case (optional)" min="0" step="0.01" style="width:150px"
               onkeydown="if(event.key==='Enter')addSKUFromPanel('${ve}');if(event.key==='Escape')cancelPanelAddSKU('${ve}')">
             <button class="btn-save"   onclick="addSKUFromPanel('${ve}')">Save</button>
             <button class="btn-cancel" onclick="cancelPanelAddSKU('${ve}')">Cancel</button>
@@ -4070,16 +4097,18 @@ function cancelPanelAddSKU(v) {
   document.getElementById('panelAddSkuBtn_'  + pvid).style.display = '';
   document.getElementById('panelSkuName_'    + pvid).value = '';
   document.getElementById('panelSkuRate_'    + pvid).value = '';
+  document.getElementById('panelSkuCaseSize_' + pvid).value = '';
 }
 async function addSKUFromPanel(v) {
   const pvid = 'pv_' + vid(v);
   const name = document.getElementById('panelSkuName_' + pvid).value.trim();
   const rate = parseFloat(document.getElementById('panelSkuRate_' + pvid).value) || 0;
+  const caseSize = parseFloat(document.getElementById('panelSkuCaseSize_' + pvid).value) || 0;
   if (!name) { showToast('⚠ Enter a SKU name.', true); return; }
   try {
-    const result = await api('POST', '/api/sku', { vendorName: v, skuName: name, rate });
+    const result = await api('POST', '/api/sku', { vendorName: v, skuName: name, rate, caseSize });
     if (!customSKUs[v]) customSKUs[v] = [];
-    customSKUs[v].push({ id: result.id, name: result.name, rate: result.rate, qty: 0 });
+    customSKUs[v].push({ id: result.id, name: result.name, rate: result.rate, qty: 0, caseSize: result.caseSize || 0, cases: 0 });
     refreshPane(v);
     loadVendorsList();
     showToast('✓ SKU added', false);
@@ -4105,6 +4134,8 @@ function startEditSKUInPanel(v, skuId) {
       style="flex:1;min-width:100px" onkeydown="if(event.key==='Enter')saveEditSKUInPanel('${ve}',${skuId})">
     <input class="sku-edit-inp" id="peSkuRate_${pvid}_${skuId}" type="number" value="${sku.rate}" min="0" step="0.01"
       style="width:80px" onkeydown="if(event.key==='Enter')saveEditSKUInPanel('${ve}',${skuId})">
+    <input class="sku-edit-inp" id="peSkuCaseSize_${pvid}_${skuId}" type="number" value="${sku.caseSize||''}" min="0" step="0.01"
+      placeholder="per case" style="width:80px" onkeydown="if(event.key==='Enter')saveEditSKUInPanel('${ve}',${skuId})">
     <button class="btn-save"   onclick="saveEditSKUInPanel('${ve}',${skuId})">✓</button>
     <button class="btn-cancel" onclick="loadVendorsList()">✕</button>`;
   document.getElementById('peSkuName_' + pvid + '_' + skuId).focus();
@@ -4113,11 +4144,12 @@ async function saveEditSKUInPanel(v, skuId) {
   const pvid = 'pv_' + vid(v);
   const name = document.getElementById('peSkuName_' + pvid + '_' + skuId)?.value.trim();
   const rate = parseFloat(document.getElementById('peSkuRate_' + pvid + '_' + skuId)?.value) || 0;
+  const caseSize = parseFloat(document.getElementById('peSkuCaseSize_' + pvid + '_' + skuId)?.value) || 0;
   if (!name) { showToast('⚠ Enter a SKU name.', true); return; }
   try {
-    const result = await api('PATCH', '/api/sku/' + skuId, { skuName: name, rate });
+    const result = await api('PATCH', '/api/sku/' + skuId, { skuName: name, rate, caseSize });
     const sku = (customSKUs[v] || []).find(s => s.id === skuId);
-    if (sku) { sku.name = result.name; sku.rate = result.rate; }
+    if (sku) { sku.name = result.name; sku.rate = result.rate; sku.caseSize = result.caseSize || 0; }
     refreshPane(v);
     loadVendorsList();
     showToast('✓ SKU updated', false);
