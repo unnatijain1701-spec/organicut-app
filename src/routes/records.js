@@ -86,35 +86,41 @@ router.get('/export', async (req, res) => {
   }
 });
 
-// GET /api/records/export-all?month=YYYY-MM  — superadmin: full detail for ALL plants for one month
+// GET /api/records/export-all?month=YYYY-MM&businessType=  — superadmin: full detail for ALL plants,
+// optionally scoped to one month and/or one business type. Omit month for a full all-time export.
 router.get('/export-all', async (req, res) => {
   if (req.user.role !== 'superadmin')
     return res.status(403).json({ error: 'Superadmin only' });
   const month = (req.query.month || '').slice(0, 7);
-  if (!/^\d{4}-\d{2}$/.test(month))
-    return res.status(400).json({ error: 'month is required (YYYY-MM)' });
+  const hasMonth = /^\d{4}-\d{2}$/.test(month);
+  const businessType = req.query.businessType || null;
   try {
+    const params = [];
+    const filters = [];
+    if (hasMonth) { params.push(month); filters.push(`TO_CHAR(dr.record_date, 'YYYY-MM') = $${params.length}`); }
+    if (businessType) { params.push(businessType); filters.push(`p.business_type = $${params.length}`); }
+    const where = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
+
     const { rows: records } = await db.query(`
       SELECT dr.*, p.name AS plant_name, p.display_order, p.business_type
       FROM daily_records dr JOIN plants p ON p.id = dr.plant_id
-      WHERE TO_CHAR(dr.record_date, 'YYYY-MM') = $1
+      ${where}
       ORDER BY p.display_order, dr.record_date ASC
-    `, [month]);
+    `, params);
 
     if (!records.length) return res.json([]);
 
+    const recordIds = records.map(r => r.id);
     const { rows: attendance } = await db.query(`
-      SELECT ca.record_id, ca.contractor_name, ca.workers, ca.cost
-      FROM contractor_attendance ca
-      JOIN daily_records dr ON dr.id = ca.record_id
-      WHERE TO_CHAR(dr.record_date, 'YYYY-MM') = $1
-    `, [month]);
+      SELECT record_id, contractor_name, workers, cost
+      FROM contractor_attendance
+      WHERE record_id = ANY($1)
+    `, [recordIds]);
     const { rows: kgEntries } = await db.query(`
-      SELECT vke.record_id, vke.vendor_name, vke.sku_name, vke.rate, vke.qty, vke.cost
-      FROM vendor_kg_entries vke
-      JOIN daily_records dr ON dr.id = vke.record_id
-      WHERE TO_CHAR(dr.record_date, 'YYYY-MM') = $1
-    `, [month]);
+      SELECT record_id, vendor_name, sku_name, rate, qty, cost
+      FROM vendor_kg_entries
+      WHERE record_id = ANY($1)
+    `, [recordIds]);
 
     const attMap = {};
     attendance.forEach(a => {
