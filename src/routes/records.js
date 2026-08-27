@@ -189,7 +189,7 @@ router.get('/analytics', async (req, res) => {
     const { rows: monthly } = await db.query(`
       SELECT
         TO_CHAR(record_date, 'YYYY-MM') AS month,
-        AVG(mpk)::NUMERIC(10,4)             AS avg_mpk,
+        CASE WHEN SUM(sale_qty) > 0 THEN (SUM(total_cost)/SUM(sale_qty))::NUMERIC(10,4) ELSE 0 END AS avg_mpk,
         AVG(attendance_cost)::NUMERIC(12,2) AS avg_attendance_cost,
         AVG(kg_cost)::NUMERIC(12,2)         AS avg_kg_cost,
         COUNT(*)                            AS days
