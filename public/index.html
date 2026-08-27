@@ -1846,6 +1846,18 @@ function activePlantBizType() {
   const pid = currentPlantId || activePlantId;
   return PLANTS_BY_ID[pid]?.business_type || null;
 }
+// RTE and Beverage don't sell by weight the way FnV/Coco-Sutra do — for these,
+// the "Sale Qty" box becomes a read-only "Production Qty" auto-summed from the
+// quantities entered in the KG tables below, and the per-row Cost column is hidden.
+function isProdQtyBiz() {
+  const bt = activePlantBizType();
+  return bt === 'RTE' || bt === 'Beverage';
+}
+// Sale/Production Qty box is locked either because the record itself is
+// superadmin-locked, or because this business auto-fills it from KG quantities.
+function saleQtyLocked() {
+  return isProdQtyBiz() || (_currentRecordLocked && currentRole !== 'superadmin');
+}
 // Same idea for Dashboard/Compare/Report views, which can be scoped to one plant OR
 // one business-type filter with no single plant — falls back to null (mixed/default kg).
 function dashboardBizType() {
@@ -1964,7 +1976,13 @@ async function initApp() {
   const hasKgProcessing = PLANTS_BY_ID[effectivePlantId]?.has_kg_processing !== false;
   const bizType = PLANTS_BY_ID[effectivePlantId]?.business_type || null;
   const unitAbbr = bizUnitAbbr(bizType);
-  document.getElementById('saleQtyLabel').innerHTML = `Sale&nbsp;Qty&nbsp;(${unitAbbr})`;
+  const _prodQtyBiz = bizType === 'RTE' || bizType === 'Beverage';
+  document.getElementById('saleQtyLabel').innerHTML = _prodQtyBiz
+    ? `Production&nbsp;Qty&nbsp;(${unitAbbr})`
+    : `Sale&nbsp;Qty&nbsp;(${unitAbbr})`;
+  const _sqInput = document.getElementById('saleQtyInput');
+  _sqInput.classList.toggle('locked-input', saleQtyLocked());
+  _sqInput.title = _prodQtyBiz ? 'Auto-filled from the quantities entered below' : '';
   document.getElementById('sumKGLabel').textContent = `Per ${bizUnitWord(bizType)} Cost`;
   document.getElementById('sumMPKLabel').textContent = `MPK (₹ / ${unitAbbr})`;
   document.getElementById('kgProcessingCardTitle').textContent = `⚖ Per ${bizUnitWord(bizType)} Processing Cost`;
@@ -2246,6 +2264,15 @@ function totalKG() { return KG_VENDORS.reduce((s, v) => s + vendorKG(v), 0); }
 
 function grandTotal() { return totalAtt() + totalKG(); }
 
+// Raw quantity (not cost) entered for a vendor — used to auto-fill Production Qty
+// for RTE/Beverage, where the top box isn't a separately-typed sale figure.
+function vendorQty(v) {
+  const defQty  = (SKU_CFG[v] || []).reduce((s, _pair, i) => s + (kgState[v]?.[i] || 0), 0);
+  const custQty = (customSKUs[v] || []).reduce((s, sku) => s + (sku.qty || 0), 0);
+  return defQty + custQty;
+}
+function totalKGQty() { return KG_VENDORS.reduce((s, v) => s + vendorQty(v), 0); }
+
 function getMPK() {
   const sq = parseFloat(document.getElementById('saleQtyInput').value) || 0;
   return sq > 0 ? grandTotal() / sq : null;
@@ -2298,6 +2325,11 @@ function updateDateNice() {
 
 function recalc() {
   updateDateNice();
+  // For RTE/Beverage, Production Qty isn't typed in — it's the sum of everything
+  // entered in the KG tables below, kept in sync on every quantity change.
+  if (isProdQtyBiz()) {
+    document.getElementById('saleQtyInput').value = totalKGQty() || '';
+  }
   const att = totalAtt(), kg = totalKG(), total = att + kg, mpk = getMPK();
   document.getElementById('sumAtt').textContent   = fcShort(att);
   document.getElementById('sumKG').textContent    = fcShort(kg);
@@ -2307,11 +2339,13 @@ function recalc() {
   const totalW = ATT_VENDORS.reduce((s, v) => s + (parseInt(attState[v]?.workers) || 0), 0);
   const wEl = document.querySelector('#attTfoot .ft td:nth-child(' + (2 + (_desigViewOn ? _getAllDesigCols().length : 0)) + ')');
   if (wEl) wEl.textContent = totalW > 0 ? totalW + ' workers' : '';
+  const _qtyOnly = isProdQtyBiz();
+  const _u = bizUnitAbbr(activePlantBizType());
   KG_VENDORS.forEach(v => {
     const el = document.getElementById('kgTot_' + vid(v));
-    if (el) el.textContent = fc(vendorKG(v));
+    if (el) el.textContent = _qtyOnly ? `${fn(vendorQty(v))} ${_u}` : fc(vendorKG(v));
   });
-  // Flag the Sale Qty box when it's empty or zero so it can't be missed
+  // Flag the Sale/Production Qty box when it's empty or zero so it can't be missed
   const sqField = document.getElementById('saleQtyField');
   if (sqField) {
     const sq = parseFloat(document.getElementById('saleQtyInput').value) || 0;
@@ -2513,9 +2547,12 @@ function renderKGTabs() {
 
 function buildPane(v) {
   const vid_ = vid(v);
+  const _qtyOnly = isProdQtyBiz();
+  const _u = bizUnitAbbr(activePlantBizType());
   const defRows = (SKU_CFG[v] || []).map(([name, rate], i) => {
     const qty = kgState[v][i] || 0, cost = qty * rate;
     const vesc = v.replace(/'/g, "\\'");
+    const costCell = _qtyOnly ? '' : `<td class="r cost-val" id="kc_${vid_}_${i}">${cost>0?fc(cost):'<span class="zero">—</span>'}</td>`;
     return `<tr id="defrow_${vid_}_${i}">
       <td class="sku-name">${name}
         <button class="btn-edit-sku" title="Edit rate" onclick="startEditDefaultSKU('${vesc}',${i})">✎</button>
@@ -2523,7 +2560,7 @@ function buildPane(v) {
       <td class="r rate-cell" id="defrate_${vid_}_${i}">₹&nbsp;${rate.toFixed(2)}</td>
       <td class="r"><input type="number" min="0" step="0.001" value="${qty||''}" placeholder="—"
         data-v="${vid_}" data-type="def" data-i="${i}" data-rate="${rate}" onchange="onKG(this)"></td>
-      <td class="r cost-val" id="kc_${vid_}_${i}">${cost>0?fc(cost):'<span class="zero">—</span>'}</td>
+      ${costCell}
     </tr>`;
   }).join('');
 
@@ -2533,23 +2570,28 @@ function buildPane(v) {
       ? `<input type="number" min="0" step="0.01" value="${sku.cases||''}" placeholder="Cases" class="case-input" title="${sku.caseSize} ${bizUnitAbbr(activePlantBizType())} per case"
           onchange="onCaseInput(this,${sku.caseSize},'${vid_}',${sku.id})">`
       : '';
+    const costCell = _qtyOnly ? '' : `<td class="r cost-val" id="kcc_${vid_}_${sku.id}">${cost>0?fc(cost):'<span class="zero">—</span>'}</td>`;
     return `<tr class="custom-sku-row" id="custrow_${vid_}_${sku.id}">
       <td class="sku-name">${sku.name}${sku.caseSize > 0 ? `<span class="case-hint"> (${sku.caseSize}/case)</span>` : ''}</td>
       <td class="r rate-cell">₹&nbsp;${sku.rate.toFixed(2)}</td>
       <td class="r"><span class="qty-cell-inner">${caseInput}<input type="number" min="0" step="0.001" value="${qty||''}" placeholder="—"
         id="qty_${vid_}_${sku.id}" data-v="${vid_}" data-type="cust" data-ci="${sku.id}" data-rate="${sku.rate}" onchange="onKG(this)"></span></td>
-      <td class="r cost-val" id="kcc_${vid_}_${sku.id}">${cost>0?fc(cost):'<span class="zero">—</span>'}</td>
+      ${costCell}
     </tr>`;
   }).join('');
 
   const vesc = v.replace(/'/g, "\\'");
+  const headCostCol = _qtyOnly ? '' : `<th class="r">Cost (₹)</th>`;
+  const footLabel = _qtyOnly ? `${v} — Total Qty` : `${v} — Total KG Cost`;
+  const footColspan = _qtyOnly ? 2 : 3;
+  const footVal = _qtyOnly ? `${fn(vendorQty(v))} ${_u}` : fc(vendorKG(v));
   return `<div class="tab-pane ${v===activeTab?'active':''}" id="kgPane_${vid_}">
     <div class="table-wrap">
       <table>
-        <thead><tr><th>SKU</th><th class="r">Rate (₹/${bizUnitAbbr(activePlantBizType())})</th><th class="r">Qty (${bizUnitAbbr(activePlantBizType())})</th><th class="r">Cost (₹)</th></tr></thead>
+        <thead><tr><th>SKU</th><th class="r">Rate (₹/${_u})</th><th class="r">Qty (${_u})</th>${headCostCol}</tr></thead>
         <tbody>${defRows}${custRows}</tbody>
-        <tfoot><tr class="ft"><td colspan="3">${v} — Total KG Cost</td>
-          <td class="r cost-val" id="kgTot_${vid_}">${fc(vendorKG(v))}</td></tr></tfoot>
+        <tfoot><tr class="ft"><td colspan="${footColspan}">${footLabel}</td>
+          <td class="r cost-val" id="kgTot_${vid_}">${footVal}</td></tr></tfoot>
       </table>
     </div>
     <div class="unloading-bar" id="unloadBar_${vid_}">
@@ -2612,7 +2654,7 @@ function onKG(input) {
   if (costCell) costCell.innerHTML = cost > 0 ? fc(cost) : '<span class="zero">—</span>';
 
   const totCell = document.getElementById('kgTot_' + v_);
-  if (totCell && rawV) totCell.textContent = fc(vendorKG(rawV));
+  if (totCell && rawV) totCell.textContent = isProdQtyBiz() ? `${fn(vendorQty(rawV))} ${bizUnitAbbr(activePlantBizType())}` : fc(vendorKG(rawV));
   markDirty(); recalc();
 }
 
@@ -3137,7 +3179,7 @@ function _updateLockUI() {
     if (lockBadge) lockBadge.style.display = 'none';
   }
   if (entryCards) entryCards.classList.toggle('locked-view', isLockedForUser);
-  if (saleQty) saleQty.classList.toggle('locked-input', isLockedForUser);
+  if (saleQty) saleQty.classList.toggle('locked-input', saleQtyLocked());
 }
 
 async function lockAllRecords(lock) {
