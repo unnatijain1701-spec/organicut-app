@@ -3757,7 +3757,10 @@ async function loadReportView() {
   const to   = document.getElementById('repTo')?.value;
   const el   = document.getElementById('reportContent');
   if (!el) return;
-  repBizType = bizChipValue('repBizType') || repBizType;
+  // Only fall back to the previous selection when the chip row hasn't been rendered
+  // yet (first load) — once it exists, an empty value is a deliberate "All" click,
+  // not a missing one, so it must not be overwritten by the old non-empty value.
+  if (document.getElementById('repBizType')) repBizType = bizChipValue('repBizType');
   const bizWrap = document.getElementById('repBizTypeWrap');
   if (bizWrap) bizWrap.innerHTML = bizChipsHTML('repBizType', repBizType, 'loadReportView');
   if (!from || !to) { el.innerHTML = '<p style="color:var(--muted);text-align:center;padding:20px">Pick a date range.</p>'; return; }
@@ -4804,7 +4807,9 @@ async function loadDashCompare() {
   const to   = _dashCompToDate   || document.getElementById('dashCompToDate').value;
   if (!from || !to) return;
   closeDashCompareDetail();
-  dashCompBizType = bizChipValue('dashCompBizType') || dashCompBizType;
+  // Same fix as the Report chips: don't fall back to the old value once the chip
+  // row exists — an empty value there is a deliberate "All" click.
+  if (document.getElementById('dashCompBizType')) dashCompBizType = bizChipValue('dashCompBizType');
   const bizWrap = document.getElementById('dashCompBizTypeWrap');
   if (bizWrap) bizWrap.innerHTML = bizChipsHTML('dashCompBizType', dashCompBizType, 'loadDashCompare');
   try {
