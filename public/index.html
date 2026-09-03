@@ -671,7 +671,7 @@ td input[type="number"]:hover { border-color: #7dbf99; }
 }
 
 /* ── DASHBOARD OVERLAY ────────────────────────────────── */
-#dashboardOverlay, #reportOverlay {
+#dashboardOverlay, #reportOverlay, #trendOverlay {
   position: fixed; top: 0; right: 0; bottom: 0; left: 210px; z-index: 400;
   background: var(--bg); overflow-y: auto;
   display: flex; flex-direction: column;
@@ -699,7 +699,7 @@ td input[type="number"]:hover { border-color: #7dbf99; }
 @media (max-width: 700px) {
   .rep-summary { grid-template-columns: 1fr; }
   .rep-cards { grid-template-columns: 1fr; }
-  #reportOverlay { left: 0; }
+  #reportOverlay, #trendOverlay { left: 0; }
 }
 
 /* Report table — plants across the top, Total column at the end */
@@ -827,7 +827,7 @@ tr.dash-row-alt td { background: #f7fdf9; }
   .sidebar-foot { margin-top: 0; margin-left: auto; border-top: none; border-left: 1px solid rgba(255,255,255,.12); padding: 0; display: flex; align-items: center; }
   .sidebar-user { display: none; }
   .topbar, .sumbar, .main { margin-left: 0; }
-  #dashboardOverlay, #reportOverlay, #usersPanel, #vendorsPanel { left: 0; }
+  #dashboardOverlay, #reportOverlay, #trendOverlay, #usersPanel, #vendorsPanel { left: 0; }
 
   .topbar-main { padding: 6px 12px; min-height: 48px; gap: 6px; }
   .field input[type="date"]   { min-width: 120px; }
@@ -1299,6 +1299,22 @@ tr.dash-row-alt td { background: #f7fdf9; }
   </div>
 </div>
 
+<!-- ═══════════════════ COST TREND OVERLAY ═══════════════════ -->
+<div id="trendOverlay" style="display:none">
+  <div class="dash-header">
+    <span class="dash-header-title">📈 Cost <em>Trend</em></span>
+    <button class="dash-close" onclick="closeTrend()">×</button>
+  </div>
+  <div class="dash-body">
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:16px 20px;background:#fff;border-bottom:1px solid var(--border)">
+      <span style="font-size:12px;font-weight:700;color:var(--muted)">BUSINESS TYPE</span>
+      <span id="trendBizTypeWrap"></span>
+      <span id="trendSubLabel" style="font-size:12px;color:var(--muted);margin-left:6px"></span>
+    </div>
+    <div id="trendContent" style="padding:16px 20px"><p style="color:var(--muted);text-align:center;padding:20px">Loading…</p></div>
+  </div>
+</div>
+
 <!-- ═══════════════════ SIDEBAR ═══════════════════ -->
 <!-- Mobile top bar (phones only) -->
 <div class="mobile-topbar">
@@ -1328,6 +1344,7 @@ tr.dash-row-alt td { background: #f7fdf9; }
       </button>
       <div id="navAdminItems" style="display:none">
         <button class="nav-item nav-admin-item" id="navReport" onclick="navTo('report')"><span class="nav-ico">📑</span> Report</button>
+        <button class="nav-item nav-admin-item" id="navTrend" onclick="navTo('trend')"><span class="nav-ico">📈</span> Cost Trend</button>
         <button class="nav-item nav-admin-item" id="navVendors" onclick="navTo('vendors')"><span class="nav-ico">⚙</span> Vendors</button>
         <button class="nav-item nav-admin-item" id="navUsers" onclick="navTo('users')"><span class="nav-ico">👤</span> Users</button>
       </div>
@@ -1582,6 +1599,7 @@ async function checkAuth() {
       document.getElementById('histBulkLockBtns').style.display = isSuperadmin ? 'flex' : 'none';
       { const rb = document.getElementById('reportMenuBtn'); if (rb) rb.style.display = isSuperadmin ? 'block' : 'none'; }
       { const nr = document.getElementById('navReport'); if (nr) nr.style.display = isSuperadmin ? '' : 'none'; }
+      { const nt = document.getElementById('navTrend');  if (nt) nt.style.display = isSuperadmin ? '' : 'none'; }
       document.getElementById('navAdminToggle').style.display = isSuperadmin ? '' : 'none';
       if (isSuperadmin) setAdminGroupOpen(sessionStorage.getItem('navAdminOpen') === '1');
       document.getElementById('preLoginOverlay').style.display = 'none';
@@ -1665,6 +1683,7 @@ async function doLogin() {
     document.getElementById('navDashboard').style.display = canSeeDashboard ? '' : 'none';
     document.getElementById('navVendors').style.display = isSuperadmin ? '' : 'none';
     { const nr = document.getElementById('navReport'); if (nr) nr.style.display = isSuperadmin ? '' : 'none'; }
+    { const nt = document.getElementById('navTrend');  if (nt) nt.style.display = isSuperadmin ? '' : 'none'; }
     document.getElementById('navAdminToggle').style.display = isSuperadmin ? '' : 'none';
     if (isSuperadmin) setAdminGroupOpen(false);
     document.getElementById('histBulkLockBtns').style.display = isSuperadmin ? 'flex' : 'none';
@@ -1731,6 +1750,7 @@ async function doLogout() {
   document.getElementById('navDashboard').style.display = 'none';
   document.getElementById('navVendors').style.display = 'none';
   { const nr = document.getElementById('navReport'); if (nr) nr.style.display = 'none'; }
+  { const nt = document.getElementById('navTrend');  if (nt) nt.style.display = 'none'; }
   document.getElementById('navAdminToggle').style.display = 'none';
   setAdminGroupOpen(false);
   setActiveNav('daily');
@@ -3258,6 +3278,7 @@ function navTo(section) {
   // Close any open right-panel / overlay first, then open the requested one
   closeDashboard();
   closeReport();
+  closeTrend();
   toggleHistory(false);
   toggleVendorsPanel(false);
   toggleUsersPanel(false);
@@ -3266,6 +3287,7 @@ function navTo(section) {
     case 'daily':     /* main is always visible — nothing to open */ break;
     case 'dashboard': loadDashboard();          break;
     case 'report':    openReport();             break;
+    case 'trend':     openTrend();              break;
     case 'history':   toggleHistory(true);      break;
     case 'vendors':   toggleVendorsPanel(true); break;
     case 'users':     toggleUsersPanel(true);   break;
@@ -3820,6 +3842,140 @@ function _renderReportView(data) {
   document.getElementById('reportContent').innerHTML =
     `<div class="rep-table-wrap"><table class="rep-table"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
 }
+
+/* ═══════════════════════════════════════════════════════
+   COST TREND — per-plant MPK across the last 3 months, with
+   the current (in-progress) month projected to month-end using
+   the same daily-average method as the Report tab.
+═══════════════════════════════════════════════════════ */
+
+let trendBizType = '';
+let _trendChart = null;
+
+function openTrend() {
+  document.getElementById('trendOverlay').style.display = 'flex';
+  loadTrendView();
+}
+function closeTrend() {
+  const el = document.getElementById('trendOverlay');
+  if (el) el.style.display = 'none';
+}
+
+async function loadTrendView() {
+  const el = document.getElementById('trendContent');
+  if (!el) return;
+  // Same fix as Report/Dashboard Compare chips — don't fall back to the old
+  // value once the chip row exists; an empty value there is a deliberate "All".
+  if (document.getElementById('trendBizType')) trendBizType = bizChipValue('trendBizType');
+  const bizWrap = document.getElementById('trendBizTypeWrap');
+  if (bizWrap) bizWrap.innerHTML = bizChipsHTML('trendBizType', trendBizType, 'loadTrendView');
+  el.innerHTML = '<p style="color:var(--muted);text-align:center;padding:20px">Loading…</p>';
+  try {
+    const btParam = trendBizType ? `?businessType=${encodeURIComponent(trendBizType)}` : '';
+    const data = await api('GET', `/api/records/trend${btParam}`);
+    if (!data.rows || !data.rows.length) {
+      el.innerHTML = '<p style="color:var(--muted);text-align:center;padding:24px">No records found.</p>';
+      return;
+    }
+    _renderTrendView(data);
+  } catch (e) {
+    el.innerHTML = `<p style="color:#c00;text-align:center;padding:20px">⚠ ${e.message}</p>`;
+  }
+}
+
+// Group the flat plant×month rows from the backend into { plantName: { month: {cost,qty,mpk,days} } },
+// figure out which 3 months to show (2 complete months before the current one, plus the
+// current month itself), and project the current month's month-end MPK the same way
+// the Report tab does: daily average so far × days in month.
+function _computeTrend(data) {
+  const byPlant = {};
+  data.rows.forEach(r => {
+    if (!byPlant[r.name]) byPlant[r.name] = { businessType: r.business_type, months: {} };
+    const cost = parseFloat(r.total_cost) || 0, qty = parseFloat(r.total_qty) || 0;
+    byPlant[r.name].months[r.month] = { cost, qty, days: parseInt(r.days) || 0, mpk: qty > 0 ? cost / qty : 0 };
+  });
+
+  // Last 3 calendar months ending at data.currentMonth (e.g. Jul, Aug, Sep)
+  const [cy, cm] = data.currentMonth.split('-').map(Number);
+  const monthKeys = [2, 1, 0].map(back => {
+    const d = new Date(cy, cm - 1 - back, 1);
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+  });
+  const monthLabels = monthKeys.map(k => {
+    const [y, m] = k.split('-').map(Number);
+    return new Date(y, m - 1, 1).toLocaleDateString('en-IN', { month: 'short', year: '2-digit' });
+  });
+
+  const plants = Object.entries(byPlant).map(([name, p]) => {
+    const points = monthKeys.map((mk, i) => {
+      const m = p.months[mk];
+      if (!m) return { month: mk, mpk: null, projected: false };
+      const isCurrent = mk === data.currentMonth;
+      if (isCurrent && m.days > 0) {
+        const projCost = (m.cost / m.days) * data.daysInCurrentMonth;
+        const projQty  = (m.qty  / m.days) * data.daysInCurrentMonth;
+        return { month: mk, mpk: m.mpk, projMPK: projQty > 0 ? projCost / projQty : null, days: m.days, projected: true };
+      }
+      return { month: mk, mpk: m.mpk, projected: false, days: m.days };
+    });
+    return { name, businessType: p.businessType, points };
+  });
+
+  return { monthKeys, monthLabels, plants };
+}
+
+function _renderTrendView(data) {
+  const { monthLabels, plants } = _computeTrend(data);
+  const sub = document.getElementById('trendSubLabel');
+  if (sub) sub.textContent = `Current month (${monthLabels[monthLabels.length - 1]}) is projected to month-end from days recorded so far.`;
+
+  const palette = ['#0f766e', '#c2410c', '#7c3aed', '#0369a1', '#be123c', '#65a30d', '#0891b2', '#a21caf'];
+  const datasets = plants.map((p, i) => ({
+    label: p.name,
+    data: p.points.map(pt => pt.mpk),
+    borderColor: palette[i % palette.length],
+    backgroundColor: palette[i % palette.length],
+    spanGaps: true,
+    tension: 0.25,
+    pointRadius: p.points.map(pt => pt.projected ? 5 : 3),
+    pointStyle: p.points.map(pt => pt.projected ? 'rectRot' : 'circle'),
+    borderWidth: 2,
+  }));
+
+  const chartHTML = '<div style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:16px"><canvas id="trendChart" height="90"></canvas></div>';
+
+  const rows = plants.map(p => {
+    const cells = p.points.map(pt => {
+      if (pt.mpk == null) return '<td>—</td>';
+      if (pt.projected) {
+        return `<td>₹${pt.mpk.toFixed(2)} so far<br><span style="color:var(--primary);font-weight:700">→ ₹${pt.projMPK != null ? pt.projMPK.toFixed(2) : '—'} proj.</span><br><span style="font-size:11px;color:var(--muted)">${pt.days} day(s) recorded</span></td>`;
+      }
+      return `<td>₹${pt.mpk.toFixed(2)}</td>`;
+    }).join('');
+    return `<tr><td class="rep-metric-name">${p.name}</td>${cells}</tr>`;
+  }).join('');
+
+  const tableHTML = `<div class="rep-table-wrap"><table class="rep-table">
+    <thead><tr><th>Plant</th>${monthLabels.map(l => `<th>${l}</th>`).join('')}</tr></thead>
+    <tbody>${rows}</tbody>
+  </table></div>`;
+
+  document.getElementById('trendContent').innerHTML = chartHTML + tableHTML;
+
+  if (_trendChart) { _trendChart.destroy(); _trendChart = null; }
+  const ctx = document.getElementById('trendChart').getContext('2d');
+  _trendChart = new Chart(ctx, {
+    type: 'line',
+    data: { labels: monthLabels, datasets },
+    options: {
+      responsive: true,
+      interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { position: 'top', labels: { boxWidth: 12, font: { size: 11 } } } },
+      scales: { y: { title: { display: true, text: bizMpkLabel(trendBizType || null) } } },
+    },
+  });
+}
+
 document.addEventListener('click', function(e) {
   const dd = document.getElementById('exportDd');
   if (dd && !dd.contains(e.target)) {

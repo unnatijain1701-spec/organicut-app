@@ -345,6 +345,47 @@ router.get('/report', async (req, res) => {
   }
 });
 
+// GET /api/records/trend?businessType=  — superadmin: per-plant monthly MPK for the
+// last 3 calendar months (including the current, in-progress one), for spotting
+// cost trends across plants. The current month's numbers are partial — the frontend
+// projects a month-end estimate from them using the same method as /report.
+router.get('/trend', async (req, res) => {
+  if (req.user.role !== 'superadmin')
+    return res.status(403).json({ error: 'Superadmin only' });
+  const businessType = req.query.businessType || null;
+  try {
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth() - 2, 1);
+    const iso = x => `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}-${String(x.getDate()).padStart(2,'0')}`;
+    const daysInCurrentMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+
+    const params = [iso(start)];
+    let btFilter = '';
+    if (businessType) { params.push(businessType); btFilter = `AND p.business_type = $${params.length}`; }
+
+    const { rows } = await db.query(`
+      SELECT p.id, p.name, p.display_order, p.business_type,
+        TO_CHAR(dr.record_date, 'YYYY-MM') AS month,
+        COUNT(*) AS days,
+        COALESCE(SUM(dr.total_cost), 0)::NUMERIC(14,2) AS total_cost,
+        COALESCE(SUM(dr.sale_qty), 0)::NUMERIC(14,2)   AS total_qty
+      FROM daily_records dr JOIN plants p ON p.id = dr.plant_id
+      WHERE dr.record_date >= $1 ${btFilter}
+      GROUP BY p.id, p.name, p.display_order, p.business_type, TO_CHAR(dr.record_date, 'YYYY-MM')
+      ORDER BY p.display_order, month
+    `, params);
+
+    res.json({
+      rows,
+      currentMonth: iso(now).slice(0, 7),
+      daysInCurrentMonth,
+    });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // GET /api/records/audit  — superadmin: recent deletion audit entries for a plant
 router.get('/audit', async (req, res) => {
   if (req.user.role !== 'superadmin')
