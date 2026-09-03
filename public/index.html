@@ -1309,6 +1309,12 @@ tr.dash-row-alt td { background: #f7fdf9; }
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:16px 20px;background:#fff;border-bottom:1px solid var(--border)">
       <span style="font-size:12px;font-weight:700;color:var(--muted)">BUSINESS TYPE</span>
       <span id="trendBizTypeWrap"></span>
+      <span style="font-size:12px;font-weight:700;color:var(--muted);margin-left:6px">COST TYPE</span>
+      <div class="dash-toggle" id="trendMetricToggle">
+        <button class="dash-toggle-btn active" data-metric="total"      onclick="setTrendMetric('total')">Total Cost</button>
+        <button class="dash-toggle-btn"        data-metric="attendance" onclick="setTrendMetric('attendance')">Attendance Cost</button>
+        <button class="dash-toggle-btn"        data-metric="kg"         onclick="setTrendMetric('kg')">Per-KG Cost</button>
+      </div>
       <span id="trendSubLabel" style="font-size:12px;color:var(--muted);margin-left:6px"></span>
     </div>
     <div id="trendContent" style="padding:16px 20px"><p style="color:var(--muted);text-align:center;padding:20px">Loading…</p></div>
@@ -3851,6 +3857,15 @@ function _renderReportView(data) {
 
 let trendBizType = '';
 let _trendChart = null;
+let _trendData = null;
+let trendMetric = 'total'; // 'total' | 'attendance' | 'kg'
+
+function setTrendMetric(m) {
+  trendMetric = m;
+  document.querySelectorAll('#trendMetricToggle .dash-toggle-btn').forEach(btn =>
+    btn.classList.toggle('active', btn.dataset.metric === m));
+  if (_trendData) _renderTrendView(_trendData);
+}
 
 function openTrend() {
   document.getElementById('trendOverlay').style.display = 'flex';
@@ -3877,6 +3892,7 @@ async function loadTrendView() {
       el.innerHTML = '<p style="color:var(--muted);text-align:center;padding:24px">No records found.</p>';
       return;
     }
+    _trendData = data;
     _renderTrendView(data);
   } catch (e) {
     el.innerHTML = `<p style="color:#c00;text-align:center;padding:20px">⚠ ${e.message}</p>`;
@@ -3947,21 +3963,29 @@ function _fitWeeklySeries(dailyList, currentMonth, daysInCurrentMonth) {
   return { r2: fit ? fit.r2 : null, weeksUsed: fitPoints.length, predictedCost };
 }
 
+// metric selects which cost field drives everything below — 'total' (attendance + kg),
+// 'attendance' (labor cost, usually steadier), or 'kg' (vendor/produce cost, usually the
+// volatile one). Splitting them lets one component read as a real trend even when the
+// blended total looks scattered, since the two behave very differently day to day.
+function _costField(r, metric) {
+  if (metric === 'attendance') return parseFloat(r.attendance_cost) || 0;
+  if (metric === 'kg')         return parseFloat(r.kg_cost) || 0;
+  return parseFloat(r.total_cost) || 0;
+}
+
 // Group the backend's flat rows into per-plant data: actual monthly cost for the last
 // 3 months (Jul/Aug/Sept-MTD), PLUS a weekly trend fit across every complete day of each
 // plant's recorded history before this month, extrapolated across the current month's
-// days to predict its total cost — independent of how much of the current month is filled
-// in. Also builds a company-wide "Total" column the same way, summing all plants per day.
-function _computeTrend(data) {
+// days to predict its cost — independent of how much of the current month is filled in.
+function _computeTrend(data, metric) {
   const byPlant = {};
   data.rows.forEach(r => {
     if (!byPlant[r.name]) byPlant[r.name] = { businessType: r.business_type, months: {}, daily: [] };
-    const cost = parseFloat(r.total_cost) || 0, qty = parseFloat(r.total_qty) || 0;
-    byPlant[r.name].months[r.month] = { cost, qty, days: parseInt(r.days) || 0 };
+    byPlant[r.name].months[r.month] = { cost: _costField(r, metric), days: parseInt(r.days) || 0 };
   });
   (data.daily || []).forEach(r => {
     if (!byPlant[r.name]) byPlant[r.name] = { businessType: null, months: {}, daily: [] };
-    byPlant[r.name].daily.push({ date: r.date, cost: parseFloat(r.total_cost) || 0 });
+    byPlant[r.name].daily.push({ date: r.date, cost: _costField(r, metric) });
   });
 
   // Last 3 calendar months ending at data.currentMonth (e.g. Jul, Aug, Sep)
@@ -3984,13 +4008,14 @@ function _computeTrend(data) {
     return { name, businessType: p.businessType, points, predictedCost, weeksUsed, r2 };
   });
 
-  // Company-wide Total — same shape as a plant, built by summing every plant's daily
-  // cost per date (for the fit) and per month (for the actuals row).
-  const totalDailyMap = {};
-  (data.daily || []).forEach(r => {
-    totalDailyMap[r.date] = (totalDailyMap[r.date] || 0) + (parseFloat(r.total_cost) || 0);
-  });
-  const totalDaily = Object.entries(totalDailyMap).map(([date, cost]) => ({ date, cost }));
+  // Company-wide Total is a SUM of the individually-fitted plant predictions, not its
+  // own separate regression. Fitting a trend directly on the combined series breaks
+  // whenever plants have different amounts of history (e.g. Rai has 14 weeks, everyone
+  // else has 9) — the early weeks are really just Rai's cost alone, so the combined
+  // series has an artificial step-change the moment the other plants' data starts,
+  // which isn't a real trend and makes that fit meaningless. Summing already-reliable
+  // per-plant numbers sidesteps that entirely and keeps Total mathematically consistent
+  // with its parts.
   const totalPoints = monthKeys.map(mk => {
     let sum = null;
     plants.forEach(p => {
@@ -3999,16 +4024,18 @@ function _computeTrend(data) {
     });
     return { month: mk, cost: sum, isCurrent: mk === data.currentMonth };
   });
-  const totalFit = _fitWeeklySeries(totalDaily, data.currentMonth, data.daysInCurrentMonth);
-  const total = { name: 'Total', points: totalPoints, predictedCost: totalFit.predictedCost, weeksUsed: totalFit.weeksUsed, r2: totalFit.r2 };
+  let totalPredicted = null;
+  plants.forEach(p => { if (p.predictedCost != null) totalPredicted = (totalPredicted || 0) + p.predictedCost; });
+  const total = { name: 'Total', points: totalPoints, predictedCost: totalPredicted, weeksUsed: null, r2: null };
 
   return { monthKeys, monthLabels, plants, total };
 }
 
 function _renderTrendView(data) {
-  const { monthLabels, plants, total } = _computeTrend(data);
+  const { monthLabels, plants, total } = _computeTrend(data, trendMetric);
+  const metricLabel = trendMetric === 'attendance' ? 'attendance cost' : trendMetric === 'kg' ? 'per-kg (vendor) cost' : 'total cost';
   const sub = document.getElementById('trendSubLabel');
-  if (sub) sub.textContent = `Predicted ${monthLabels[monthLabels.length - 1]} total cost is a WEEKLY trend fit across every complete week of each plant's recorded history before this month (bucketing into weeks smooths out day-to-day noise), extrapolated forward. Values in ₹ Lakhs.`;
+  if (sub) sub.textContent = `Predicted ${monthLabels[monthLabels.length - 1]} ${metricLabel} is a WEEKLY trend fit across every complete week of each plant's recorded history before this month, extrapolated forward. Values in ₹ Lakhs.`;
 
   const L = n => n / 1e5; // rupees -> lakhs
 
@@ -4104,7 +4131,7 @@ function _renderTrendView(data) {
       responsive: true,
       interaction: { mode: 'index', intersect: false },
       plugins: { legend: { position: 'top', labels: { boxWidth: 12, font: { size: 11 } } } },
-      scales: { y: { title: { display: true, text: 'Total Cost (₹ Lakhs)' } } },
+      scales: { y: { title: { display: true, text: (trendMetric === 'attendance' ? 'Attendance Cost' : trendMetric === 'kg' ? 'Per-KG Cost' : 'Total Cost') + ' (₹ Lakhs)' } } },
     },
   });
 }

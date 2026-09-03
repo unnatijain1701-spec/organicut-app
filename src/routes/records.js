@@ -373,8 +373,10 @@ router.get('/trend', async (req, res) => {
       SELECT p.id, p.name, p.display_order, p.business_type,
         TO_CHAR(dr.record_date, 'YYYY-MM') AS month,
         COUNT(*) FILTER (WHERE ${COMPLETE}) AS days,
-        COALESCE(SUM(dr.total_cost) FILTER (WHERE ${COMPLETE}), 0)::NUMERIC(14,2) AS total_cost,
-        COALESCE(SUM(dr.sale_qty)   FILTER (WHERE ${COMPLETE}), 0)::NUMERIC(14,2) AS total_qty
+        COALESCE(SUM(dr.total_cost)      FILTER (WHERE ${COMPLETE}), 0)::NUMERIC(14,2) AS total_cost,
+        COALESCE(SUM(dr.attendance_cost) FILTER (WHERE ${COMPLETE}), 0)::NUMERIC(14,2) AS attendance_cost,
+        COALESCE(SUM(dr.kg_cost)         FILTER (WHERE ${COMPLETE}), 0)::NUMERIC(14,2) AS kg_cost,
+        COALESCE(SUM(dr.sale_qty)        FILTER (WHERE ${COMPLETE}), 0)::NUMERIC(14,2) AS total_qty
       FROM daily_records dr JOIN plants p ON p.id = dr.plant_id
       WHERE dr.record_date >= $1 ${btFilter}
       GROUP BY p.id, p.name, p.display_order, p.business_type, TO_CHAR(dr.record_date, 'YYYY-MM')
@@ -395,7 +397,7 @@ router.get('/trend', async (req, res) => {
     const { rows: daily } = await db.query(`
       SELECT p.id, p.name, p.display_order,
         TO_CHAR(dr.record_date, 'YYYY-MM-DD') AS date,
-        dr.total_cost, dr.sale_qty
+        dr.total_cost, dr.attendance_cost, dr.kg_cost, dr.sale_qty
       FROM daily_records dr JOIN plants p ON p.id = dr.plant_id
       WHERE dr.record_date < $1 AND ${COMPLETE} ${dailyBtFilter}
       ORDER BY p.display_order, dr.record_date ASC
