@@ -98,12 +98,14 @@ function processCSV(text, filterDate) {
 }
 
 // Parse a date cell into canonical ISO (YYYY-MM-DD). Handles:
-//   DD-MM-YYYY / D-M-YYYY   (dashes, Indian)   -> e.g. 05-07-2026
-//   M/D/YYYY   / D/M/YYYY   (slashes)          -> e.g. 7/5/2026
+//   DD-MM-YYYY / D-M-YYYY   (dashes)
+//   DD/MM/YYYY / D/M/YYYY   (slashes)
 //   YYYY-MM-DD (already ISO)
 //   2-digit years (26 -> 2026)
-// When day and month are both <= 12 (ambiguous), the separator decides:
-//   '/' -> US M/D/YYYY,  '-' -> Indian D-M-YYYY.
+// This app is India-only, so every source (device exports, manual uploads) uses
+// day-first dates — '/' and '-' are treated identically. When one field is >12
+// it's unambiguous and used as the day regardless of position; when both are
+// <=12 (e.g. "1/9/2026") the first field is still taken as the day.
 function parseDateToISO(raw) {
   if (!raw) return null;
   const s = String(raw).trim();
@@ -121,7 +123,7 @@ function parseDateToISO(raw) {
     if (Y < 100) Y += 2000;               // 2-digit year -> 20YY
     if (a > 12)       { D = a; M = b; }    // first field must be the day
     else if (b > 12)  { M = a; D = b; }    // second field must be the day
-    else              { if (sep === '/') { M = a; D = b; } else { D = a; M = b; } }
+    else              { D = a; M = b; }    // ambiguous — day-first (India)
   }
   if (!Y || !M || !D || M < 1 || M > 12 || D < 1 || D > 31) return null;
   const pad = n => String(n).padStart(2, '0');
