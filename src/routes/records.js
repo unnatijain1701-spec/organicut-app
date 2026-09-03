@@ -363,20 +363,41 @@ router.get('/trend', async (req, res) => {
     let btFilter = '';
     if (businessType) { params.push(businessType); btFilter = `AND p.business_type = $${params.length}`; }
 
+    // Same "complete day" rule as /report: a day only counts once attendance cost,
+    // sale qty AND per-kg cost are all filled in (kg cost exempt where the plant has
+    // none) — otherwise a half-entered day (e.g. cost saved, qty not yet typed in)
+    // divides by zero qty and craters that month's MPK to 0.
+    const COMPLETE = "dr.attendance_cost > 0 AND dr.sale_qty > 0 AND (NOT p.has_kg_processing OR dr.kg_cost > 0)";
+
     const { rows } = await db.query(`
       SELECT p.id, p.name, p.display_order, p.business_type,
         TO_CHAR(dr.record_date, 'YYYY-MM') AS month,
-        COUNT(*) AS days,
-        COALESCE(SUM(dr.total_cost), 0)::NUMERIC(14,2) AS total_cost,
-        COALESCE(SUM(dr.sale_qty), 0)::NUMERIC(14,2)   AS total_qty
+        COUNT(*) FILTER (WHERE ${COMPLETE}) AS days,
+        COALESCE(SUM(dr.total_cost) FILTER (WHERE ${COMPLETE}), 0)::NUMERIC(14,2) AS total_cost,
+        COALESCE(SUM(dr.sale_qty)   FILTER (WHERE ${COMPLETE}), 0)::NUMERIC(14,2) AS total_qty
       FROM daily_records dr JOIN plants p ON p.id = dr.plant_id
       WHERE dr.record_date >= $1 ${btFilter}
       GROUP BY p.id, p.name, p.display_order, p.business_type, TO_CHAR(dr.record_date, 'YYYY-MM')
+      HAVING COUNT(*) FILTER (WHERE ${COMPLETE}) > 0
       ORDER BY p.display_order, month
     `, params);
 
+    // Day-level MPK for every complete day BEFORE the current month (i.e. the fully
+    // completed reference months) — this is the series the frontend fits a day-wise
+    // linear trend to, then extrapolates across the current month's days to predict it.
+    const currentMonthStart = `${iso(now).slice(0, 7)}-01`;
+    const { rows: daily } = await db.query(`
+      SELECT p.id, p.name, p.display_order,
+        TO_CHAR(dr.record_date, 'YYYY-MM-DD') AS date,
+        dr.total_cost, dr.sale_qty
+      FROM daily_records dr JOIN plants p ON p.id = dr.plant_id
+      WHERE dr.record_date >= $1 AND dr.record_date < $${params.length + 1} AND ${COMPLETE} ${btFilter}
+      ORDER BY p.display_order, dr.record_date ASC
+    `, [...params, currentMonthStart]);
+
     res.json({
       rows,
+      daily,
       currentMonth: iso(now).slice(0, 7),
       daysInCurrentMonth,
     });
