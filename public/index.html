@@ -3919,12 +3919,11 @@ function _computeTrend(data) {
   data.rows.forEach(r => {
     if (!byPlant[r.name]) byPlant[r.name] = { businessType: r.business_type, months: {}, daily: [] };
     const cost = parseFloat(r.total_cost) || 0, qty = parseFloat(r.total_qty) || 0;
-    byPlant[r.name].months[r.month] = { cost, qty, days: parseInt(r.days) || 0, mpk: qty > 0 ? cost / qty : null };
+    byPlant[r.name].months[r.month] = { cost, qty, days: parseInt(r.days) || 0 };
   });
   (data.daily || []).forEach(r => {
     if (!byPlant[r.name]) byPlant[r.name] = { businessType: null, months: {}, daily: [] };
-    const cost = parseFloat(r.total_cost) || 0, qty = parseFloat(r.sale_qty) || 0;
-    if (qty > 0) byPlant[r.name].daily.push({ date: r.date, mpk: cost / qty });
+    byPlant[r.name].daily.push({ date: r.date, cost: parseFloat(r.total_cost) || 0 });
   });
 
   // Last 3 calendar months ending at data.currentMonth (e.g. Jul, Aug, Sep)
@@ -3941,25 +3940,27 @@ function _computeTrend(data) {
   const plants = Object.entries(byPlant).map(([name, p]) => {
     const points = monthKeys.map(mk => {
       const m = p.months[mk];
-      return { month: mk, mpk: m ? m.mpk : null, days: m ? m.days : 0, isCurrent: mk === data.currentMonth };
+      return { month: mk, cost: m ? m.cost : null, days: m ? m.days : 0, isCurrent: mk === data.currentMonth };
     });
 
-    // Fit the day-wise regression on Jul+Aug's daily MPK, x = day index (0,1,2,...)
+    // Fit the day-wise regression on Jul+Aug's daily total cost, x = day index (0,1,2,...)
     const sorted = [...p.daily].sort((a, b) => a.date.localeCompare(b.date));
-    const fitPoints = sorted.map((d, i) => ({ x: i, y: d.mpk }));
+    const fitPoints = sorted.map((d, i) => ({ x: i, y: d.cost }));
     const fit = _linearRegression(fitPoints);
 
-    // Predict the current month by averaging the fitted line across its day-count,
-    // continuing the day index straight on from where Jul+Aug's series left off.
-    let predictedMPK = null;
+    // Predict the current month's total cost by SUMMING the fitted line across its
+    // day-count (cost accumulates day over day, unlike a per-unit rate like MPK,
+    // which would need averaging instead) — continuing the day index straight on
+    // from where Jul+Aug's series left off.
+    let predictedCost = null;
     if (fit) {
       const startX = fitPoints.length; // first day of the current month, day-index-wise
       let sum = 0;
       for (let i = 0; i < data.daysInCurrentMonth; i++) sum += fit.predict(startX + i);
-      predictedMPK = sum / data.daysInCurrentMonth;
+      predictedCost = sum;
     }
 
-    return { name, businessType: p.businessType, points, predictedMPK, fitDayCount: fitPoints.length, r2: fit ? fit.r2 : null };
+    return { name, businessType: p.businessType, points, predictedCost, fitDayCount: fitPoints.length, r2: fit ? fit.r2 : null };
   });
 
   return { monthKeys, monthLabels, plants };
@@ -3968,36 +3969,32 @@ function _computeTrend(data) {
 function _renderTrendView(data) {
   const { monthLabels, plants } = _computeTrend(data);
   const sub = document.getElementById('trendSubLabel');
-  if (sub) sub.textContent = `Predicted ${monthLabels[monthLabels.length - 1]} MPK is a day-wise trend line fit across every complete day in the prior two months, extrapolated forward — shown alongside actual ${monthLabels[monthLabels.length - 1]} month-to-date as it fills in.`;
+  if (sub) sub.textContent = `Predicted ${monthLabels[monthLabels.length - 1]} total cost is a day-wise trend line fit across every complete day in the prior two months, extrapolated forward — shown alongside actual ${monthLabels[monthLabels.length - 1]} month-to-date as it fills in. Values in ₹ Lakhs.`;
+
+  const L = n => n / 1e5; // rupees -> lakhs
 
   const palette = ['#0f766e', '#c2410c', '#7c3aed', '#0369a1', '#be123c', '#65a30d', '#0891b2', '#a21caf'];
-  // Chart: actual Jul/Aug/Sept-MTD as the solid line, with the predicted Sept point
-  // appended as a second series so it renders as a distinct dashed/marker point.
-  const datasets = plants.flatMap((p, i) => {
+  // One dataset per plant — Jul/Aug actual plus a single Sept value (predicted, or
+  // actual once it's in) — so each plant gets exactly one legend entry. The Sept
+  // point is drawn larger/diamond so it reads as "different" without a second series.
+  const datasets = plants.map((p, i) => {
     const color = palette[i % palette.length];
-    const actual = {
+    const sept = p.points[p.points.length - 1];
+    const septVal = sept.cost != null ? L(sept.cost) : (p.predictedCost != null ? L(p.predictedCost) : null);
+    const data = [...p.points.slice(0, -1).map(pt => pt.cost != null ? L(pt.cost) : null), septVal];
+    const isPredictedPoint = sept.cost == null && p.predictedCost != null;
+    return {
       label: p.name,
-      data: p.points.map(pt => pt.mpk),
+      data,
       borderColor: color,
       backgroundColor: color,
       spanGaps: true,
       tension: 0.25,
-      pointRadius: 3,
       borderWidth: 2,
+      pointRadius: data.map((_, idx) => idx === data.length - 1 && isPredictedPoint ? 7 : 3),
+      pointStyle: data.map((_, idx) => idx === data.length - 1 && isPredictedPoint ? 'rectRot' : 'circle'),
+      segment: isPredictedPoint ? { borderDash: ctx => ctx.p1DataIndex === data.length - 1 ? [5, 4] : undefined } : undefined,
     };
-    if (p.predictedMPK == null) return [actual];
-    const predSeries = monthLabels.map((_, idx) => idx === monthLabels.length - 1 ? p.predictedMPK : null);
-    const predicted = {
-      label: p.name + ' (predicted)',
-      data: predSeries,
-      borderColor: color,
-      backgroundColor: color,
-      borderDash: [4, 3],
-      pointRadius: 6,
-      pointStyle: 'rectRot',
-      showLine: false,
-    };
-    return [actual, predicted];
   });
 
   const chartHTML = '<div style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:16px"><canvas id="trendChart" height="90"></canvas></div>';
@@ -4015,12 +4012,12 @@ function _renderTrendView(data) {
 
   const rows = plants.map(p => {
     const cells = p.points.map(pt => {
-      if (!pt.isCurrent) return `<td>${pt.mpk != null ? '₹' + pt.mpk.toFixed(2) : '—'}</td>`;
-      const actualHTML = pt.mpk != null
-        ? `₹${pt.mpk.toFixed(2)} actual MTD<br><span style="font-size:11px;color:var(--muted)">${pt.days} day(s) recorded</span>`
+      if (!pt.isCurrent) return `<td>${pt.cost != null ? '₹' + L(pt.cost).toFixed(2) + ' L' : '—'}</td>`;
+      const actualHTML = pt.cost != null
+        ? `₹${L(pt.cost).toFixed(2)} L actual MTD<br><span style="font-size:11px;color:var(--muted)">${pt.days} day(s) recorded</span>`
         : `<span style="color:var(--muted)">No data yet</span>`;
-      const predHTML = p.predictedMPK != null
-        ? `<br><span style="color:var(--primary);font-weight:700">↝ ₹${p.predictedMPK.toFixed(2)} predicted</span><br><span style="font-size:11px;color:var(--muted)">from ${p.fitDayCount}-day Jul–Aug trend</span>${_r2Badge(p.r2)}`
+      const predHTML = p.predictedCost != null
+        ? `<br><span style="color:var(--primary);font-weight:700">↝ ₹${L(p.predictedCost).toFixed(2)} L predicted</span><br><span style="font-size:11px;color:var(--muted)">from ${p.fitDayCount}-day Jul–Aug trend</span>${_r2Badge(p.r2)}`
         : `<br><span style="font-size:11px;color:var(--muted)">Not enough Jul–Aug data to predict</span>`;
       return `<td>${actualHTML}${predHTML}</td>`;
     }).join('');
@@ -4043,7 +4040,7 @@ function _renderTrendView(data) {
       responsive: true,
       interaction: { mode: 'index', intersect: false },
       plugins: { legend: { position: 'top', labels: { boxWidth: 12, font: { size: 11 } } } },
-      scales: { y: { title: { display: true, text: bizMpkLabel(trendBizType || null) } } },
+      scales: { y: { title: { display: true, text: 'Total Cost (₹ Lakhs)' } } },
     },
   });
 }
