@@ -3909,11 +3909,49 @@ function _linearRegression(points) {
   return { slope, intercept, predict, r2, n };
 }
 
-// Group the backend's flat rows into per-plant data: actual monthly MPK for the last
-// 3 months (Jul/Aug/Sept-MTD, weighted avg like Report), PLUS a day-wise linear trend
-// fit across every complete day in the fully-completed reference months (Jul+Aug — the
-// `daily` series from the backend), extrapolated across the current month's days to
-// predict where MPK is headed, independent of how much of the current month is filled in.
+function _daysBetweenISO(a, b) { return (new Date(b + 'T00:00:00') - new Date(a + 'T00:00:00')) / 86400000; }
+
+// Fits the trend on WEEKLY total cost, not raw daily cost — bucketing days into weeks
+// first averages out day-to-day noise (staffing swings, one-off vendor deliveries,
+// weekday/weekend effects) so the regression can see an underlying trend that's often
+// invisible at the single-day level. x = week index since the plant's first recorded
+// day, y = that week's summed cost. The current month is then predicted by evaluating
+// the fitted weekly line at each of its days (spread evenly across the week) and summing.
+function _fitWeeklySeries(dailyList, currentMonth, daysInCurrentMonth) {
+  const sorted = [...dailyList].sort((a, b) => a.date.localeCompare(b.date));
+  if (!sorted.length) return { r2: null, weeksUsed: 0, predictedCost: null };
+  const firstDate = sorted[0].date;
+
+  const weekBuckets = {};
+  sorted.forEach(d => {
+    const wIdx = Math.floor(_daysBetweenISO(firstDate, d.date) / 7);
+    weekBuckets[wIdx] = (weekBuckets[wIdx] || 0) + d.cost;
+  });
+  const fitPoints = Object.entries(weekBuckets)
+    .map(([wIdx, cost]) => ({ x: +wIdx, y: cost }))
+    .sort((a, b) => a.x - b.x);
+  const fit = _linearRegression(fitPoints);
+
+  let predictedCost = null;
+  if (fit) {
+    const [cy, cm] = currentMonth.split('-').map(Number);
+    let sum = 0;
+    for (let i = 0; i < daysInCurrentMonth; i++) {
+      const d = new Date(cy, cm - 1, 1 + i);
+      const dateISO = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      const wIdxContinuous = _daysBetweenISO(firstDate, dateISO) / 7;
+      sum += fit.predict(wIdxContinuous) / 7;
+    }
+    predictedCost = sum;
+  }
+  return { r2: fit ? fit.r2 : null, weeksUsed: fitPoints.length, predictedCost };
+}
+
+// Group the backend's flat rows into per-plant data: actual monthly cost for the last
+// 3 months (Jul/Aug/Sept-MTD), PLUS a weekly trend fit across every complete day of each
+// plant's recorded history before this month, extrapolated across the current month's
+// days to predict its total cost — independent of how much of the current month is filled
+// in. Also builds a company-wide "Total" column the same way, summing all plants per day.
 function _computeTrend(data) {
   const byPlant = {};
   data.rows.forEach(r => {
@@ -3942,34 +3980,35 @@ function _computeTrend(data) {
       const m = p.months[mk];
       return { month: mk, cost: m ? m.cost : null, days: m ? m.days : 0, isCurrent: mk === data.currentMonth };
     });
-
-    // Fit the day-wise regression on Jul+Aug's daily total cost, x = day index (0,1,2,...)
-    const sorted = [...p.daily].sort((a, b) => a.date.localeCompare(b.date));
-    const fitPoints = sorted.map((d, i) => ({ x: i, y: d.cost }));
-    const fit = _linearRegression(fitPoints);
-
-    // Predict the current month's total cost by SUMMING the fitted line across its
-    // day-count (cost accumulates day over day, unlike a per-unit rate like MPK,
-    // which would need averaging instead) — continuing the day index straight on
-    // from where Jul+Aug's series left off.
-    let predictedCost = null;
-    if (fit) {
-      const startX = fitPoints.length; // first day of the current month, day-index-wise
-      let sum = 0;
-      for (let i = 0; i < data.daysInCurrentMonth; i++) sum += fit.predict(startX + i);
-      predictedCost = sum;
-    }
-
-    return { name, businessType: p.businessType, points, predictedCost, fitDayCount: fitPoints.length, r2: fit ? fit.r2 : null };
+    const { r2, weeksUsed, predictedCost } = _fitWeeklySeries(p.daily, data.currentMonth, data.daysInCurrentMonth);
+    return { name, businessType: p.businessType, points, predictedCost, weeksUsed, r2 };
   });
 
-  return { monthKeys, monthLabels, plants };
+  // Company-wide Total — same shape as a plant, built by summing every plant's daily
+  // cost per date (for the fit) and per month (for the actuals row).
+  const totalDailyMap = {};
+  (data.daily || []).forEach(r => {
+    totalDailyMap[r.date] = (totalDailyMap[r.date] || 0) + (parseFloat(r.total_cost) || 0);
+  });
+  const totalDaily = Object.entries(totalDailyMap).map(([date, cost]) => ({ date, cost }));
+  const totalPoints = monthKeys.map(mk => {
+    let sum = null;
+    plants.forEach(p => {
+      const pt = p.points.find(x => x.month === mk);
+      if (pt && pt.cost != null) sum = (sum || 0) + pt.cost;
+    });
+    return { month: mk, cost: sum, isCurrent: mk === data.currentMonth };
+  });
+  const totalFit = _fitWeeklySeries(totalDaily, data.currentMonth, data.daysInCurrentMonth);
+  const total = { name: 'Total', points: totalPoints, predictedCost: totalFit.predictedCost, weeksUsed: totalFit.weeksUsed, r2: totalFit.r2 };
+
+  return { monthKeys, monthLabels, plants, total };
 }
 
 function _renderTrendView(data) {
-  const { monthLabels, plants } = _computeTrend(data);
+  const { monthLabels, plants, total } = _computeTrend(data);
   const sub = document.getElementById('trendSubLabel');
-  if (sub) sub.textContent = `Predicted ${monthLabels[monthLabels.length - 1]} total cost is a day-wise trend line fit across every complete day of each plant's recorded history before this month, extrapolated forward. Values in ₹ Lakhs.`;
+  if (sub) sub.textContent = `Predicted ${monthLabels[monthLabels.length - 1]} total cost is a WEEKLY trend fit across every complete week of each plant's recorded history before this month (bucketing into weeks smooths out day-to-day noise), extrapolated forward. Values in ₹ Lakhs.`;
 
   const L = n => n / 1e5; // rupees -> lakhs
 
@@ -3977,8 +4016,11 @@ function _renderTrendView(data) {
   // One dataset per plant — Jul/Aug actual plus a single Sept value (predicted, or
   // actual once it's in) — so each plant gets exactly one legend entry. The Sept
   // point is drawn larger/diamond so it reads as "different" without a second series.
-  const datasets = plants.map((p, i) => {
-    const color = palette[i % palette.length];
+  // Total is charted too, styled distinctly (thicker, dashed grey) so it reads as a
+  // sum rather than another plant.
+  const chartPlants = [...plants, { ...total, isTotal: true }];
+  const datasets = chartPlants.map((p, i) => {
+    const color = p.isTotal ? '#475569' : palette[i % palette.length];
     const sept = p.points[p.points.length - 1];
     const septVal = sept.cost != null ? L(sept.cost) : (p.predictedCost != null ? L(p.predictedCost) : null);
     const data = [...p.points.slice(0, -1).map(pt => pt.cost != null ? L(pt.cost) : null), septVal];
@@ -3990,22 +4032,26 @@ function _renderTrendView(data) {
       backgroundColor: color,
       spanGaps: true,
       tension: 0.25,
-      borderWidth: 2,
+      borderWidth: p.isTotal ? 3 : 2,
+      borderDash: p.isTotal ? [6, 3] : undefined,
       pointRadius: data.map((_, idx) => idx === data.length - 1 && isPredictedPoint ? 7 : 3),
       pointStyle: data.map((_, idx) => idx === data.length - 1 && isPredictedPoint ? 'rectRot' : 'circle'),
-      segment: isPredictedPoint ? { borderDash: ctx => ctx.p1DataIndex === data.length - 1 ? [5, 4] : undefined } : undefined,
+      segment: isPredictedPoint ? { borderDash: ctx => ctx.p1DataIndex === data.length - 1 ? [5, 4] : (p.isTotal ? [6, 3] : undefined) } : undefined,
     };
   });
 
   const chartHTML = '<div style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:16px"><canvas id="trendChart" height="90"></canvas></div>';
 
-  // One table, plant names across the top (same layout as the Report tab), metrics
-  // running down — actual months, actual MTD, predicted, then trend quality.
+  // One table, plant names across the top (same layout as the Report tab) plus a
+  // Total column, metrics running down — actual months, actual MTD, predicted,
+  // weeks the fit is based on, then trend quality.
   const currentLabel = monthLabels[monthLabels.length - 1];
-  const head = `<th>Metric</th>` + plants.map(p => `<th>${p.name}</th>`).join('');
+  const tableCols = [...plants, total];
+  const head = `<th>Metric</th>` + tableCols.map(p => `<th${p.name === 'Total' ? ' class="rep-total-col"' : ''}>${p.name}</th>`).join('');
 
   const row = (label, cellFn) =>
-    `<tr><td class="rep-metric-name">${label}</td>` + plants.map(p => `<td>${cellFn(p)}</td>`).join('') + `</tr>`;
+    `<tr><td class="rep-metric-name">${label}</td>` +
+    tableCols.map(p => `<td${p.name === 'Total' ? ' class="rep-total-col"' : ''}>${cellFn(p)}</td>`).join('') + `</tr>`;
 
   const monthRows = monthLabels.slice(0, -1).map((label, idx) =>
     row(label, p => { const v = p.points[idx].cost; return v != null ? '₹' + L(v).toFixed(2) + ' L' : '—'; })
@@ -4022,6 +4068,8 @@ function _renderTrendView(data) {
       : '<span style="color:var(--muted)">—</span>'
   );
 
+  const weeksRow = row('Weeks Used', p => p.weeksUsed > 0 ? `${p.weeksUsed} week(s)` : '<span style="color:var(--muted)">—</span>');
+
   // R² tells you whether a plant's recorded daily costs actually trace a real trend
   // or are just scattered/noisy — closer to 1 means the prediction above is riding a
   // real pattern; closer to 0 means treat that prediction with real caution.
@@ -4035,14 +4083,14 @@ function _renderTrendView(data) {
   }
   const trendRow = row('Trend Quality (R²)', p => _r2Cell(p.r2));
 
-  const tableHTML = `<div class="rep-table-wrap"><table class="rep-table">
+  const tableHTML = `<div class="rep-table-wrap"><table class="rep-table" style="font-size:15px">
     <thead><tr>${head}</tr></thead>
-    <tbody>${monthRows}${mtdRow}${predRow}${trendRow}</tbody>
+    <tbody>${monthRows}${mtdRow}${predRow}${weeksRow}${trendRow}</tbody>
   </table></div>
-  <p style="font-size:12px;color:var(--muted);margin-top:10px;line-height:1.5">
-    <strong>Trend Quality (R²)</strong> shows how well a straight line actually fits each plant's day-by-day cost history (0 to 1).
+  <p style="font-size:13px;color:var(--muted);margin-top:10px;line-height:1.5">
+    <strong>Trend Quality (R²)</strong> shows how well a straight line actually fits each plant's week-by-week cost history (0 to 1).
     <strong style="color:#166534">Consistent</strong> means cost has been moving steadily in one direction, so the prediction above is likely meaningful.
-    <strong style="color:#991b1b">Scattered</strong> means the days bounce around too much for a straight-line trend to mean much — treat that plant's prediction as a rough guess, not a forecast.
+    <strong style="color:#991b1b">Scattered</strong> means the weeks bounce around too much for a straight-line trend to mean much — treat that plant's prediction as a rough guess, not a forecast.
   </p>`;
 
   document.getElementById('trendContent').innerHTML = chartHTML + tableHTML;
