@@ -3851,6 +3851,7 @@ function _renderReportView(data) {
 
 let trendBizType = '';
 let _trendChart = null;
+let _trendMpkChart = null;
 let _trendData = null;
 
 function openTrend() {
@@ -3995,6 +3996,7 @@ function _computeTrend(data) {
       total: parseFloat(r.total_cost) || 0,
       attendance: parseFloat(r.attendance_cost) || 0,
       kg: parseFloat(r.kg_cost) || 0,
+      qty: parseFloat(r.total_qty) || 0,
       days: parseInt(r.days) || 0,
     };
   });
@@ -4018,23 +4020,30 @@ function _computeTrend(data) {
   const plants = Object.entries(byPlant).map(([name, p]) => {
     const points = monthKeys.map(mk => {
       const m = p.months[mk];
-      return { month: mk, cost: m ? m.total : null, days: m ? m.days : 0, isCurrent: mk === data.currentMonth };
+      const mpk = m && m.qty > 0 ? m.total / m.qty : null;
+      return { month: mk, cost: m ? m.total : null, qty: m ? m.qty : null, mpk, days: m ? m.days : 0, isCurrent: mk === data.currentMonth };
     });
     const lastActual = p.months[lastCompleteMonthKey];
 
     const totalFit = _fitMetric(p.daily, monthKeys, data.currentMonth, data.daysInCurrentMonth, 'total');
     const attFit    = _fitMetric(p.daily, monthKeys, data.currentMonth, data.daysInCurrentMonth, 'attendance');
     const kgFit      = _fitMetric(p.daily, monthKeys, data.currentMonth, data.daysInCurrentMonth, 'kg');
+    const qtyDaily   = p.daily.map(r => ({ date: r.date, cost: parseFloat(r.sale_qty) || 0 }));
+    const qtyFit     = _fitWeeklySeries(qtyDaily, data.currentMonth, data.daysInCurrentMonth);
 
     const totalClamp = _clampToPlausible(totalFit.predictedCost, lastActual ? lastActual.total : null);
     const attClamp    = _clampToPlausible(attFit.predictedCost,    lastActual ? lastActual.attendance : null);
     const kgClamp      = _clampToPlausible(kgFit.predictedCost,      lastActual ? lastActual.kg : null);
+    const qtyClamp      = _clampToPlausible(qtyFit.predictedCost,      lastActual ? lastActual.qty : null);
+
+    const predictedMPK = totalClamp.value != null && qtyClamp.value > 0 ? totalClamp.value / qtyClamp.value : null;
 
     return {
       name, businessType: p.businessType, points,
       predictedCost: totalClamp.value, predictedClamped: totalClamp.clamped,
       predictedAttendance: attClamp.value, predictedAttendanceClamped: attClamp.clamped,
       predictedKg: kgClamp.value, predictedKgClamped: kgClamp.clamped,
+      predictedQty: qtyClamp.value, predictedMPK,
       weeksUsed: totalFit.weeksUsed, r2: totalFit.r2,
     };
   });
@@ -4047,20 +4056,27 @@ function _computeTrend(data) {
   // plants' data starts, which isn't a real trend and makes that fit meaningless.
   // Summing already-reliable per-plant numbers sidesteps that entirely and keeps Total
   // mathematically consistent with its parts.
+  // MPK isn't additive across plants — Total's MPK for any month has to be recomputed
+  // as (summed cost) / (summed qty), not an average of the individual plants' MPKs.
   const totalPoints = monthKeys.map(mk => {
-    let sum = null;
+    let costSum = null, qtySum = null;
     plants.forEach(p => {
       const pt = p.points.find(x => x.month === mk);
-      if (pt && pt.cost != null) sum = (sum || 0) + pt.cost;
+      if (pt && pt.cost != null) costSum = (costSum || 0) + pt.cost;
+      if (pt && pt.qty  != null) qtySum  = (qtySum  || 0) + pt.qty;
     });
-    return { month: mk, cost: sum, isCurrent: mk === data.currentMonth };
+    return { month: mk, cost: costSum, qty: qtySum, mpk: qtySum > 0 ? costSum / qtySum : null, isCurrent: mk === data.currentMonth };
   });
   const sumField = key => { let s = null; plants.forEach(p => { if (p[key] != null) s = (s || 0) + p[key]; }); return s; };
+  const predictedTotalCost = sumField('predictedCost');
+  const predictedTotalQty  = sumField('predictedQty');
   const total = {
     name: 'Total', points: totalPoints,
-    predictedCost: sumField('predictedCost'),
+    predictedCost: predictedTotalCost,
     predictedAttendance: sumField('predictedAttendance'),
     predictedKg: sumField('predictedKg'),
+    predictedQty: predictedTotalQty,
+    predictedMPK: predictedTotalQty > 0 && predictedTotalCost != null ? predictedTotalCost / predictedTotalQty : null,
     predictedClamped: plants.some(p => p.predictedClamped),
     weeksUsed: null, r2: null,
   };
@@ -4125,19 +4141,24 @@ function _renderTrendView(data) {
     return v != null ? '₹' + L(v).toFixed(2) + ' L' : '<span style="color:var(--muted)">No data yet</span>';
   });
 
-  // Total prediction is bold/primary; Attendance and Per-KG sit underneath as a compact
-  // breakdown of the same number — so all three are visible together for comparison,
-  // without needing three separate tables or a toggle that hides two of them at a time.
-  const predRow = row(`Predicted ${currentLabel}`, p => {
-    if (p.predictedCost == null) return '<span style="color:var(--muted)">—</span>';
-    const clampNote = p.predictedClamped
-      ? `<br><span style="font-size:11px;color:#92400e" title="The raw trend fit predicted a number too far from last month's actual to be plausible — capped to a realistic range instead">⚠ capped to a plausible range</span>`
-      : '';
-    const attHTML = p.predictedAttendance != null ? `₹${L(p.predictedAttendance).toFixed(2)} L attendance` : '—';
-    const kgHTML   = p.predictedKg != null         ? `₹${L(p.predictedKg).toFixed(2)} L per-kg`             : '—';
-    return `<span style="color:var(--primary);font-weight:700;font-size:1.05em">₹${L(p.predictedCost).toFixed(2)} L</span>${clampNote}
-      <br><span style="font-size:11px;color:var(--muted)">${attHTML} + ${kgHTML}</span>`;
-  });
+  const clampIcon = p => p.predictedClamped
+    ? ` <span style="color:#92400e;cursor:help" title="Raw trend fit was too far from last month's actual to be plausible — capped to a realistic range">⚠</span>`
+    : '';
+
+  // Separate rows for Attendance and Per-KG, each its own single-line cell (not stacked
+  // inside the Total row) — Total Cost comes last and bold, as the headline number the
+  // other two roll up into.
+  const predAttRow = row(`Predicted Attendance Cost`, p =>
+    p.predictedAttendance != null ? `₹${L(p.predictedAttendance).toFixed(2)} L` : '<span style="color:var(--muted)">—</span>'
+  );
+  const predKgRow = row(`Predicted Per-KG Cost`, p =>
+    p.predictedKg != null ? `₹${L(p.predictedKg).toFixed(2)} L` : '<span style="color:var(--muted)">—</span>'
+  );
+  const predTotalRow = row(`Predicted Total Cost`, p =>
+    p.predictedCost != null
+      ? `<span style="color:var(--primary);font-weight:700">₹${L(p.predictedCost).toFixed(2)} L</span>${clampIcon(p)}`
+      : '<span style="color:var(--muted)">—</span>'
+  );
 
   const weeksRow = row('Weeks Used', p => p.weeksUsed > 0 ? `${p.weeksUsed} week(s)` : '<span style="color:var(--muted)">—</span>');
 
@@ -4156,7 +4177,7 @@ function _renderTrendView(data) {
 
   const tableHTML = `<div class="rep-table-wrap"><table class="rep-table" style="font-size:15px">
     <thead><tr>${head}</tr></thead>
-    <tbody>${monthRows}${mtdRow}${predRow}${weeksRow}${trendRow}</tbody>
+    <tbody>${monthRows}${mtdRow}${predAttRow}${predKgRow}${predTotalRow}${weeksRow}${trendRow}</tbody>
   </table></div>
   <p style="font-size:13px;color:var(--muted);margin-top:10px;line-height:1.5">
     <strong>Trend Quality (R²)</strong> shows how well a straight line actually fits each plant's week-by-week cost history (0 to 1).
@@ -4164,7 +4185,52 @@ function _renderTrendView(data) {
     <strong style="color:#991b1b">Scattered</strong> means the weeks bounce around too much for a straight-line trend to mean much — treat that plant's prediction as a rough guess, not a forecast.
   </p>`;
 
-  document.getElementById('trendContent').innerHTML = chartHTML + tableHTML;
+  // ── MPK section — same layout, same plants/Total columns, but cost-per-kg instead
+  // of total ₹. Predicted MPK = predicted total cost ÷ predicted quantity (not a
+  // separate regression on MPK itself, since MPK is a ratio, not something that
+  // accumulates the way cost does).
+  const mpkDatasets = chartPlants.map((p, i) => {
+    const color = p.isTotal ? '#475569' : palette[i % palette.length];
+    const sept = p.points[p.points.length - 1];
+    const septVal = sept.mpk != null ? sept.mpk : (p.predictedMPK != null ? p.predictedMPK : null);
+    const dat = [...p.points.slice(0, -1).map(pt => pt.mpk != null ? pt.mpk : null), septVal];
+    const isPredictedPoint = sept.mpk == null && p.predictedMPK != null;
+    return {
+      label: p.name,
+      data: dat,
+      borderColor: color,
+      backgroundColor: color,
+      spanGaps: true,
+      tension: 0.25,
+      borderWidth: p.isTotal ? 3 : 2,
+      borderDash: p.isTotal ? [6, 3] : undefined,
+      pointRadius: dat.map((_, idx) => idx === dat.length - 1 && isPredictedPoint ? 7 : 3),
+      pointStyle: dat.map((_, idx) => idx === dat.length - 1 && isPredictedPoint ? 'rectRot' : 'circle'),
+      segment: isPredictedPoint ? { borderDash: ctx => ctx.p1DataIndex === dat.length - 1 ? [5, 4] : (p.isTotal ? [6, 3] : undefined) } : undefined,
+    };
+  });
+  const mpkChartHTML = '<div style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:16px;margin:24px 0 16px"><canvas id="trendMpkChart" height="90"></canvas></div>';
+
+  const mpkMonthRows = monthLabels.slice(0, -1).map((label, idx) =>
+    row(label, p => { const v = p.points[idx].mpk; return v != null ? '₹' + v.toFixed(2) : '—'; })
+  ).join('');
+  const mpkMtdRow = row(`${currentLabel} (MTD)`, p => {
+    const v = p.points[p.points.length - 1].mpk;
+    return v != null ? '₹' + v.toFixed(2) : '<span style="color:var(--muted)">No data yet</span>';
+  });
+  const mpkPredRow = row(`Predicted ${currentLabel} MPK`, p =>
+    p.predictedMPK != null
+      ? `<span style="color:var(--primary);font-weight:700">₹${p.predictedMPK.toFixed(2)}</span>`
+      : '<span style="color:var(--muted)">—</span>'
+  );
+
+  const mpkTableHTML = `<div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:8px">Cost Per Kg (MPK)</div>
+  <div class="rep-table-wrap"><table class="rep-table" style="font-size:15px">
+    <thead><tr>${head}</tr></thead>
+    <tbody>${mpkMonthRows}${mpkMtdRow}${mpkPredRow}</tbody>
+  </table></div>`;
+
+  document.getElementById('trendContent').innerHTML = chartHTML + tableHTML + mpkChartHTML + mpkTableHTML;
 
   if (_trendChart) { _trendChart.destroy(); _trendChart = null; }
   const ctx = document.getElementById('trendChart').getContext('2d');
@@ -4176,6 +4242,19 @@ function _renderTrendView(data) {
       interaction: { mode: 'index', intersect: false },
       plugins: { legend: { position: 'top', labels: { boxWidth: 12, font: { size: 11 } } } },
       scales: { y: { title: { display: true, text: 'Total Cost (₹ Lakhs)' } } },
+    },
+  });
+
+  if (_trendMpkChart) { _trendMpkChart.destroy(); _trendMpkChart = null; }
+  const mpkCtx = document.getElementById('trendMpkChart').getContext('2d');
+  _trendMpkChart = new Chart(mpkCtx, {
+    type: 'line',
+    data: { labels: monthLabels, datasets: mpkDatasets },
+    options: {
+      responsive: true,
+      interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { position: 'top', labels: { boxWidth: 12, font: { size: 11 } } } },
+      scales: { y: { title: { display: true, text: 'MPK (₹/kg)' } } },
     },
   });
 }
