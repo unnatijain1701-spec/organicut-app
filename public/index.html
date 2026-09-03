@@ -4045,6 +4045,11 @@ function _computeTrend(data) {
       predictedKg: kgClamp.value, predictedKgClamped: kgClamp.clamped,
       predictedQty: qtyClamp.value, predictedMPK,
       weeksUsed: totalFit.weeksUsed, r2: totalFit.r2,
+      // Last complete month's actuals, for a "vs last month" % badge next to each
+      // predicted number — without these there's nothing to judge the prediction against.
+      lastMonthTotal: lastActual ? lastActual.total : null,
+      lastMonthAttendance: lastActual ? lastActual.attendance : null,
+      lastMonthKg: lastActual ? lastActual.kg : null,
     };
   });
 
@@ -4079,6 +4084,9 @@ function _computeTrend(data) {
     predictedMPK: predictedTotalQty > 0 && predictedTotalCost != null ? predictedTotalCost / predictedTotalQty : null,
     predictedClamped: plants.some(p => p.predictedClamped),
     weeksUsed: null, r2: null,
+    lastMonthTotal: sumField('lastMonthTotal'),
+    lastMonthAttendance: sumField('lastMonthAttendance'),
+    lastMonthKg: sumField('lastMonthKg'),
   };
 
   return { monthKeys, monthLabels, plants, total };
@@ -4145,18 +4153,34 @@ function _renderTrendView(data) {
     ? ` <span style="color:#92400e;cursor:help" title="Raw trend fit was too far from last month's actual to be plausible — capped to a realistic range">⚠</span>`
     : '';
 
+  // % change vs the last complete month — without this there's nothing to judge
+  // whether a predicted number is actually good or bad news. Same up/down coloring
+  // as the Report tab's MPK Change badge.
+  function _changeBadge(predicted, lastActual) {
+    if (predicted == null || lastActual == null || lastActual <= 0) return '';
+    const pct = ((predicted - lastActual) / lastActual) * 100;
+    const color = pct > 0 ? '#991b1b' : pct < 0 ? '#166534' : 'var(--muted)';
+    const arrow = pct > 0 ? '▲' : pct < 0 ? '▼' : '';
+    return ` <span style="font-size:11px;font-weight:700;color:${color}">${pct >= 0 ? '+' : ''}${pct.toFixed(1)}% ${arrow}</span>`;
+  }
+
   // Separate rows for Attendance and Per-KG, each its own single-line cell (not stacked
   // inside the Total row) — Total Cost comes last and bold, as the headline number the
-  // other two roll up into.
+  // other two roll up into. Each carries a "vs last month" % badge so it's clear whether
+  // the prediction is actually rising or falling, not just what the raw number is.
   const predAttRow = row(`Predicted Attendance Cost`, p =>
-    p.predictedAttendance != null ? `₹${L(p.predictedAttendance).toFixed(2)} L` : '<span style="color:var(--muted)">—</span>'
+    p.predictedAttendance != null
+      ? `₹${L(p.predictedAttendance).toFixed(2)} L${_changeBadge(p.predictedAttendance, p.lastMonthAttendance)}`
+      : '<span style="color:var(--muted)">—</span>'
   );
   const predKgRow = row(`Predicted Per-KG Cost`, p =>
-    p.predictedKg != null ? `₹${L(p.predictedKg).toFixed(2)} L` : '<span style="color:var(--muted)">—</span>'
+    p.predictedKg != null
+      ? `₹${L(p.predictedKg).toFixed(2)} L${_changeBadge(p.predictedKg, p.lastMonthKg)}`
+      : '<span style="color:var(--muted)">—</span>'
   );
   const predTotalRow = row(`Predicted Total Cost`, p =>
     p.predictedCost != null
-      ? `<span style="color:var(--primary);font-weight:700">₹${L(p.predictedCost).toFixed(2)} L</span>${clampIcon(p)}`
+      ? `<span style="color:var(--primary);font-weight:700">₹${L(p.predictedCost).toFixed(2)} L</span>${clampIcon(p)}${_changeBadge(p.predictedCost, p.lastMonthTotal)}`
       : '<span style="color:var(--muted)">—</span>'
   );
 
@@ -4218,11 +4242,11 @@ function _renderTrendView(data) {
     const v = p.points[p.points.length - 1].mpk;
     return v != null ? '₹' + v.toFixed(2) : '<span style="color:var(--muted)">No data yet</span>';
   });
-  const mpkPredRow = row(`Predicted ${currentLabel} MPK`, p =>
-    p.predictedMPK != null
-      ? `<span style="color:var(--primary);font-weight:700">₹${p.predictedMPK.toFixed(2)}</span>`
-      : '<span style="color:var(--muted)">—</span>'
-  );
+  const mpkPredRow = row(`Predicted ${currentLabel} MPK`, p => {
+    if (p.predictedMPK == null) return '<span style="color:var(--muted)">—</span>';
+    const lastMonthMPK = p.points[p.points.length - 2]?.mpk ?? null;
+    return `<span style="color:var(--primary);font-weight:700">₹${p.predictedMPK.toFixed(2)}</span>${_changeBadge(p.predictedMPK, lastMonthMPK)}`;
+  });
 
   const mpkTableHTML = `<div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:8px">Cost Per Kg (MPK)</div>
   <div class="rep-table-wrap"><table class="rep-table" style="font-size:15px">
