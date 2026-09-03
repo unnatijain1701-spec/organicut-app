@@ -3969,7 +3969,7 @@ function _computeTrend(data) {
 function _renderTrendView(data) {
   const { monthLabels, plants } = _computeTrend(data);
   const sub = document.getElementById('trendSubLabel');
-  if (sub) sub.textContent = `Predicted ${monthLabels[monthLabels.length - 1]} total cost is a day-wise trend line fit across every complete day in the prior two months, extrapolated forward — shown alongside actual ${monthLabels[monthLabels.length - 1]} month-to-date as it fills in. Values in ₹ Lakhs.`;
+  if (sub) sub.textContent = `Predicted ${monthLabels[monthLabels.length - 1]} total cost is a day-wise trend line fit across every complete day of each plant's recorded history before this month, extrapolated forward. Values in ₹ Lakhs.`;
 
   const L = n => n / 1e5; // rupees -> lakhs
 
@@ -3999,49 +3999,53 @@ function _renderTrendView(data) {
 
   const chartHTML = '<div style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:16px"><canvas id="trendChart" height="90"></canvas></div>';
 
-  // R² tells you whether the Jul-Aug days actually trace a real trend or are just
-  // scattered/noisy — a high day-count doesn't fix a low R², and vice versa. Kept as a
-  // short colored word + tooltip, not a full sentence, to stay out of the way.
-  function _r2Badge(r2) {
+  // One table, plant names across the top (same layout as the Report tab), metrics
+  // running down — actual months, actual MTD, predicted, then trend quality.
+  const currentLabel = monthLabels[monthLabels.length - 1];
+  const head = `<th>Metric</th>` + plants.map(p => `<th>${p.name}</th>`).join('');
+
+  const row = (label, cellFn) =>
+    `<tr><td class="rep-metric-name">${label}</td>` + plants.map(p => `<td>${cellFn(p)}</td>`).join('') + `</tr>`;
+
+  const monthRows = monthLabels.slice(0, -1).map((label, idx) =>
+    row(label, p => { const v = p.points[idx].cost; return v != null ? '₹' + L(v).toFixed(2) + ' L' : '—'; })
+  ).join('');
+
+  const mtdRow = row(`${currentLabel} (MTD)`, p => {
+    const v = p.points[p.points.length - 1].cost;
+    return v != null ? '₹' + L(v).toFixed(2) + ' L' : '<span style="color:var(--muted)">No data yet</span>';
+  });
+
+  const predRow = row(`Predicted ${currentLabel}`, p =>
+    p.predictedCost != null
+      ? `<span style="color:var(--primary);font-weight:700">₹${L(p.predictedCost).toFixed(2)} L</span>`
+      : '<span style="color:var(--muted)">—</span>'
+  );
+
+  // R² tells you whether a plant's recorded daily costs actually trace a real trend
+  // or are just scattered/noisy — closer to 1 means the prediction above is riding a
+  // real pattern; closer to 0 means treat that prediction with real caution.
+  function _r2Cell(r2) {
     if (r2 == null) return '<span style="color:var(--muted)">—</span>';
     let label, color;
     if (r2 >= 0.5)      { label = 'Consistent';  color = '#166534'; }
     else if (r2 >= 0.2) { label = 'Weak';         color = '#92400e'; }
     else                { label = 'Scattered';    color = '#991b1b'; }
-    return `<span style="font-weight:700;color:${color}" title="R² = ${r2.toFixed(2)} — how well a straight line fits the Jul-Aug daily costs">${label} (R²=${r2.toFixed(2)})</span>`;
+    return `<span style="font-weight:700;color:${color}">${label} (${r2.toFixed(2)})</span>`;
   }
+  const trendRow = row('Trend Quality (R²)', p => _r2Cell(p.r2));
 
-  // Table 1: plain actuals — one number per cell, nothing stacked.
-  const actualRows = plants.map(p => {
-    const cells = p.points.map(pt => {
-      if (!pt.isCurrent) return `<td>${pt.cost != null ? '₹' + L(pt.cost).toFixed(2) + ' L' : '—'}</td>`;
-      return `<td>${pt.cost != null ? '₹' + L(pt.cost).toFixed(2) + ' L' : '<span style="color:var(--muted)">No data yet</span>'}</td>`;
-    }).join('');
-    return `<tr><td class="rep-metric-name">${p.name}</td>${cells}</tr>`;
-  }).join('');
-  const actualTableHTML = `<div class="rep-table-wrap"><table class="rep-table">
-    <thead><tr><th>Plant</th>${monthLabels.map(l => `<th>${l}</th>`).join('')}</tr></thead>
-    <tbody>${actualRows}</tbody>
-  </table></div>`;
+  const tableHTML = `<div class="rep-table-wrap"><table class="rep-table">
+    <thead><tr>${head}</tr></thead>
+    <tbody>${monthRows}${mtdRow}${predRow}${trendRow}</tbody>
+  </table></div>
+  <p style="font-size:12px;color:var(--muted);margin-top:10px;line-height:1.5">
+    <strong>Trend Quality (R²)</strong> shows how well a straight line actually fits each plant's day-by-day cost history (0 to 1).
+    <strong style="color:#166534">Consistent</strong> means cost has been moving steadily in one direction, so the prediction above is likely meaningful.
+    <strong style="color:#991b1b">Scattered</strong> means the days bounce around too much for a straight-line trend to mean much — treat that plant's prediction as a rough guess, not a forecast.
+  </p>`;
 
-  // Table 2: the prediction, in its own compact table — one row per plant, one
-  // value per column, so it doesn't compete with the actuals table above.
-  const currentLabel = monthLabels[monthLabels.length - 1];
-  const predRows = plants.map(p => `<tr>
-    <td class="rep-metric-name">${p.name}</td>
-    <td>${p.predictedCost != null ? '₹' + L(p.predictedCost).toFixed(2) + ' L' : '<span style="color:var(--muted)">—</span>'}</td>
-    <td>${_r2Badge(p.r2)}</td>
-    <td>${p.fitDayCount} days</td>
-  </tr>`).join('');
-  const predTableHTML = `<div style="margin-top:18px">
-    <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:8px">Predicted ${currentLabel} (from Jul–Aug trend)</div>
-    <div class="rep-table-wrap"><table class="rep-table">
-      <thead><tr><th>Plant</th><th>Predicted Cost</th><th>Trend Quality</th><th>Days Used</th></tr></thead>
-      <tbody>${predRows}</tbody>
-    </table></div>
-  </div>`;
-
-  document.getElementById('trendContent').innerHTML = chartHTML + actualTableHTML + predTableHTML;
+  document.getElementById('trendContent').innerHTML = chartHTML + tableHTML;
 
   if (_trendChart) { _trendChart.destroy(); _trendChart = null; }
   const ctx = document.getElementById('trendChart').getContext('2d');

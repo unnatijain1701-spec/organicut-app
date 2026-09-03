@@ -382,18 +382,24 @@ router.get('/trend', async (req, res) => {
       ORDER BY p.display_order, month
     `, params);
 
-    // Day-level MPK for every complete day BEFORE the current month (i.e. the fully
-    // completed reference months) — this is the series the frontend fits a day-wise
-    // linear trend to, then extrapolates across the current month's days to predict it.
+    // Day-level cost for every complete day BEFORE the current month — this is the
+    // series the frontend fits a day-wise linear trend to, then extrapolates across
+    // the current month's days to predict it. Deliberately NOT limited to the same
+    // 2-month window as the `rows` query above — a plant with more recorded history
+    // (e.g. 3 full months instead of 2) should get a richer, more reliable fit from
+    // all of it, not have its earlier months thrown away to match the shortest plant.
     const currentMonthStart = `${iso(now).slice(0, 7)}-01`;
+    const dailyParams = [currentMonthStart];
+    let dailyBtFilter = '';
+    if (businessType) { dailyParams.push(businessType); dailyBtFilter = `AND p.business_type = $${dailyParams.length}`; }
     const { rows: daily } = await db.query(`
       SELECT p.id, p.name, p.display_order,
         TO_CHAR(dr.record_date, 'YYYY-MM-DD') AS date,
         dr.total_cost, dr.sale_qty
       FROM daily_records dr JOIN plants p ON p.id = dr.plant_id
-      WHERE dr.record_date >= $1 AND dr.record_date < $${params.length + 1} AND ${COMPLETE} ${btFilter}
+      WHERE dr.record_date < $1 AND ${COMPLETE} ${dailyBtFilter}
       ORDER BY p.display_order, dr.record_date ASC
-    `, [...params, currentMonthStart]);
+    `, dailyParams);
 
     res.json({
       rows,
