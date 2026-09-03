@@ -4000,36 +4000,48 @@ function _renderTrendView(data) {
   const chartHTML = '<div style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:16px"><canvas id="trendChart" height="90"></canvas></div>';
 
   // R² tells you whether the Jul-Aug days actually trace a real trend or are just
-  // scattered/noisy — a high day-count doesn't fix a low R², and vice versa.
+  // scattered/noisy — a high day-count doesn't fix a low R², and vice versa. Kept as a
+  // short colored word + tooltip, not a full sentence, to stay out of the way.
   function _r2Badge(r2) {
-    if (r2 == null) return '';
+    if (r2 == null) return '<span style="color:var(--muted)">—</span>';
     let label, color;
-    if (r2 >= 0.5)      { label = 'Consistent trend';   color = '#166534'; }
-    else if (r2 >= 0.2) { label = 'Weak trend';          color = '#92400e'; }
-    else                { label = 'Too scattered to trust'; color = '#991b1b'; }
-    return `<br><span style="font-size:11px;font-weight:700;color:${color}">R²=${r2.toFixed(2)} · ${label}</span>`;
+    if (r2 >= 0.5)      { label = 'Consistent';  color = '#166534'; }
+    else if (r2 >= 0.2) { label = 'Weak';         color = '#92400e'; }
+    else                { label = 'Scattered';    color = '#991b1b'; }
+    return `<span style="font-weight:700;color:${color}" title="R² = ${r2.toFixed(2)} — how well a straight line fits the Jul-Aug daily costs">${label} (R²=${r2.toFixed(2)})</span>`;
   }
 
-  const rows = plants.map(p => {
+  // Table 1: plain actuals — one number per cell, nothing stacked.
+  const actualRows = plants.map(p => {
     const cells = p.points.map(pt => {
       if (!pt.isCurrent) return `<td>${pt.cost != null ? '₹' + L(pt.cost).toFixed(2) + ' L' : '—'}</td>`;
-      const actualHTML = pt.cost != null
-        ? `₹${L(pt.cost).toFixed(2)} L actual MTD<br><span style="font-size:11px;color:var(--muted)">${pt.days} day(s) recorded</span>`
-        : `<span style="color:var(--muted)">No data yet</span>`;
-      const predHTML = p.predictedCost != null
-        ? `<br><span style="color:var(--primary);font-weight:700">↝ ₹${L(p.predictedCost).toFixed(2)} L predicted</span><br><span style="font-size:11px;color:var(--muted)">from ${p.fitDayCount}-day Jul–Aug trend</span>${_r2Badge(p.r2)}`
-        : `<br><span style="font-size:11px;color:var(--muted)">Not enough Jul–Aug data to predict</span>`;
-      return `<td>${actualHTML}${predHTML}</td>`;
+      return `<td>${pt.cost != null ? '₹' + L(pt.cost).toFixed(2) + ' L' : '<span style="color:var(--muted)">No data yet</span>'}</td>`;
     }).join('');
     return `<tr><td class="rep-metric-name">${p.name}</td>${cells}</tr>`;
   }).join('');
-
-  const tableHTML = `<div class="rep-table-wrap"><table class="rep-table">
+  const actualTableHTML = `<div class="rep-table-wrap"><table class="rep-table">
     <thead><tr><th>Plant</th>${monthLabels.map(l => `<th>${l}</th>`).join('')}</tr></thead>
-    <tbody>${rows}</tbody>
+    <tbody>${actualRows}</tbody>
   </table></div>`;
 
-  document.getElementById('trendContent').innerHTML = chartHTML + tableHTML;
+  // Table 2: the prediction, in its own compact table — one row per plant, one
+  // value per column, so it doesn't compete with the actuals table above.
+  const currentLabel = monthLabels[monthLabels.length - 1];
+  const predRows = plants.map(p => `<tr>
+    <td class="rep-metric-name">${p.name}</td>
+    <td>${p.predictedCost != null ? '₹' + L(p.predictedCost).toFixed(2) + ' L' : '<span style="color:var(--muted)">—</span>'}</td>
+    <td>${_r2Badge(p.r2)}</td>
+    <td>${p.fitDayCount} days</td>
+  </tr>`).join('');
+  const predTableHTML = `<div style="margin-top:18px">
+    <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:8px">Predicted ${currentLabel} (from Jul–Aug trend)</div>
+    <div class="rep-table-wrap"><table class="rep-table">
+      <thead><tr><th>Plant</th><th>Predicted Cost</th><th>Trend Quality</th><th>Days Used</th></tr></thead>
+      <tbody>${predRows}</tbody>
+    </table></div>
+  </div>`;
+
+  document.getElementById('trendContent').innerHTML = chartHTML + actualTableHTML + predTableHTML;
 
   if (_trendChart) { _trendChart.destroy(); _trendChart = null; }
   const ctx = document.getElementById('trendChart').getContext('2d');
