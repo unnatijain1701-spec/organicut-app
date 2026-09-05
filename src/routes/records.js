@@ -88,16 +88,26 @@ router.get('/export', async (req, res) => {
 
 // GET /api/records/export-all?month=YYYY-MM&businessType=  — superadmin: full detail for ALL plants,
 // optionally scoped to one month and/or one business type. Omit month for a full all-time export.
+// Alternatively, pass from=YYYY-MM-DD&to=YYYY-MM-DD for a specific range spanning any number of
+// months (e.g. "just July and August") — from/to take priority over month when both are given.
 router.get('/export-all', async (req, res) => {
   if (req.user.role !== 'superadmin')
     return res.status(403).json({ error: 'Superadmin only' });
   const month = (req.query.month || '').slice(0, 7);
   const hasMonth = /^\d{4}-\d{2}$/.test(month);
+  const from = (req.query.from || '').slice(0, 10);
+  const to   = (req.query.to   || '').slice(0, 10);
+  const hasRange = /^\d{4}-\d{2}-\d{2}$/.test(from) && /^\d{4}-\d{2}-\d{2}$/.test(to);
   const businessType = req.query.businessType || null;
   try {
     const params = [];
     const filters = [];
-    if (hasMonth) { params.push(month); filters.push(`TO_CHAR(dr.record_date, 'YYYY-MM') = $${params.length}`); }
+    if (hasRange) {
+      params.push(from, to);
+      filters.push(`dr.record_date BETWEEN $${params.length - 1} AND $${params.length}`);
+    } else if (hasMonth) {
+      params.push(month); filters.push(`TO_CHAR(dr.record_date, 'YYYY-MM') = $${params.length}`);
+    }
     if (businessType) { params.push(businessType); filters.push(`p.business_type = $${params.length}`); }
     const where = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
 

@@ -1395,7 +1395,7 @@ tr.dash-row-alt td { background: #f7fdf9; }
           <button onclick="exportExcel();toggleExportDd()">Export Today</button>
           <button onclick="exportMonthRecords();toggleExportDd()">Export This Month</button>
           <button onclick="exportAllRecords();toggleExportDd()">Export All Records</button>
-          <button id="exportAllPlantsBtn" style="display:none" onclick="exportAllPlantsMonth();toggleExportDd()">⬇ Export All Plants (Month)</button>
+          <button id="exportAllPlantsBtn" style="display:none" onclick="exportAllPlantsMonth();toggleExportDd()">⬇ Export All Plants (Months)</button>
           <button id="reportMenuBtn" style="display:none" onclick="openPlantReport();toggleExportDd()">📑 Multi-Plant Report</button>
           <button onclick="downloadBackup();toggleExportDd()">Download Backup (JSON)</button>
         </div>
@@ -4413,16 +4413,27 @@ async function exportAllPlantsMonth() {
   }
   const d = new Date();
   const ym = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
-  const month = prompt('Enter month to export for ALL plants (YYYY-MM):', ym);
-  if (!month || !/^\d{4}-\d{2}$/.test(month)) { showToast('⚠ Invalid month format. Use YYYY-MM.', true); return; }
-  showToast('⏳ Fetching all plants’ records for ' + month + '…', false);
+  const fromMonth = prompt('Export ALL plants — from which month? (YYYY-MM):', ym);
+  if (!fromMonth || !/^\d{4}-\d{2}$/.test(fromMonth)) { showToast('⚠ Invalid month format. Use YYYY-MM.', true); return; }
+  const toMonth = prompt('...to which month? (YYYY-MM, same as above for a single month):', fromMonth);
+  if (!toMonth || !/^\d{4}-\d{2}$/.test(toMonth)) { showToast('⚠ Invalid month format. Use YYYY-MM.', true); return; }
+  if (toMonth < fromMonth) { showToast('⚠ "To" month is before "from" month', true); return; }
+
+  const [fy, fm] = fromMonth.split('-').map(Number);
+  const [ty, tm] = toMonth.split('-').map(Number);
+  const from = `${fromMonth}-01`;
+  const toLastDay = new Date(ty, tm, 0).getDate(); // 0th of next month = last day of this month
+  const to = `${toMonth}-${String(toLastDay).padStart(2, '0')}`;
+  const rangeLabel = fromMonth === toMonth ? fromMonth : `${fromMonth}_to_${toMonth}`;
+
+  showToast('⏳ Fetching all plants’ records for ' + rangeLabel + '…', false);
   try {
     const btQs = activeBizType ? '&businessType=' + encodeURIComponent(activeBizType) : '';
-    const records = await api('GET', '/api/records/export-all?month=' + month + btQs);
-    if (!records.length) { showToast('⚠ No records found for ' + month + ' across any plant', true); return; }
+    const records = await api('GET', `/api/records/export-all?from=${from}&to=${to}${btQs}`);
+    if (!records.length) { showToast('⚠ No records found for ' + rangeLabel + ' across any plant', true); return; }
 
-    _writeMultiPlantWorkbook(records, (activeBizType ? 'All-' + activeBizType : 'All-Businesses') + '_MPK_' + month + '.xlsx');
-    showToast('✓ Exported ' + records.length + ' record(s) across all plants for ' + month, false);
+    _writeMultiPlantWorkbook(records, (activeBizType ? 'All-' + activeBizType : 'All-Businesses') + '_MPK_' + rangeLabel + '.xlsx');
+    showToast('✓ Exported ' + records.length + ' record(s) across all plants for ' + rangeLabel, false);
   } catch (e) {
     showToast('⚠ Export failed: ' + e.message, true);
   }
