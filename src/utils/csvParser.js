@@ -44,20 +44,9 @@ function processCSV(text, filterDate) {
     r.length > col.contractor && (r[col.contractor] || '').trim()
   );
 
-  // Different plants' biometric devices don't agree on date order for an ambiguous
-  // cell like "9/2/2026" — some mean D/M (9 Feb), some mean M/D (Sept 2). There's no
-  // single hardcoded rule that's right for every device. So: parse every row BOTH
-  // ways, then let filterDate — the date the operator already has selected in the
-  // app — decide which convention this particular file actually uses. Only fall back
-  // to a hardcoded default (day-first) when there's no filterDate to disambiguate with.
-  const rowISO_dayFirst   = dataRows.map(r => col.date !== -1 ? parseDateToISO((r[col.date] || '').trim(), false) : null);
-  const rowISO_monthFirst = dataRows.map(r => col.date !== -1 ? parseDateToISO((r[col.date] || '').trim(), true)  : null);
-
-  let rowISO = rowISO_dayFirst;
-  if (filterDate && !rowISO_dayFirst.includes(filterDate) && rowISO_monthFirst.includes(filterDate)) {
-    rowISO = rowISO_monthFirst;
-  }
-
+  // Normalise every row's Attendance Date to canonical ISO (YYYY-MM-DD).
+  // rowISO[i] holds the ISO date for dataRows[i]; allDates is the set of ISO dates.
+  const rowISO = dataRows.map(r => col.date !== -1 ? parseDateToISO((r[col.date] || '').trim()) : null);
   const allDates = new Set(rowISO.filter(Boolean));
 
   // Sorted unique ISO dates (ascending) — ISO strings sort chronologically as text
@@ -113,10 +102,11 @@ function processCSV(text, filterDate) {
 //   DD/MM/YYYY / D/M/YYYY   (slashes)
 //   YYYY-MM-DD (already ISO)
 //   2-digit years (26 -> 2026)
-// When a field is unambiguous (one part > 12), that part is always the day, regardless
-// of the preferMonthFirst flag. Only the truly ambiguous case (both parts <= 12) is
-// affected by preferMonthFirst — callers try both and pick whichever matches context.
-function parseDateToISO(raw, preferMonthFirst) {
+// This app is India-only, so every source (device exports, manual uploads) uses
+// day-first dates — '/' and '-' are treated identically. When one field is >12
+// it's unambiguous and used as the day regardless of position; when both are
+// <=12 (e.g. "1/9/2026") the first field is still taken as the day.
+function parseDateToISO(raw) {
   if (!raw) return null;
   const s = String(raw).trim();
   const sep = s.includes('/') ? '/' : (s.includes('-') ? '-' : null);
@@ -133,8 +123,7 @@ function parseDateToISO(raw, preferMonthFirst) {
     if (Y < 100) Y += 2000;               // 2-digit year -> 20YY
     if (a > 12)       { D = a; M = b; }    // first field must be the day
     else if (b > 12)  { M = a; D = b; }    // second field must be the day
-    else if (preferMonthFirst) { M = a; D = b; }  // ambiguous — try month-first (US)
-    else              { D = a; M = b; }    // ambiguous — try day-first (India)
+    else              { D = a; M = b; }    // ambiguous — day-first (India)
   }
   if (!Y || !M || !D || M < 1 || M > 12 || D < 1 || D > 31) return null;
   const pad = n => String(n).padStart(2, '0');
