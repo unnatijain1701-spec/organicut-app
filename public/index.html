@@ -5063,10 +5063,10 @@ async function addUser() {
   errEl.textContent = '';
   if (!username || !password) { errEl.textContent = 'Both fields are required.'; return; }
   if (password.length < 6)    { errEl.textContent = 'Password must be at least 6 characters.'; return; }
-  if (currentRole === 'superadmin' && !plantId) { errEl.textContent = 'Please select a plant.'; return; }
+  if (currentRole === 'superadmin' && role !== 'superadmin' && !plantId) { errEl.textContent = 'Please select a plant.'; return; }
   try {
     const body = { username, password, role };
-    if (currentRole === 'superadmin') body.plantId = parseInt(plantId, 10);
+    if (currentRole === 'superadmin' && role !== 'superadmin') body.plantId = parseInt(plantId, 10);
     await api('POST', '/api/auth/users', body);
     document.getElementById('newUsername').value = '';
     document.getElementById('newPassword').value = '';
