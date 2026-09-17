@@ -1,0 +1,8 @@
+CREATE TABLE IF NOT EXISTS plants (
+  id            SERIAL PRIMARY KEY,
+  name          VARCHAR(100) UNIQUE NOT NULL,
+  display_order INTEGER DEFAULT 0,
+  created_at    TIMESTAMPTZ DEFAULT NOW()
+);
+ALTER TABLE plants ADD COLUMN IF NOT EXISTS business_type    VARCHAR(20);
+ALTER TABLE plants ADD COLUMN IF NOT EXISTS has_kg_processing BOOLEAN DEFAULT TRUE;
