@@ -1007,9 +1007,7 @@ tr.dash-row-alt td { background: #f7fdf9; }
             <div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:5px">BUSINESS TYPE</div>
             <span id="newUserBizType"></span>
           </div>
-          <select class="users-input" id="newUserPlant" multiple style="cursor:pointer;display:none;height:auto;min-height:70px">
-          </select>
-          <div id="newUserPlantHint" style="display:none;font-size:10.5px;color:var(--muted);margin:-6px 0 8px">Ctrl/Cmd-click to select multiple locations</div>
+          <div id="newUserPlant" style="display:none;border:1.5px solid var(--border);border-radius:8px;padding:8px 10px;max-height:150px;overflow-y:auto;margin-bottom:10px"></div>
           <div id="usersFormErr" class="users-form-err"></div>
           <button class="users-add-btn" onclick="addUser()">Add User</button>
         </div>
@@ -4973,14 +4971,15 @@ async function addLocation() {
 
 function onNewUserBizTypeChange() {
   const businessType = bizChipValue('newUserBizType');
-  const plantSel = document.getElementById('newUserPlant');
-  plantSel.innerHTML = '';
-  (allPlantsCache || []).filter(p => p.business_type === businessType).forEach(p => {
-    const opt = document.createElement('option');
-    opt.value = p.id;
-    opt.textContent = p.name;
-    plantSel.appendChild(opt);
-  });
+  const wrap = document.getElementById('newUserPlant');
+  const plants = (allPlantsCache || []).filter(p => p.business_type === businessType);
+  wrap.innerHTML = plants.length
+    ? plants.map(p => `
+        <label style="display:flex;align-items:center;gap:8px;padding:5px 2px;font-size:13px;cursor:pointer">
+          <input type="checkbox" class="newuser-plant-cb" value="${p.id}">
+          ${p.name}
+        </label>`).join('')
+    : '<div style="font-size:12px;color:var(--muted);padding:4px 2px">No locations for this business type yet.</div>';
 }
 
 let _allUsersCache = null;
@@ -5116,19 +5115,17 @@ function applyUsersFilter() {
 function onNewUserRoleChange(role) {
   const bizField = document.getElementById('newUserBizTypeField');
   const plantSel = document.getElementById('newUserPlant');
-  const plantHint = document.getElementById('newUserPlantHint');
   // Show business-type + plant selectors when creating non-superadmin users and current user has no plant (all-plants access)
   const show = (!currentPlantId && role !== 'superadmin');
   bizField.style.display = show ? '' : 'none';
   plantSel.style.display = show ? '' : 'none';
-  if (plantHint) plantHint.style.display = show ? '' : 'none';
 }
 
 async function addUser() {
   const username = document.getElementById('newUsername').value.trim();
   const password = document.getElementById('newPassword').value;
   const role     = document.getElementById('newUserRole').value;
-  const plantIds = [...document.getElementById('newUserPlant').selectedOptions].map(o => parseInt(o.value, 10));
+  const plantIds = [...document.querySelectorAll('#newUserPlant .newuser-plant-cb:checked')].map(cb => parseInt(cb.value, 10));
   const errEl    = document.getElementById('usersFormErr');
   errEl.textContent = '';
   if (!username || !password) { errEl.textContent = 'Both fields are required.'; return; }
