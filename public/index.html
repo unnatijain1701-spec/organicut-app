@@ -256,7 +256,7 @@ td input[type="number"] {
   width: 110px; border: 1px solid var(--border); border-radius: 6px;
   padding: 6px 9px; font-size: 13px; color: var(--text); background: #fff;
   outline: none; text-align: right;
-  transition: border-color .15s, box-shadow .15s; -moz-appearance: textfield;
+  transition: border-color .15s, box-shadow .15s; -moz-appearance: textfield; appearance: textfield;
 }
 td input[type="number"]::-webkit-inner-spin-button,
 td input[type="number"]::-webkit-outer-spin-button { opacity: 0.4; }
@@ -1857,21 +1857,21 @@ const BIZ_TYPES = [
 ];
 
 /* ── Unit-of-measure helpers — Beverage is litre-based, everything else is kg-based ── */
-function bizUnitAbbr(businessType) { return businessType === 'Beverage' ? 'L' : 'kg'; }
-function bizUnitWord(businessType) { return businessType === 'Beverage' ? 'Litres' : 'Kg'; }
-function bizVolUnitAbbr(businessType) { return businessType === 'Beverage' ? 'KL' : 'MT'; }
+function bizUnitAbbr(businessType) { return businessType === 'Beverage' ? 'L' : businessType === 'Coco-Sutra' ? 'pcs' : 'kg'; }
+function bizUnitWord(businessType) { return businessType === 'Beverage' ? 'Litres' : businessType === 'Coco-Sutra' ? 'Pieces' : 'Kg'; }
+function bizVolUnitAbbr(businessType) { return businessType === 'Beverage' ? 'KL' : businessType === 'Coco-Sutra' ? 'K pcs' : 'MT'; }
 function bizMpkLabel(businessType) { return `MPK (₹/${bizUnitAbbr(businessType)})`; }
 // Best-guess business type for the current single-plant context (Daily Entry, History, SKU panels)
 function activePlantBizType() {
   const pid = currentPlantId || activePlantId;
   return PLANTS_BY_ID[pid]?.business_type || null;
 }
-// RTE and Beverage don't sell by weight the way FnV/Coco-Sutra do — for these,
+// RTE, Beverage and Coco-Sutra don't sell by weight the way FnV does — for these,
 // the "Sale Qty" box becomes a read-only "Production Qty" auto-summed from the
 // quantities entered in the KG tables below, and the per-row Cost column is hidden.
 function isProdQtyBiz() {
   const bt = activePlantBizType();
-  return bt === 'RTE' || bt === 'Beverage';
+  return bt === 'RTE' || bt === 'Beverage' || bt === 'Coco-Sutra';
 }
 // Sale/Production Qty box is locked either because the record itself is
 // superadmin-locked, or because this business auto-fills it from KG quantities.
@@ -1996,7 +1996,7 @@ async function initApp() {
   const hasKgProcessing = PLANTS_BY_ID[effectivePlantId]?.has_kg_processing !== false;
   const bizType = PLANTS_BY_ID[effectivePlantId]?.business_type || null;
   const unitAbbr = bizUnitAbbr(bizType);
-  const _prodQtyBiz = bizType === 'RTE' || bizType === 'Beverage';
+  const _prodQtyBiz = bizType === 'RTE' || bizType === 'Beverage' || bizType === 'Coco-Sutra';
   document.getElementById('saleQtyLabel').innerHTML = _prodQtyBiz
     ? `Production&nbsp;Qty&nbsp;(${unitAbbr})`
     : `Sale&nbsp;Qty&nbsp;(${unitAbbr})`;
