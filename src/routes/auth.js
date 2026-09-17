@@ -135,22 +135,62 @@ router.post('/plants', authenticateToken, async (req, res) => {
   }
 });
 
-// PATCH /api/auth/plants/:id — rename a location (superadmin only)
+// PATCH /api/auth/plants/:id — edit a location's name / business type / has-kg-processing (superadmin only)
 router.patch('/plants/:id', authenticateToken, async (req, res) => {
   if (req.user.role !== 'superadmin') return res.status(403).json({ error: 'Superadmin only' });
   const plantId = parseInt(req.params.id, 10);
   if (isNaN(plantId)) return res.status(400).json({ error: 'Invalid plant id' });
-  const { name } = req.body || {};
-  if (!name || !name.trim()) return res.status(400).json({ error: 'name is required' });
+  const { name, businessType, hasKgProcessing } = req.body || {};
+  if (name === undefined && businessType === undefined && hasKgProcessing === undefined) {
+    return res.status(400).json({ error: 'Nothing to update' });
+  }
+  if (name !== undefined && !name.trim()) return res.status(400).json({ error: 'name cannot be empty' });
+  const validTypes = ['FnV', 'RTE', 'Beverage', 'Coco-Sutra'];
+  if (businessType !== undefined && !validTypes.includes(businessType)) {
+    return res.status(400).json({ error: 'Invalid businessType' });
+  }
   try {
+    const sets = [];
+    const params = [];
+    if (name !== undefined) { params.push(name.trim()); sets.push(`name = $${params.length}`); }
+    if (businessType !== undefined) { params.push(businessType); sets.push(`business_type = $${params.length}`); }
+    if (hasKgProcessing !== undefined) { params.push(!!hasKgProcessing); sets.push(`has_kg_processing = $${params.length}`); }
+    params.push(plantId);
     const { rows } = await db.query(
-      `UPDATE plants SET name = $1 WHERE id = $2
+      `UPDATE plants SET ${sets.join(', ')} WHERE id = $${params.length}
        RETURNING id, name, business_type, has_kg_processing, display_order`,
-      [name.trim(), plantId]
+      params
     );
     if (!rows.length) return res.status(404).json({ error: 'Location not found' });
     res.json(rows[0]);
   } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// DELETE /api/auth/plants/:id — delete a location (superadmin only). Blocked if it
+// still has saved records or users assigned, so no data is silently orphaned.
+router.delete('/plants/:id', authenticateToken, async (req, res) => {
+  if (req.user.role !== 'superadmin') return res.status(403).json({ error: 'Superadmin only' });
+  const plantId = parseInt(req.params.id, 10);
+  if (isNaN(plantId)) return res.status(400).json({ error: 'Invalid plant id' });
+  try {
+    const { rows: recCheck } = await db.query('SELECT COUNT(*) AS n FROM daily_records WHERE plant_id = $1', [plantId]);
+    if (parseInt(recCheck[0].n, 10) > 0) {
+      return res.status(409).json({ error: 'This location has saved records and cannot be deleted.' });
+    }
+    const { rows: userCheck } = await db.query('SELECT COUNT(*) AS n FROM users WHERE plant_id = $1', [plantId]);
+    if (parseInt(userCheck[0].n, 10) > 0) {
+      return res.status(409).json({ error: 'This location still has users assigned to it — reassign or remove them first.' });
+    }
+    const { rowCount } = await db.query('DELETE FROM plants WHERE id = $1', [plantId]);
+    if (!rowCount) return res.status(404).json({ error: 'Location not found' });
+    res.json({ ok: true });
+  } catch (e) {
+    if (e.code === '23503') {
+      return res.status(409).json({ error: 'This location still has vendors/SKUs or other linked data — remove those first.' });
+    }
     console.error(e);
     res.status(500).json({ error: 'Server error' });
   }

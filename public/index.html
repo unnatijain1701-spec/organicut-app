@@ -981,7 +981,7 @@ tr.dash-row-alt td { background: #f7fdf9; }
 <!-- ═══════════════════ USERS PANEL ════════════════════ -->
 <div id="usersPanel" style="display:none">
   <div class="dash-header">
-    <span class="dash-header-title">👤 Manage <em>Users</em></span>
+    <span class="dash-header-title">👤 Manage <em>Users &amp; Locations</em></span>
     <button class="dash-close" onclick="toggleUsersPanel(false)">×</button>
   </div>
   <div class="users-toolbar">
@@ -1346,7 +1346,7 @@ tr.dash-row-alt td { background: #f7fdf9; }
         <button class="nav-item nav-admin-item" id="navReport" onclick="navTo('report')"><span class="nav-ico">📑</span> Report</button>
         <button class="nav-item nav-admin-item" id="navTrend" onclick="navTo('trend')"><span class="nav-ico">📈</span> Cost Trend</button>
         <button class="nav-item nav-admin-item" id="navVendors" onclick="navTo('vendors')"><span class="nav-ico">⚙</span> Vendors</button>
-        <button class="nav-item nav-admin-item" id="navUsers" onclick="navTo('users')"><span class="nav-ico">👤</span> Users</button>
+        <button class="nav-item nav-admin-item" id="navUsers" onclick="navTo('users')"><span class="nav-ico">👤</span> Users &amp; Locations</button>
       </div>
     </div>
   </div>
@@ -4659,8 +4659,13 @@ function renderVendorsList(vendors, totalCount) {
             <button class="btn-save"   onclick="addSKUFromPanel('${ve}')">Save</button>
             <button class="btn-cancel" onclick="cancelPanelAddSKU('${ve}')">Cancel</button>
           </div>
-          <button class="btn-ghost" id="panelAddSkuBtn_${pvid}"
-            onclick="showPanelAddSKUForm('${ve}')" style="margin-top:8px;font-size:12px">+ Add custom SKU</button>
+          <div style="display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap">
+            <button class="btn-ghost" id="panelAddSkuBtn_${pvid}"
+              onclick="showPanelAddSKUForm('${ve}')" style="font-size:12px">+ Add custom SKU</button>
+            <button class="btn-ghost" onclick="document.getElementById('bulkSkuFileInput_${pvid}').click()" style="font-size:12px">⬆ Bulk upload SKUs</button>
+            <input type="file" id="bulkSkuFileInput_${pvid}" accept=".csv,.xlsx,.xls" style="display:none"
+              onchange="bulkUploadSKUs('${ve}', this)">
+          </div>
         </div>
       </div>`;
   }).join('');
@@ -4713,6 +4718,34 @@ async function addSKUFromPanel(v) {
     showToast('✓ SKU added', false);
   } catch (e) { showToast('⚠ ' + e.message, true); }
 }
+async function bulkUploadSKUs(v, inputEl) {
+  const file = inputEl.files?.[0];
+  if (!file) return;
+  const fd = new FormData();
+  fd.append('file', file);
+  fd.append('vendorName', v);
+  try {
+    const result = await api('POST', '/api/sku/bulk', fd);
+    if (!customSKUs[v]) customSKUs[v] = [];
+    const existingIds = new Set(customSKUs[v].map(s => s.id));
+    result.skus.forEach(s => {
+      if (existingIds.has(s.id)) {
+        const idx = customSKUs[v].findIndex(x => x.id === s.id);
+        customSKUs[v][idx] = { ...customSKUs[v][idx], name: s.name, rate: s.rate, caseSize: s.caseSize };
+      } else {
+        customSKUs[v].push({ id: s.id, name: s.name, rate: s.rate, qty: 0, caseSize: s.caseSize || 0, cases: 0 });
+      }
+    });
+    refreshPane(v);
+    loadVendorsList();
+    showToast(`✓ Added ${result.count} SKU${result.count === 1 ? '' : 's'}`, false);
+  } catch (e) {
+    showToast('⚠ ' + e.message, true);
+  } finally {
+    inputEl.value = '';
+  }
+}
+
 async function deleteSKUFromPanel(v, skuId) {
   try {
     await api('DELETE', '/api/sku/' + skuId);
@@ -4844,39 +4877,65 @@ function renderLocationsList() {
     <div class="loc-row" id="locRow_${p.id}">
       <span>
         <span class="loc-row-name" id="locName_${p.id}">${p.name}</span>
-        <span class="loc-row-type">${p.business_type}</span>
+        <span class="loc-row-type">${p.business_type}${p.has_kg_processing === false ? ' · no per-unit cost' : ''}</span>
       </span>
-      <button class="loc-rename-btn" onclick="startRenameLocation(${p.id})" title="Rename">✎</button>
+      <span style="display:flex;gap:2px;flex-shrink:0">
+        <button class="loc-rename-btn" onclick="startEditLocation(${p.id})" title="Edit">✎</button>
+        <button class="loc-rename-btn" onclick="deleteLocation(${p.id},'${p.name.replace(/'/g,"\\'")}')" title="Delete">🗑</button>
+      </span>
     </div>
   `).join('');
 }
 
-function startRenameLocation(plantId) {
+function startEditLocation(plantId) {
   const row = document.getElementById('locRow_' + plantId);
   if (!row) return;
-  const currentName = document.getElementById('locName_' + plantId).textContent;
+  const plant = (allPlantsCache || []).find(p => p.id === plantId);
+  if (!plant) return;
   row.innerHTML = `
-    <input class="loc-rename-input" id="locNameInput_${plantId}" value="${currentName.replace(/"/g,'&quot;')}"
-      onkeydown="if(event.key==='Enter')saveRenameLocation(${plantId});if(event.key==='Escape')renderLocationsList()">
-    <span style="display:flex;gap:4px;flex-shrink:0">
-      <button class="btn-save" onclick="saveRenameLocation(${plantId})" title="Save">✓ Save</button>
-      <button class="btn-cancel" onclick="renderLocationsList()" title="Cancel">✕</button>
-    </span>`;
+    <div style="width:100%">
+      <input class="loc-rename-input" id="locNameInput_${plantId}" value="${plant.name.replace(/"/g,'&quot;')}"
+        style="width:100%;margin-bottom:6px"
+        onkeydown="if(event.key==='Enter')saveEditLocation(${plantId});if(event.key==='Escape')renderLocationsList()">
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text);margin-bottom:8px;cursor:pointer">
+        <input type="checkbox" id="locHasKg_${plantId}" ${plant.has_kg_processing !== false ? 'checked' : ''} style="cursor:pointer">
+        Has per-unit processing cost
+      </label>
+      <span style="display:flex;gap:4px;flex-shrink:0">
+        <button class="btn-save" onclick="saveEditLocation(${plantId})" title="Save">✓ Save</button>
+        <button class="btn-cancel" onclick="renderLocationsList()" title="Cancel">✕</button>
+      </span>
+    </div>`;
   document.getElementById('locNameInput_' + plantId).focus();
 }
 
-async function saveRenameLocation(plantId) {
+async function saveEditLocation(plantId) {
   const input = document.getElementById('locNameInput_' + plantId);
   const name = input?.value.trim();
+  const hasKgProcessing = document.getElementById('locHasKg_' + plantId)?.checked;
   if (!name) { showToast('⚠ Location name cannot be empty', true); return; }
   try {
-    const plant = await api('PATCH', '/api/auth/plants/' + plantId, { name });
+    const plant = await api('PATCH', '/api/auth/plants/' + plantId, { name, hasKgProcessing });
     const idx = allPlantsCache.findIndex(p => p.id === plantId);
     if (idx !== -1) allPlantsCache[idx] = plant;
     PLANTS_BY_ID[plantId] = plant;
     renderLocationsList();
     renderPlantSelector();
-    showToast(`✓ Renamed to "${plant.name}"`, false);
+    showToast(`✓ Updated "${plant.name}"`, false);
+  } catch (e) {
+    showToast('⚠ ' + e.message, true);
+  }
+}
+
+async function deleteLocation(plantId, name) {
+  if (!confirm(`Delete location "${name}"?\nOnly works if it has no saved records and no users assigned. This cannot be undone.`)) return;
+  try {
+    await api('DELETE', '/api/auth/plants/' + plantId);
+    allPlantsCache = (allPlantsCache || []).filter(p => p.id !== plantId);
+    delete PLANTS_BY_ID[plantId];
+    renderLocationsList();
+    renderPlantSelector();
+    showToast(`✓ Deleted "${name}"`, false);
   } catch (e) {
     showToast('⚠ ' + e.message, true);
   }
