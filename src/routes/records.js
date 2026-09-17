@@ -4,10 +4,17 @@ const { authenticateToken } = require('../middleware/auth');
 
 const router = express.Router();
 
+// See vendors.js's getPlantId for the full rationale — a restricted (non-superadmin)
+// user can only ever resolve to a plant inside their granted plantIds set.
 function getPlantId(req) {
-  if (req.user.plant_id != null) return req.user.plant_id;
-  const pid = parseInt(req.query.plantId || req.body?.plantId);
-  return isNaN(pid) ? null : pid;
+  if (req.user.role === 'superadmin') {
+    const pid = parseInt(req.query.plantId || req.body?.plantId);
+    return isNaN(pid) ? null : pid;
+  }
+  const allowed = req.user.plantIds || (req.user.plant_id != null ? [req.user.plant_id] : []);
+  if (!allowed.length) return null;
+  const requested = parseInt(req.query.plantId || req.body?.plantId);
+  return !isNaN(requested) && allowed.includes(requested) ? requested : allowed[0];
 }
 
 // GET /api/records  — list all records for this plant (summary only)
@@ -255,9 +262,11 @@ router.get('/compare', async (req, res) => {
   }
 });
 
-// GET /api/records/allplants/:date?businessType=  — per-plant summary for a date (all-plants users only)
+// GET /api/records/allplants/:date?businessType=  — per-plant summary for a date
+// (superadmin only — a multi-plant restricted user must NOT see other plants'
+// data here just because their own plant_id happens to be null too).
 router.get('/allplants/:date', async (req, res) => {
-  if (req.user.plant_id != null) return res.status(403).json({ error: 'Forbidden' });
+  if (req.user.role !== 'superadmin') return res.status(403).json({ error: 'Forbidden' });
   try {
     const businessType = req.query.businessType || null;
     const params = [req.params.date];

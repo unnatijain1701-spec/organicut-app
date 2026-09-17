@@ -4,10 +4,20 @@ const { authenticateToken } = require('../middleware/auth');
 
 const router = express.Router();
 
+// Superadmin: any plant the frontend asks for (or none). Everyone else: only a
+// plant they've actually been granted, via plantIds — a multi-plant user's
+// currently-selected plant if it's in their set, otherwise their first allowed
+// plant. An out-of-scope plantId in the request is silently ignored rather than
+// honored, so a restricted user can never read/write another plant's data.
 function getPlantId(req) {
-  if (req.user.plant_id != null) return req.user.plant_id;
-  const pid = parseInt(req.query.plantId || req.body?.plantId);
-  return isNaN(pid) ? null : pid;
+  if (req.user.role === 'superadmin') {
+    const pid = parseInt(req.query.plantId || req.body?.plantId);
+    return isNaN(pid) ? null : pid;
+  }
+  const allowed = req.user.plantIds || (req.user.plant_id != null ? [req.user.plant_id] : []);
+  if (!allowed.length) return null;
+  const requested = parseInt(req.query.plantId || req.body?.plantId);
+  return !isNaN(requested) && allowed.includes(requested) ? requested : allowed[0];
 }
 
 router.get('/', async (req, res) => {

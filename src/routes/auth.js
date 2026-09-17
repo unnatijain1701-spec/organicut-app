@@ -7,6 +7,17 @@ const { authenticateToken } = require('../middleware/auth');
 const router = express.Router();
 const COOKIE_OPTS = { httpOnly: true, sameSite: 'lax', maxAge: 7 * 24 * 60 * 60 * 1000 };
 
+// Resolves a user's plant access as an array (never single-valued). Superadmin
+// gets null, meaning "unrestricted" — every other role gets the exact set of
+// plants assigned via user_plants (which may be one plant, several, or — for
+// legacy accounts predating this table — a fallback to their old single plant_id).
+async function getUserPlantIds(user) {
+  if (user.role === 'superadmin') return null;
+  const { rows } = await db.query('SELECT plant_id FROM user_plants WHERE user_id = $1 ORDER BY plant_id', [user.id]);
+  if (rows.length) return rows.map(r => r.plant_id);
+  return user.plant_id != null ? [user.plant_id] : [];
+}
+
 // POST /api/auth/login
 router.post('/login', async (req, res) => {
   const { username, password } = req.body || {};
@@ -22,19 +33,25 @@ router.post('/login', async (req, res) => {
     if (!ok) return res.status(401).json({ error: 'Invalid username or password' });
 
     const u = rows[0];
+    const plantIds = await getUserPlantIds(u);
+    // Single-plant users keep the old locked-to-one-plant experience (plant_id set,
+    // plant_name shown). Multi-plant users get plant_id: null so the frontend treats
+    // them like an "all plants" account, but /api/auth/plants only ever returns the
+    // plants actually in plantIds, so their picker is silently restricted to those.
+    const singlePlantId = plantIds && plantIds.length === 1 ? plantIds[0] : null;
     let plantName = null;
-    if (u.plant_id) {
-      const pr = await db.query('SELECT name FROM plants WHERE id = $1', [u.plant_id]);
+    if (singlePlantId) {
+      const pr = await db.query('SELECT name FROM plants WHERE id = $1', [singlePlantId]);
       plantName = pr.rows[0]?.name || null;
     }
 
     const token = jwt.sign(
-      { id: u.id, username: u.username, role: u.role, plant_id: u.plant_id, plant_name: plantName },
+      { id: u.id, username: u.username, role: u.role, plant_id: singlePlantId, plant_name: plantName, plantIds },
       process.env.JWT_SECRET,
       { expiresIn: '7d' }
     );
     res.cookie('token', token, COOKIE_OPTS);
-    res.json({ username: u.username, role: u.role, plant_id: u.plant_id, plant_name: plantName });
+    res.json({ username: u.username, role: u.role, plant_id: singlePlantId, plant_name: plantName, plantIds });
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: 'Server error' });
@@ -58,6 +75,7 @@ router.get('/me', (req, res) => {
       role:       user.role || 'user',
       plant_id:   user.plant_id   || null,
       plant_name: user.plant_name || null,
+      plantIds:   user.plantIds !== undefined ? user.plantIds : (user.plant_id != null ? [user.plant_id] : null),
     });
   } catch {
     res.status(401).json({ error: 'Session expired' });
@@ -103,11 +121,14 @@ router.get('/needs-setup', async (req, res) => {
   }
 });
 
-// GET /api/auth/plants — list all plants (used by superadmin when creating users)
+// GET /api/auth/plants — list plants: all of them for superadmin, otherwise only
+// the ones this user has been granted access to (via user_plants).
 router.get('/plants', authenticateToken, async (req, res) => {
   try {
     const { rows } = await db.query('SELECT id, name, business_type, has_kg_processing FROM plants ORDER BY display_order');
-    res.json(rows);
+    if (req.user.role === 'superadmin') return res.json(rows);
+    const allowed = new Set(req.user.plantIds || (req.user.plant_id != null ? [req.user.plant_id] : []));
+    res.json(rows.filter(p => allowed.has(p.id)));
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: 'Server error' });
@@ -216,6 +237,19 @@ router.get('/users', authenticateToken, async (req, res) => {
         ORDER BY u.id
       `, [req.user.plant_id]));
     }
+    // Attach each user's full plant list (from user_plants) so the UI can show
+    // "3 plants" instead of just the single legacy plant_name for multi-plant users.
+    const { rows: upRows } = await db.query(`
+      SELECT up.user_id, p.id AS plant_id, p.name, p.business_type
+      FROM user_plants up JOIN plants p ON p.id = up.plant_id
+    `);
+    const byUser = {};
+    upRows.forEach(r => {
+      (byUser[r.user_id] = byUser[r.user_id] || []).push({ id: r.plant_id, name: r.name, business_type: r.business_type });
+    });
+    rows.forEach(u => {
+      u.plants = byUser[u.id] || (u.plant_name ? [{ id: u.plant_id, name: u.plant_name, business_type: u.business_type }] : []);
+    });
     res.json(rows);
   } catch (e) {
     console.error(e);
@@ -223,10 +257,13 @@ router.get('/users', authenticateToken, async (req, res) => {
   }
 });
 
-// POST /api/auth/users — create a new user
+// POST /api/auth/users — create a new user. For non-superadmin roles, pass
+// plantIds: [id, id, ...] to grant access to that exact subset of plants
+// (one plant, several, or — pass every plant's id — effectively all of them).
+// The legacy singular plantId is still accepted for one-plant grants.
 router.post('/users', authenticateToken, async (req, res) => {
   if (req.user.role !== 'superadmin') return res.status(403).json({ error: 'Superadmin only' });
-  const { username, password, role, plantId } = req.body || {};
+  const { username, password, role, plantId, plantIds } = req.body || {};
   if (!username || !password) {
     return res.status(400).json({ error: 'Username and password are required' });
   }
@@ -236,17 +273,18 @@ router.post('/users', authenticateToken, async (req, res) => {
 
   const assignedRole = role === 'superadmin' ? 'superadmin' : role === 'admin' ? 'admin' : 'user';
 
-  let assignedPlantId;
-  if (assignedRole === 'superadmin') {
-    assignedPlantId = null; // superadmin has no plant
-  } else if (req.user.role === 'superadmin' || !req.user.plant_id) {
-    if (!plantId) return res.status(400).json({ error: 'plantId is required' });
-    const plantCheck = await db.query('SELECT id FROM plants WHERE id = $1', [plantId]);
-    if (!plantCheck.rows.length) return res.status(400).json({ error: 'Invalid plant' });
-    assignedPlantId = parseInt(plantId, 10);
-  } else {
-    assignedPlantId = req.user.plant_id;
+  let ids = [];
+  if (assignedRole !== 'superadmin') {
+    if (Array.isArray(plantIds) && plantIds.length) {
+      ids = plantIds.map(x => parseInt(x, 10)).filter(x => !isNaN(x));
+    } else if (plantId) {
+      ids = [parseInt(plantId, 10)];
+    }
+    if (!ids.length) return res.status(400).json({ error: 'Select at least one plant' });
+    const plantCheck = await db.query('SELECT id FROM plants WHERE id = ANY($1)', [ids]);
+    if (plantCheck.rows.length !== ids.length) return res.status(400).json({ error: 'Invalid plant selection' });
   }
+  const legacyPlantId = ids.length === 1 ? ids[0] : null;
 
   try {
     const exists = await db.query('SELECT id FROM users WHERE username = $1', [username.trim()]);
@@ -256,16 +294,23 @@ router.post('/users', authenticateToken, async (req, res) => {
     const hash = await bcrypt.hash(password, 12);
     const { rows } = await db.query(
       'INSERT INTO users (username, password_hash, role, plant_id) VALUES ($1, $2, $3, $4) RETURNING id, username, role, plant_id',
-      [username.trim(), hash, assignedRole, assignedPlantId]
+      [username.trim(), hash, assignedRole, legacyPlantId]
     );
-    res.json(rows[0]);
+    const newUser = rows[0];
+    if (ids.length) {
+      const values = ids.map((_, i) => `($1, $${i + 2})`).join(',');
+      await db.query(`INSERT INTO user_plants (user_id, plant_id) VALUES ${values}`, [newUser.id, ...ids]);
+    }
+    res.json({ ...newUser, plantIds: ids });
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: 'Server error' });
   }
 });
 
-// PATCH /api/auth/users/:id — change role (admin/superadmin only, cannot change own role)
+// PATCH /api/auth/users/:id — change role and/or plant access (superadmin only,
+// cannot change own role). Pass plantIds: [id, ...] to set the exact subset of
+// plants this user should have; omitting it keeps their current plant access.
 router.patch('/users/:id', authenticateToken, async (req, res) => {
   const isSuperadmin = req.user.role === 'superadmin';
   const isAdmin      = false; // user management locked to superadmin during trial
@@ -275,38 +320,53 @@ router.patch('/users/:id', authenticateToken, async (req, res) => {
   if (isNaN(targetId)) return res.status(400).json({ error: 'Invalid user id' });
   if (targetId === req.user.id) return res.status(400).json({ error: 'You cannot change your own role' });
 
-  const { role, plantId } = req.body || {};
+  const { role, plantId, plantIds } = req.body || {};
   let newRole;
   if (isSuperadmin && role === 'superadmin') newRole = 'superadmin';
   else if (role === 'admin') newRole = 'admin';
   else newRole = 'user';
 
-  // Determine new plant_id
-  let newPlantId;
+  // Determine the new set of plant ids for this user
+  let ids = null; // null = "not provided, keep existing"
   if (newRole === 'superadmin') {
-    newPlantId = null;
+    ids = [];
+  } else if (Array.isArray(plantIds)) {
+    ids = plantIds.map(x => parseInt(x, 10)).filter(x => !isNaN(x));
   } else if (plantId != null) {
-    const plantCheck = await db.query('SELECT id FROM plants WHERE id = $1', [parseInt(plantId, 10)]);
-    if (!plantCheck.rows.length) return res.status(400).json({ error: 'Invalid plant' });
-    newPlantId = parseInt(plantId, 10);
-  } else {
-    // No plantId provided — keep existing plant_id
-    const existing = await db.query('SELECT plant_id FROM users WHERE id = $1', [targetId]);
-    if (!existing.rows.length) return res.status(404).json({ error: 'User not found' });
-    newPlantId = existing.rows[0].plant_id;
-    // If demoting a superadmin (plant_id was NULL) without providing a plantId, reject
-    if (newRole !== 'superadmin' && newPlantId == null) {
+    ids = [parseInt(plantId, 10)];
+  }
+
+  if (ids && ids.length) {
+    const plantCheck = await db.query('SELECT id FROM plants WHERE id = ANY($1)', [ids]);
+    if (plantCheck.rows.length !== ids.length) return res.status(400).json({ error: 'Invalid plant selection' });
+  }
+
+  if (ids === null) {
+    // No plant info provided at all — keep existing access, but a demotion from
+    // superadmin (which has none) must be given at least one plant.
+    const existingIds = await getUserPlantIds({ id: targetId, role: 'user' });
+    if (newRole !== 'superadmin' && !existingIds.length) {
       return res.status(400).json({ error: 'A plant must be assigned when changing from Superadmin to a plant role' });
     }
+    ids = existingIds;
+  } else if (newRole !== 'superadmin' && !ids.length) {
+    return res.status(400).json({ error: 'Select at least one plant' });
   }
+
+  const legacyPlantId = ids.length === 1 ? ids[0] : null;
 
   try {
     const result = await db.query(
       'UPDATE users SET role = $1, plant_id = $2 WHERE id = $3 RETURNING id, username, role, plant_id',
-      [newRole, newPlantId, targetId]
+      [newRole, legacyPlantId, targetId]
     );
     if (result.rowCount === 0) return res.status(404).json({ error: 'User not found' });
-    res.json(result.rows[0]);
+    await db.query('DELETE FROM user_plants WHERE user_id = $1', [targetId]);
+    if (ids.length) {
+      const values = ids.map((_, i) => `($1, $${i + 2})`).join(',');
+      await db.query(`INSERT INTO user_plants (user_id, plant_id) VALUES ${values}`, [targetId, ...ids]);
+    }
+    res.json({ ...result.rows[0], plantIds: ids });
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: 'Server error' });

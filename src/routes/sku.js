@@ -53,10 +53,17 @@ function parseSKUFile(file) {
   return rows;
 }
 
+// See vendors.js's getPlantId for the full rationale — a restricted (non-superadmin)
+// user can only ever resolve to a plant inside their granted plantIds set.
 function getPlantId(req) {
-  if (req.user.plant_id != null) return req.user.plant_id;
-  const pid = parseInt(req.query.plantId || req.body?.plantId);
-  return isNaN(pid) ? null : pid;
+  if (req.user.role === 'superadmin') {
+    const pid = parseInt(req.query.plantId || req.body?.plantId);
+    return isNaN(pid) ? null : pid;
+  }
+  const allowed = req.user.plantIds || (req.user.plant_id != null ? [req.user.plant_id] : []);
+  if (!allowed.length) return null;
+  const requested = parseInt(req.query.plantId || req.body?.plantId);
+  return !isNaN(requested) && allowed.includes(requested) ? requested : allowed[0];
 }
 
 // GET /api/sku  — all custom SKUs for this plant grouped by vendor

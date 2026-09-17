@@ -627,3 +627,20 @@ SELECT p.id, v.vendor, v.sku, v.rate, v.ord FROM (VALUES
 ) AS v(vendor, sku, rate, ord)
 CROSS JOIN (SELECT id FROM plants WHERE name = 'Bangalore-FnV') AS p
 ON CONFLICT (plant_id, vendor_name, sku_name) DO NOTHING;
+
+-- ============================================================
+-- Partial multi-plant access — a non-superadmin user can be
+-- granted any subset of plants (not just one, not necessarily all).
+-- ============================================================
+CREATE TABLE IF NOT EXISTS user_plants (
+  user_id  INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  plant_id INTEGER NOT NULL REFERENCES plants(id) ON DELETE CASCADE,
+  PRIMARY KEY (user_id, plant_id)
+);
+
+-- One-time backfill: give every existing plant-locked user an explicit
+-- user_plants row matching their legacy users.plant_id, so the new
+-- multi-plant access model has data to work with immediately.
+INSERT INTO user_plants (user_id, plant_id)
+SELECT id, plant_id FROM users WHERE plant_id IS NOT NULL
+ON CONFLICT DO NOTHING;
