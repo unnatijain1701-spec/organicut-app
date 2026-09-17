@@ -366,7 +366,7 @@ SELECT v.name, v.ord, p.id FROM (VALUES
   ('Taj SATS', 19),
   ('Swiggy', 20)
 ) AS v(name, ord)
-CROSS JOIN (SELECT id FROM plants WHERE name = 'Bangalore') AS p
+CROSS JOIN (SELECT id FROM plants WHERE name = 'Bangalore-FnV') AS p
 ON CONFLICT (plant_id, name) DO NOTHING;
 
 -- 2) SKUs per customer tab
@@ -375,7 +375,7 @@ INSERT INTO custom_skus (plant_id, vendor_name, sku_name, rate, display_order)
 SELECT p.id, v.vendor, v.sku, v.rate, v.ord FROM (VALUES
   ('ITC', 'Ladyfinger', 8, 1)
 ) AS v(vendor, sku, rate, ord)
-CROSS JOIN (SELECT id FROM plants WHERE name = 'Bangalore') AS p
+CROSS JOIN (SELECT id FROM plants WHERE name = 'Bangalore-FnV') AS p
 ON CONFLICT (plant_id, vendor_name, sku_name) DO NOTHING;
 
 -- Gopizza
@@ -384,7 +384,7 @@ SELECT p.id, v.vendor, v.sku, v.rate, v.ord FROM (VALUES
   ('Gopizza', 'Onion Slice decoring', 4.275, 1),
   ('Gopizza', 'Capsicum decoring', 4.36, 2)
 ) AS v(vendor, sku, rate, ord)
-CROSS JOIN (SELECT id FROM plants WHERE name = 'Bangalore') AS p
+CROSS JOIN (SELECT id FROM plants WHERE name = 'Bangalore-FnV') AS p
 ON CONFLICT (plant_id, vendor_name, sku_name) DO NOTHING;
 
 -- Peppercorn
@@ -393,7 +393,7 @@ SELECT p.id, v.vendor, v.sku, v.rate, v.ord FROM (VALUES
   ('Peppercorn', 'Peeled Onion', 5.575, 1),
   ('Peppercorn', 'Potato', 16.3, 2)
 ) AS v(vendor, sku, rate, ord)
-CROSS JOIN (SELECT id FROM plants WHERE name = 'Bangalore') AS p
+CROSS JOIN (SELECT id FROM plants WHERE name = 'Bangalore-FnV') AS p
 ON CONFLICT (plant_id, vendor_name, sku_name) DO NOTHING;
 
 -- Griffith
@@ -402,7 +402,7 @@ SELECT p.id, v.vendor, v.sku, v.rate, v.ord FROM (VALUES
   ('Griffith', 'Chilli Green Destem', 7, 1),
   ('Griffith', 'Peeled Onion Peeling', 4.275, 2)
 ) AS v(vendor, sku, rate, ord)
-CROSS JOIN (SELECT id FROM plants WHERE name = 'Bangalore') AS p
+CROSS JOIN (SELECT id FROM plants WHERE name = 'Bangalore-FnV') AS p
 ON CONFLICT (plant_id, vendor_name, sku_name) DO NOTHING;
 
 -- Jubilant
@@ -413,7 +413,7 @@ SELECT p.id, v.vendor, v.sku, v.rate, v.ord FROM (VALUES
   ('Jubilant', 'Tomato Cut', 10.86, 3),
   ('Jubilant', 'Mushroom Cut', 5.5, 4)
 ) AS v(vendor, sku, rate, ord)
-CROSS JOIN (SELECT id FROM plants WHERE name = 'Bangalore') AS p
+CROSS JOIN (SELECT id FROM plants WHERE name = 'Bangalore-FnV') AS p
 ON CONFLICT (plant_id, vendor_name, sku_name) DO NOTHING;
 
 -- Shilton
@@ -459,7 +459,7 @@ SELECT p.id, v.vendor, v.sku, v.rate, v.ord FROM (VALUES
   ('Shilton', 'Zucchini Yellow whole', 1.3, 38),
   ('Shilton', 'Carrot Orange Julienne', 18.8, 39)
 ) AS v(vendor, sku, rate, ord)
-CROSS JOIN (SELECT id FROM plants WHERE name = 'Bangalore') AS p
+CROSS JOIN (SELECT id FROM plants WHERE name = 'Bangalore-FnV') AS p
 ON CONFLICT (plant_id, vendor_name, sku_name) DO NOTHING;
 
 -- Amicus (Salad Days)
@@ -469,7 +469,7 @@ SELECT p.id, v.vendor, v.sku, v.rate, v.ord FROM (VALUES
   ('Amicus (Salad Days)', 'Ginger', 46, 2),
   ('Amicus (Salad Days)', 'Pomegranate', 24, 3)
 ) AS v(vendor, sku, rate, ord)
-CROSS JOIN (SELECT id FROM plants WHERE name = 'Bangalore') AS p
+CROSS JOIN (SELECT id FROM plants WHERE name = 'Bangalore-FnV') AS p
 ON CONFLICT (plant_id, vendor_name, sku_name) DO NOTHING;
 
 -- Compass
@@ -526,7 +526,7 @@ SELECT p.id, v.vendor, v.sku, v.rate, v.ord FROM (VALUES
   ('Compass', 'Sweet Potato', 4.6, 49),
   ('Compass', 'Dent Leaves', 4.6, 50)
 ) AS v(vendor, sku, rate, ord)
-CROSS JOIN (SELECT id FROM plants WHERE name = 'Bangalore') AS p
+CROSS JOIN (SELECT id FROM plants WHERE name = 'Bangalore-FnV') AS p
 ON CONFLICT (plant_id, vendor_name, sku_name) DO NOTHING;
 
 -- Taj SATS
@@ -588,7 +588,7 @@ SELECT p.id, v.vendor, v.sku, v.rate, v.ord FROM (VALUES
   ('Taj SATS', 'BEETROOT WHOLE', 9, 54),
   ('Taj SATS', 'Ridge Gourd', 9, 55)
 ) AS v(vendor, sku, rate, ord)
-CROSS JOIN (SELECT id FROM plants WHERE name = 'Bangalore') AS p
+CROSS JOIN (SELECT id FROM plants WHERE name = 'Bangalore-FnV') AS p
 ON CONFLICT (plant_id, vendor_name, sku_name) DO NOTHING;
 
 -- Swiggy
@@ -625,5 +625,5 @@ SELECT p.id, v.vendor, v.sku, v.rate, v.ord FROM (VALUES
   ('Swiggy', 'Cauliflower Florets', 8, 29),
   ('Swiggy', 'Ugadi Pachadi 1Pack', 3.5, 30)
 ) AS v(vendor, sku, rate, ord)
-CROSS JOIN (SELECT id FROM plants WHERE name = 'Bangalore') AS p
+CROSS JOIN (SELECT id FROM plants WHERE name = 'Bangalore-FnV') AS p
 ON CONFLICT (plant_id, vendor_name, sku_name) DO NOTHING;
