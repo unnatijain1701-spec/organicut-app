@@ -20,12 +20,13 @@ function applyVendorsFilter() {
         v.name.toLowerCase().includes(q) ||
         (customSKUs[v.name] || []).some(s => s.name.toLowerCase().includes(q)))
     : _allVendorsCache;
-  renderVendorsList(vendors, _allVendorsCache.length);
+  renderVendorsList(vendors, _allVendorsCache.length, q);
 }
 
-function renderVendorsList(vendors, totalCount) {
+function renderVendorsList(vendors, totalCount, q) {
   const list = document.getElementById('vendorsList');
   totalCount = totalCount ?? vendors.length;
+  q = q || '';
   if (!vendors.length) {
     list.innerHTML = `<div class="hist-empty">${totalCount ? 'No vendors match your search.' : 'No vendors yet.'}</div>`;
     return;
@@ -33,7 +34,15 @@ function renderVendorsList(vendors, totalCount) {
   const cards = vendors.map(v => {
     const vn = v.name, ve = vn.replace(/'/g, "\\'");
     const pvid = 'pv_' + vid(vn);
-    const skus = customSKUs[vn] || [];
+    const allSkus = customSKUs[vn] || [];
+    // A search that matches the vendor's own name shows every SKU (browsing that
+    // vendor); a search that only matches by SKU name shows just the matching
+    // SKU(s), not the vendor's whole list — otherwise a 1-word search on a vendor
+    // with 100 SKUs dumps all 100 back at you instead of the one you searched for.
+    const vendorNameMatches = q && vn.toLowerCase().includes(q);
+    const skus = (q && !vendorNameMatches) ? allSkus.filter(s => s.name.toLowerCase().includes(q)) : allSkus;
+    const filterHint = (q && !vendorNameMatches && allSkus.length)
+      ? `<span style="font-size:10.5px;color:var(--muted);font-weight:400"> (${skus.length} of ${allSkus.length} SKUs match "${q}")</span>` : '';
     const skuRows = skus.length
       ? skus.map(s => `
           <div class="panel-sku-row" id="pskurow_${pvid}_${s.id}">
@@ -42,11 +51,11 @@ function renderVendorsList(vendors, totalCount) {
             <button class="btn-edit-sku" onclick="startEditSKUInPanel('${ve}',${s.id})" title="Edit">✎</button>
             <button class="btn-del"      onclick="deleteSKUFromPanel('${ve}',${s.id})"  title="Remove">×</button>
           </div>`).join('')
-      : '<div class="no-custom-skus">No custom SKUs yet</div>';
+      : (allSkus.length ? '<div class="no-custom-skus">No SKUs match your search</div>' : '<div class="no-custom-skus">No custom SKUs yet</div>');
     return `
       <div class="vendor-section">
         <div class="vendor-section-header">
-          <span class="vendor-section-name">${vn}</span>
+          <span class="vendor-section-name">${vn}${filterHint}</span>
           ${totalCount > 1
             ? `<button class="user-del-btn" onclick="deleteVendor(${v.id},'${ve}')">Delete vendor</button>`
             : '<span style="font-size:11px;color:var(--muted)">last vendor</span>'}
