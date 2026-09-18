@@ -92,10 +92,17 @@ const BIZ_TYPES = [
   { key: 'Coco-Sutra', icon: '🥥', label: 'Coco-Sutra' },
 ];
 
-/* ── Unit-of-measure helpers — Beverage is litre-based, everything else is kg-based ── */
-function bizUnitAbbr(businessType) { return businessType === 'Beverage' ? 'L' : businessType === 'Coco-Sutra' ? 'pcs' : 'kg'; }
-function bizUnitWord(businessType) { return businessType === 'Beverage' ? 'Litres' : businessType === 'Coco-Sutra' ? 'Pieces' : 'Kg'; }
-function bizVolUnitAbbr(businessType) { return businessType === 'Beverage' ? 'KL' : businessType === 'Coco-Sutra' ? 'K pcs' : 'MT'; }
+/* ── Unit-of-measure helpers — Beverage is litre-based, everything else is kg-based.
+   Coco-Sutra operators enter a PIECE COUNT per SKU (via the case-size box below,
+   repurposed as "grams per piece"), which auto-converts to kg — so the final
+   Production Qty / MPK are weight-based here too, same as FnV. ── */
+function bizUnitAbbr(businessType) { return businessType === 'Beverage' ? 'L' : 'kg'; }
+function bizUnitWord(businessType) { return businessType === 'Beverage' ? 'Litres' : 'Kg'; }
+function bizVolUnitAbbr(businessType) { return businessType === 'Beverage' ? 'KL' : 'MT'; }
+// The case-size box's label: Coco-Sutra enters a piece count (converted via each
+// SKU's per-piece weight); other case-priced businesses (e.g. Beverage cartons)
+// enter a case count instead.
+function caseInputWord(businessType) { return businessType === 'Coco-Sutra' ? 'Pieces' : 'Cases'; }
 function bizMpkLabel(businessType) { return `MPK (₹/${bizUnitAbbr(businessType)})`; }
 // Best-guess business type for the current single-plant context (Daily Entry, History, SKU panels)
 function activePlantBizType() {
@@ -822,13 +829,14 @@ function buildPane(v) {
 
   const custRows = customSKUs[v].map((sku) => {
     const qty = sku.qty || 0, cost = qty * sku.rate;
+    const _cw = caseInputWord(activePlantBizType());
     const caseInput = sku.caseSize > 0
-      ? `<input type="number" min="0" step="0.01" value="${sku.cases||''}" placeholder="Cases" class="case-input" title="${sku.caseSize} ${bizUnitAbbr(activePlantBizType())} per case"
+      ? `<input type="number" min="0" step="0.01" value="${sku.cases||''}" placeholder="${_cw}" class="case-input" title="${sku.caseSize} ${_u} per ${_cw.replace(/s$/,'').toLowerCase()}"
           onchange="onCaseInput(this,${sku.caseSize},'${vid_}',${sku.id})">`
       : '';
     const costCell = _qtyOnly ? '' : `<td class="r cost-val" id="kcc_${vid_}_${sku.id}">${cost>0?fc(cost):'<span class="zero">—</span>'}</td>`;
     return `<tr class="custom-sku-row" id="custrow_${vid_}_${sku.id}">
-      <td class="sku-name">${sku.name}${sku.caseSize > 0 ? `<span class="case-hint"> (${sku.caseSize}/case)</span>` : ''}</td>
+      <td class="sku-name">${sku.name}${sku.caseSize > 0 ? `<span class="case-hint"> (${sku.caseSize} ${_u}/${_cw.replace(/s$/,'').toLowerCase()})</span>` : ''}</td>
       <td class="r rate-cell">₹&nbsp;${sku.rate.toFixed(2)}</td>
       <td class="r"><span class="qty-cell-inner">${caseInput}<input type="number" min="0" step="0.001" value="${qty||''}" placeholder="—"
         id="qty_${vid_}_${sku.id}" data-v="${vid_}" data-type="cust" data-ci="${sku.id}" data-rate="${sku.rate}" onchange="onKG(this)"></span></td>

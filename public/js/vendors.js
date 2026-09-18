@@ -46,7 +46,7 @@ function renderVendorsList(vendors, totalCount, q) {
     const skuRows = skus.length
       ? skus.map(s => `
           <div class="panel-sku-row" id="pskurow_${pvid}_${s.id}">
-            <span class="panel-sku-name">${s.name}${s.caseSize > 0 ? `<span class="case-hint"> (${s.caseSize}/case)</span>` : ''}</span>
+            <span class="panel-sku-name">${s.name}${s.caseSize > 0 ? `<span class="case-hint"> (${s.caseSize} ${bizUnitAbbr(activePlantBizType())}/${caseInputWord(activePlantBizType()).replace(/s$/,'').toLowerCase()})</span>` : ''}</span>
             <span class="panel-sku-rate">₹${s.rate.toFixed(2)}/${bizUnitAbbr(activePlantBizType())}</span>
             <button class="btn-edit-sku" onclick="startEditSKUInPanel('${ve}',${s.id})" title="Edit">✎</button>
             <button class="btn-del"      onclick="deleteSKUFromPanel('${ve}',${s.id})"  title="Remove">×</button>
@@ -67,7 +67,7 @@ function renderVendorsList(vendors, totalCount, q) {
               onkeydown="if(event.key==='Enter')addSKUFromPanel('${ve}');if(event.key==='Escape')cancelPanelAddSKU('${ve}')">
             <input id="panelSkuRate_${pvid}" type="number" placeholder="₹/${bizUnitAbbr(activePlantBizType())}" min="0" step="0.01" style="width:90px"
               onkeydown="if(event.key==='Enter')addSKUFromPanel('${ve}');if(event.key==='Escape')cancelPanelAddSKU('${ve}')">
-            <input id="panelSkuCaseSize_${pvid}" type="number" placeholder="${bizUnitAbbr(activePlantBizType())}/case (optional)" min="0" step="0.01" style="width:150px"
+            <input id="panelSkuCaseSize_${pvid}" type="number" placeholder="${bizUnitAbbr(activePlantBizType())}/${caseInputWord(activePlantBizType()).replace(/s$/,'').toLowerCase()} (optional)" min="0" step="0.01" style="width:150px"
               onkeydown="if(event.key==='Enter')addSKUFromPanel('${ve}');if(event.key==='Escape')cancelPanelAddSKU('${ve}')">
             <button class="btn-save"   onclick="addSKUFromPanel('${ve}')">Save</button>
             <button class="btn-cancel" onclick="cancelPanelAddSKU('${ve}')">Cancel</button>
