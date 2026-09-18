@@ -49,7 +49,9 @@ async function api(method, url, body) {
   if (!currentPlantId && activePlantId) {
     if (method === 'GET' || method === 'DELETE') {
       url += (url.includes('?') ? '&' : '?') + 'plantId=' + activePlantId;
-    } else if (body && !(body instanceof FormData)) {
+    } else if (body instanceof FormData) {
+      body.append('plantId', activePlantId);
+    } else if (body) {
       body = { ...body, plantId: activePlantId };
     }
   }
