@@ -812,6 +812,10 @@ function buildPane(v) {
   const vid_ = vid(v);
   const _qtyOnly = isProdQtyBiz();
   const _u = bizUnitAbbr(activePlantBizType());
+  const _cw = caseInputWord(activePlantBizType());
+  const _cwSingular = _cw.replace(/s$/, '').toLowerCase();
+  const _hasCaseCol = customSKUs[v].some(s => s.caseSize > 0);
+  const caseColCell = (caseSize) => `<td class="r case-fixed-cell">${caseSize > 0 ? fn(caseSize, 3) + ' ' + _u : '<span class="zero">—</span>'}</td>`;
   const defRows = (SKU_CFG[v] || []).map(([name, rate], i) => {
     const qty = kgState[v][i] || 0, cost = qty * rate;
     const vesc = v.replace(/'/g, "\\'");
@@ -820,6 +824,7 @@ function buildPane(v) {
       <td class="sku-name">${name}
         <button class="btn-edit-sku" title="Edit rate" onclick="startEditDefaultSKU('${vesc}',${i})">✎</button>
       </td>
+      ${_hasCaseCol ? caseColCell(0) : ''}
       <td class="r rate-cell" id="defrate_${vid_}_${i}">₹&nbsp;${rate.toFixed(2)}</td>
       <td class="r"><input type="number" min="0" step="0.001" value="${qty||''}" placeholder="—"
         data-v="${vid_}" data-type="def" data-i="${i}" data-rate="${rate}" onchange="onKG(this)"></td>
@@ -829,30 +834,36 @@ function buildPane(v) {
 
   const custRows = customSKUs[v].map((sku) => {
     const qty = sku.qty || 0, cost = qty * sku.rate;
-    const _cw = caseInputWord(activePlantBizType());
     const caseInput = sku.caseSize > 0
-      ? `<input type="number" min="0" step="0.01" value="${sku.cases||''}" placeholder="${_cw}" class="case-input" title="${sku.caseSize} ${_u} per ${_cw.replace(/s$/,'').toLowerCase()}"
+      ? `<input type="number" min="0" step="0.01" value="${sku.cases||''}" placeholder="${_cw}" class="case-input" title="${sku.caseSize} ${_u} per ${_cwSingular}"
           onchange="onCaseInput(this,${sku.caseSize},'${vid_}',${sku.id})">`
       : '';
     const costCell = _qtyOnly ? '' : `<td class="r cost-val" id="kcc_${vid_}_${sku.id}">${cost>0?fc(cost):'<span class="zero">—</span>'}</td>`;
+    // When a per-piece weight is set, the qty box becomes a read-only display of
+    // the computed weight (pieces × per-piece weight) — the Pieces/Cases box is
+    // the only thing anyone types into, so there's no way to enter a conflicting
+    // manual weight. onCaseInput() still writes into this box by id as before.
+    const qtyInputAttrs = sku.caseSize > 0 ? 'readonly tabindex="-1" style="background:#f5f5f5;color:var(--muted);cursor:not-allowed"' : '';
     return `<tr class="custom-sku-row" id="custrow_${vid_}_${sku.id}">
-      <td class="sku-name">${sku.name}${sku.caseSize > 0 ? `<span class="case-hint"> (${sku.caseSize} ${_u}/${_cw.replace(/s$/,'').toLowerCase()})</span>` : ''}</td>
+      <td class="sku-name">${sku.name}</td>
+      ${_hasCaseCol ? caseColCell(sku.caseSize) : ''}
       <td class="r rate-cell">₹&nbsp;${sku.rate.toFixed(2)}</td>
-      <td class="r"><span class="qty-cell-inner">${caseInput}<input type="number" min="0" step="0.001" value="${qty||''}" placeholder="—"
+      <td class="r"><span class="qty-cell-inner">${caseInput}<input type="number" min="0" step="0.001" value="${qty||''}" placeholder="—" ${qtyInputAttrs}
         id="qty_${vid_}_${sku.id}" data-v="${vid_}" data-type="cust" data-ci="${sku.id}" data-rate="${sku.rate}" onchange="onKG(this)"></span></td>
       ${costCell}
     </tr>`;
   }).join('');
 
   const vesc = v.replace(/'/g, "\\'");
+  const caseColHead = _hasCaseCol ? `<th class="r">${_u}/${_cwSingular}</th>` : '';
   const headCostCol = _qtyOnly ? '' : `<th class="r">Cost (₹)</th>`;
   const footLabel = _qtyOnly ? `${v} — Total Qty` : `${v} — Total KG Cost`;
-  const footColspan = _qtyOnly ? 2 : 3;
+  const footColspan = (_qtyOnly ? 2 : 3) + (_hasCaseCol ? 1 : 0);
   const footVal = _qtyOnly ? `${fn(vendorQty(v))} ${_u}` : fc(vendorKG(v));
   return `<div class="tab-pane ${v===activeTab?'active':''}" id="kgPane_${vid_}">
     <div class="table-wrap">
       <table>
-        <thead><tr><th>SKU</th><th class="r">Rate (₹/${_u})</th><th class="r">Qty (${_u})</th>${headCostCol}</tr></thead>
+        <thead><tr><th>SKU</th>${caseColHead}<th class="r">Rate (₹/${_u})</th><th class="r">Qty (${_u})</th>${headCostCol}</tr></thead>
         <tbody>${defRows}${custRows}</tbody>
         <tfoot><tr class="ft"><td colspan="${footColspan}">${footLabel}</td>
           <td class="r cost-val" id="kgTot_${vid_}">${footVal}</td></tr></tfoot>
