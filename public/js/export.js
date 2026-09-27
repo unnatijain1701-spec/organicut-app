@@ -142,14 +142,25 @@ function _d2Date() { const d = new Date(); d.setDate(d.getDate() - 2); return _i
 
 // Shared computation used by both the Excel export and the on-screen report view.
 // Returns numeric rows + totals; formatting is done by the caller.
+//
+// Projection method matches the Dashboard's Month-End Prediction: keep the actual
+// recorded total exactly as-is, and only estimate the days NOT yet covered by the
+// selected range (dim - rangeDays), using each plant's own daily average. This
+// used to instead recompute the WHOLE month from the average (avg × dim), which
+// silently discards real data for the days you already have and disagreed with
+// the Dashboard's number for the same plant/period.
 function _computeReport(data) {
   const dim = data.daysInMonth;
+  const rangeDays = Math.round((new Date(data.to) - new Date(data.from)) / 86400000) + 1;
+  const daysRemaining = Math.max(0, dim - rangeDays);
   const baseline = LAST_MONTH_BASELINE[data.prevMonthLabel] || {};
   let tCost=0, tQty=0, tPCost=0, tPQty=0, tLCost=0, tLQty=0;
 
   const rows = data.plants.map(p => {
-    const projCost = (p.days ? p.total_cost / p.days : 0) * dim;
-    const projQty  = (p.days ? p.total_qty  / p.days : 0) * dim;
+    const avgDailyCost = p.days ? p.total_cost / p.days : 0;
+    const avgDailyQty  = p.days ? p.total_qty  / p.days : 0;
+    const projCost = p.total_cost + avgDailyCost * daysRemaining;
+    const projQty  = p.total_qty  + avgDailyQty  * daysRemaining;
     const projMPK  = projQty > 0 ? projCost / projQty : 0;
 
     const bl = baseline[p.name];
@@ -240,7 +251,7 @@ async function generatePlantReport(from, to, businessType) {
     const aoa = [
       ['MULTI-PLANT REPORT'],
       ['Period', `${from} to ${to}`],
-      ['Projection basis', `daily average × ${data.daysInMonth} days in month`],
+      ['Projection basis', `actual recorded total + (daily average × remaining days in month)`],
       ['Comparison', `vs previous month (${data.prevMonthLabel})`],
       [],
       header,
