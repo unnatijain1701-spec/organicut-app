@@ -372,28 +372,34 @@ function _renderDashPrediction(recs) {
   predSection.style.display = '';
 
   const daysRecorded = recs.length;
-  const daysElapsed  = now.getDate(); // today's date = days elapsed in month
-  const daysRemaining = daysInMonth - daysElapsed;
+  const daysElapsed  = now.getDate(); // today's calendar date — used only for the progress bar
+  // The projection itself uses days with NO RECORD YET (daysInMonth - daysRecorded),
+  // not "days until today" — a day can be missing because it's genuinely in the
+  // future, or because your team records on a lag (e.g. D-2) and just hasn't
+  // entered it yet. Both kinds of missing days get the same daily-average estimate;
+  // treating only future days as "missing" would silently count already-lagging
+  // past days as ₹0, understating the real month.
+  const daysMissing = Math.max(0, daysInMonth - daysRecorded);
 
   const actualCost = recs.reduce((s, r) => s + parseFloat(r.total_cost || 0), 0);
   const actualQty  = recs.reduce((s, r) => s + parseFloat(r.sale_qty  || 0), 0);
   const avgDailyCost = actualCost / daysRecorded;
   const avgDailyQty  = actualQty  / daysRecorded;
 
-  const predCost = actualCost + avgDailyCost * daysRemaining;
-  const predQty  = actualQty  + avgDailyQty  * daysRemaining;
+  const predCost = actualCost + avgDailyCost * daysMissing;
+  const predQty  = actualQty  + avgDailyQty  * daysMissing;
   const actualMPK = actualQty > 0 ? actualCost / actualQty : null;
   const predMPK   = predQty   > 0 ? predCost   / predQty   : null;
 
   const pct = Math.round((daysElapsed / daysInMonth) * 100);
 
   document.getElementById('dpPredCost').textContent    = fcShort(predCost);
-  document.getElementById('dpPredBasis').textContent   = `avg ₹${Math.round(avgDailyCost).toLocaleString('en-IN')}/day × ${daysRemaining} days left`;
+  document.getElementById('dpPredBasis').textContent   = `avg ₹${Math.round(avgDailyCost).toLocaleString('en-IN')}/day × ${daysMissing} day${daysMissing===1?'':'s'} not yet recorded`;
   document.getElementById('dpPredVol').textContent     = (predQty/1000).toFixed(2) + ' ' + bizVolUnitAbbr(dashboardBizType());
   document.getElementById('dpActualMPK').textContent   = actualMPK ? '₹ ' + actualMPK.toFixed(2) : '—';
   document.getElementById('dpPredMPK').textContent     = predMPK   ? '₹ ' + predMPK.toFixed(2)   : '—';
   document.getElementById('dpProgressBar').style.width = pct + '%';
-  document.getElementById('dpProgressLabel').textContent = `${daysElapsed} of ${daysInMonth} days elapsed (${pct}%)  •  ${daysRemaining} days remaining`;
+  document.getElementById('dpProgressLabel').textContent = `${daysElapsed} of ${daysInMonth} calendar days elapsed (${pct}%)  •  ${daysMissing} day${daysMissing===1?'':'s'} not yet recorded`;
   document.getElementById('dashPredLabel').textContent = `Based on ${daysRecorded}-day average`;
 }
 
