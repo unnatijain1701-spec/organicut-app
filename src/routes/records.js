@@ -18,6 +18,17 @@ function getPlantId(req) {
   return !isNaN(requested) && allowed.includes(requested) ? requested : allowed[0];
 }
 
+// Multi-plant routes (report/compare/trend/allplants/export-all) must never show a
+// restricted user data for a plant outside their granted plantIds — superadmin is
+// unrestricted (returns '' + unchanged params); everyone else gets an "AND p.id =
+// ANY($n)" fragment appended to `params`. Assumes the query joins plants as `p`.
+function plantScopeClause(req, params) {
+  if (req.user.role === 'superadmin') return '';
+  const allowed = req.user.plantIds || (req.user.plant_id != null ? [req.user.plant_id] : []);
+  params.push(allowed);
+  return `AND p.id = ANY($${params.length})`;
+}
+
 // GET /api/records  — list all records for this plant (summary only)
 router.get('/', async (req, res) => {
   const pid = getPlantId(req);
@@ -117,6 +128,11 @@ router.get('/export-all', async (req, res) => {
       params.push(month); filters.push(`TO_CHAR(dr.record_date, 'YYYY-MM') = $${params.length}`);
     }
     if (businessType) { params.push(businessType); filters.push(`p.business_type = $${params.length}`); }
+    if (req.user.role !== 'superadmin') {
+      const allowed = req.user.plantIds || (req.user.plant_id != null ? [req.user.plant_id] : []);
+      params.push(allowed);
+      filters.push(`p.id = ANY($${params.length})`);
+    }
     const where = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
 
     const { rows: records } = await db.query(`
@@ -235,12 +251,13 @@ router.get('/compare', async (req, res) => {
     const params = [from, to];
     let btFilter = '';
     if (businessType) { params.push(businessType); btFilter = `AND p.business_type = $${params.length}`; }
+    const scopeFilter = plantScopeClause(req, params);
     const { rows } = await db.query(`
       SELECT p.id AS plant_id, p.name AS plant_name, p.display_order, p.business_type,
         TO_CHAR(dr.record_date, 'YYYY-MM-DD') AS date,
         dr.total_cost, dr.attendance_cost, dr.kg_cost, dr.sale_qty
       FROM daily_records dr JOIN plants p ON p.id = dr.plant_id
-      WHERE dr.record_date BETWEEN $1 AND $2 ${btFilter}
+      WHERE dr.record_date BETWEEN $1 AND $2 ${btFilter} ${scopeFilter}
       ORDER BY p.display_order, dr.record_date ASC
     `, params);
 
@@ -273,10 +290,11 @@ router.get('/allplants/:date', async (req, res) => {
     const params = [req.params.date];
     let btFilter = '';
     if (businessType) { params.push(businessType); btFilter = `AND p.business_type = $${params.length}`; }
+    const scopeFilter = plantScopeClause(req, params);
     const { rows } = await db.query(`
       SELECT dr.attendance_cost, dr.kg_cost, dr.total_cost, dr.sale_qty, dr.mpk, p.name AS plant_name, p.display_order, p.business_type
       FROM daily_records dr JOIN plants p ON p.id = dr.plant_id
-      WHERE dr.record_date = $1 ${btFilter}
+      WHERE dr.record_date = $1 ${btFilter} ${scopeFilter}
       ORDER BY p.display_order
     `, params);
     res.json(rows);
@@ -312,6 +330,7 @@ router.get('/report', async (req, res) => {
     const currentParams = [from, to];
     let btFilterCurrent = '';
     if (businessType) { currentParams.push(businessType); btFilterCurrent = `AND p.business_type = $${currentParams.length}`; }
+    const scopeFilterCurrent = plantScopeClause(req, currentParams);
 
     const { rows: current } = await db.query(`
       SELECT p.id, p.name, p.display_order, p.business_type,
@@ -323,7 +342,7 @@ router.get('/report', async (req, res) => {
           THEN (SUM(dr.total_cost) FILTER (WHERE ${COMPLETE}) / SUM(dr.sale_qty) FILTER (WHERE ${COMPLETE}))::NUMERIC(10,4)
           ELSE 0 END AS mpk
       FROM daily_records dr JOIN plants p ON p.id = dr.plant_id
-      WHERE dr.record_date BETWEEN $1 AND $2 ${btFilterCurrent}
+      WHERE dr.record_date BETWEEN $1 AND $2 ${btFilterCurrent} ${scopeFilterCurrent}
       GROUP BY p.id, p.name, p.display_order, p.business_type
       ORDER BY p.display_order
     `, currentParams);
@@ -331,6 +350,7 @@ router.get('/report', async (req, res) => {
     const prevParams = [iso(prevFirst), iso(prevLast)];
     let btFilterPrev = '';
     if (businessType) { prevParams.push(businessType); btFilterPrev = `AND p.business_type = $${prevParams.length}`; }
+    const scopeFilterPrev = plantScopeClause(req, prevParams);
 
     const { rows: prev } = await db.query(`
       SELECT p.id,
@@ -340,7 +360,7 @@ router.get('/report', async (req, res) => {
           THEN (SUM(dr.total_cost) FILTER (WHERE ${COMPLETE}) / SUM(dr.sale_qty) FILTER (WHERE ${COMPLETE}))::NUMERIC(10,4)
           ELSE 0 END AS mpk
       FROM daily_records dr JOIN plants p ON p.id = dr.plant_id
-      WHERE dr.record_date BETWEEN $1 AND $2 ${btFilterPrev}
+      WHERE dr.record_date BETWEEN $1 AND $2 ${btFilterPrev} ${scopeFilterPrev}
       GROUP BY p.id
     `, prevParams);
 
@@ -382,6 +402,7 @@ router.get('/trend', async (req, res) => {
     const params = [iso(start)];
     let btFilter = '';
     if (businessType) { params.push(businessType); btFilter = `AND p.business_type = $${params.length}`; }
+    const scopeFilter = plantScopeClause(req, params);
 
     // Same "complete day" rule as /report: a day only counts once attendance cost,
     // sale qty AND per-kg cost are all filled in (kg cost exempt where the plant has
@@ -398,7 +419,7 @@ router.get('/trend', async (req, res) => {
         COALESCE(SUM(dr.kg_cost)         FILTER (WHERE ${COMPLETE}), 0)::NUMERIC(14,2) AS kg_cost,
         COALESCE(SUM(dr.sale_qty)        FILTER (WHERE ${COMPLETE}), 0)::NUMERIC(14,2) AS total_qty
       FROM daily_records dr JOIN plants p ON p.id = dr.plant_id
-      WHERE dr.record_date >= $1 ${btFilter}
+      WHERE dr.record_date >= $1 ${btFilter} ${scopeFilter}
       GROUP BY p.id, p.name, p.display_order, p.business_type, TO_CHAR(dr.record_date, 'YYYY-MM')
       HAVING COUNT(*) FILTER (WHERE ${COMPLETE}) > 0
       ORDER BY p.display_order, month
@@ -414,12 +435,13 @@ router.get('/trend', async (req, res) => {
     const dailyParams = [currentMonthStart];
     let dailyBtFilter = '';
     if (businessType) { dailyParams.push(businessType); dailyBtFilter = `AND p.business_type = $${dailyParams.length}`; }
+    const dailyScopeFilter = plantScopeClause(req, dailyParams);
     const { rows: daily } = await db.query(`
       SELECT p.id, p.name, p.display_order,
         TO_CHAR(dr.record_date, 'YYYY-MM-DD') AS date,
         dr.total_cost, dr.attendance_cost, dr.kg_cost, dr.sale_qty
       FROM daily_records dr JOIN plants p ON p.id = dr.plant_id
-      WHERE dr.record_date < $1 AND ${COMPLETE} ${dailyBtFilter}
+      WHERE dr.record_date < $1 AND ${COMPLETE} ${dailyBtFilter} ${dailyScopeFilter}
       ORDER BY p.display_order, dr.record_date ASC
     `, dailyParams);
 
