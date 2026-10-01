@@ -1,5 +1,6 @@
 let currentUsername = '';
 let currentRole = '';
+let currentPermissions = [];   // granular permission keys granted to this (non-superadmin) user
 let currentPlantId   = null;
 let currentPlantName = null;
 let activePlantId    = null;  // null for superadmin until a plant is selected
@@ -10,6 +11,11 @@ let activeBizType    = sessionStorage.getItem('activeBizType') || '';
 // Which pre-login tile (or 'ADMIN') was clicked to reach the login form — applied once
 // login succeeds, for all-plants users only; plant-locked users' access ignores it.
 let pendingBizType   = null;
+
+// Mirrors src/utils/permissions.js hasPermission — superadmin is always unrestricted.
+function hasPerm(key) {
+  return currentRole === 'superadmin' || (currentPermissions || []).includes(key);
+}
 
 /* ═══════════════════════════════════════════════════════
    SKU CONFIGURATION

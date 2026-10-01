@@ -1,6 +1,7 @@
 const express = require('express');
 const db = require('../db');
 const { authenticateToken } = require('../middleware/auth');
+const { hasPermission } = require('../utils/permissions');
 
 const router = express.Router();
 
@@ -98,8 +99,8 @@ router.get('/export', async (req, res) => {
 // Alternatively, pass from=YYYY-MM-DD&to=YYYY-MM-DD for a specific range spanning any number of
 // months (e.g. "just July and August") — from/to take priority over month when both are given.
 router.get('/export-all', async (req, res) => {
-  if (req.user.role !== 'superadmin')
-    return res.status(403).json({ error: 'Superadmin only' });
+  if (!hasPermission(req.user, 'view_reports'))
+    return res.status(403).json({ error: 'You do not have permission to do this' });
   const month = (req.query.month || '').slice(0, 7);
   const hasMonth = /^\d{4}-\d{2}$/.test(month);
   const from = (req.query.from || '').slice(0, 10);
@@ -224,8 +225,8 @@ router.get('/analytics', async (req, res) => {
 
 // GET /api/records/compare?from=&to=&businessType=  — superadmin: daily cost+qty per plant, for cross-plant MPK comparison
 router.get('/compare', async (req, res) => {
-  if (req.user.role !== 'superadmin')
-    return res.status(403).json({ error: 'Superadmin only' });
+  if (!hasPermission(req.user, 'view_reports'))
+    return res.status(403).json({ error: 'You do not have permission to do this' });
   const from = (req.query.from || '').slice(0, 10);
   const to   = (req.query.to   || '').slice(0, 10);
   const businessType = req.query.businessType || null;
@@ -266,7 +267,7 @@ router.get('/compare', async (req, res) => {
 // (superadmin only — a multi-plant restricted user must NOT see other plants'
 // data here just because their own plant_id happens to be null too).
 router.get('/allplants/:date', async (req, res) => {
-  if (req.user.role !== 'superadmin') return res.status(403).json({ error: 'Forbidden' });
+  if (!hasPermission(req.user, 'view_reports')) return res.status(403).json({ error: 'Forbidden' });
   try {
     const businessType = req.query.businessType || null;
     const params = [req.params.date];
@@ -289,8 +290,8 @@ router.get('/allplants/:date', async (req, res) => {
 // Returns, for the selected range: per-plant cost/tonnage/MPK, plus each plant's
 // previous-calendar-month MPK (for the improving/worsening comparison).
 router.get('/report', async (req, res) => {
-  if (req.user.role !== 'superadmin')
-    return res.status(403).json({ error: 'Superadmin only' });
+  if (!hasPermission(req.user, 'view_reports'))
+    return res.status(403).json({ error: 'You do not have permission to do this' });
   const from = (req.query.from || '').slice(0, 10);
   const to   = (req.query.to   || '').slice(0, 10);
   const businessType = req.query.businessType || null;
@@ -369,8 +370,8 @@ router.get('/report', async (req, res) => {
 // cost trends across plants. The current month's numbers are partial — the frontend
 // projects a month-end estimate from them using the same method as /report.
 router.get('/trend', async (req, res) => {
-  if (req.user.role !== 'superadmin')
-    return res.status(403).json({ error: 'Superadmin only' });
+  if (!hasPermission(req.user, 'view_cost_trend'))
+    return res.status(403).json({ error: 'You do not have permission to do this' });
   const businessType = req.query.businessType || null;
   try {
     const now = new Date();
@@ -436,8 +437,8 @@ router.get('/trend', async (req, res) => {
 
 // GET /api/records/audit  — superadmin: recent deletion audit entries for a plant
 router.get('/audit', async (req, res) => {
-  if (req.user.role !== 'superadmin')
-    return res.status(403).json({ error: 'Superadmin only' });
+  if (!hasPermission(req.user, 'manage_records') && !hasPermission(req.user, 'view_reports'))
+    return res.status(403).json({ error: 'You do not have permission to do this' });
   const pid = getPlantId(req);
   try {
     const params = [];
@@ -492,8 +493,8 @@ router.post('/', async (req, res) => {
   if (!pid) return res.status(400).json({ error: 'No plant selected — please select a plant before saving' });
   if (!date) return res.status(400).json({ error: '"date" is required (YYYY-MM-DD)' });
 
-  // Block saves on locked records for non-superadmin
-  if (req.user.role !== 'superadmin') {
+  // Block saves on locked records unless the user can manage records
+  if (!hasPermission(req.user, 'manage_records')) {
     const { rows: chk } = await db.query(
       'SELECT locked FROM daily_records WHERE plant_id=$1 AND record_date=$2',
       [pid, date]
@@ -574,8 +575,8 @@ router.post('/', async (req, res) => {
 
 // DELETE /api/records/:date
 router.delete('/:date', async (req, res) => {
-  if (req.user.role !== 'superadmin')
-    return res.status(403).json({ error: 'Superadmin only' });
+  if (!hasPermission(req.user, 'manage_records'))
+    return res.status(403).json({ error: 'You do not have permission to do this' });
   const pid = getPlantId(req);
   if (!pid) return res.status(400).json({ error: 'No plant selected' });
   try {
@@ -606,8 +607,8 @@ router.delete('/:date', async (req, res) => {
 
 // PATCH /api/records/lock-all  — superadmin: lock or unlock ALL records for a plant
 router.patch('/lock-all', async (req, res) => {
-  if (req.user.role !== 'superadmin')
-    return res.status(403).json({ error: 'Superadmin only' });
+  if (!hasPermission(req.user, 'manage_records'))
+    return res.status(403).json({ error: 'You do not have permission to do this' });
   const pid = getPlantId(req);
   if (!pid) return res.status(400).json({ error: 'No plant selected' });
   const locked = req.body?.locked === true || req.body?.locked === 'true';
@@ -625,8 +626,8 @@ router.patch('/lock-all', async (req, res) => {
 
 // PATCH /api/records/:date/lock  — superadmin: lock or unlock a record
 router.patch('/:date/lock', async (req, res) => {
-  if (req.user.role !== 'superadmin')
-    return res.status(403).json({ error: 'Superadmin only' });
+  if (!hasPermission(req.user, 'manage_records'))
+    return res.status(403).json({ error: 'You do not have permission to do this' });
   const pid = getPlantId(req);
   if (!pid) return res.status(400).json({ error: 'No plant selected' });
   const locked = req.body?.locked === true || req.body?.locked === 'true';

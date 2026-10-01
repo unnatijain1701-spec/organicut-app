@@ -60,51 +60,14 @@
   <div class="users-toolbar">
     <input class="users-search" id="usersSearchInput" type="text" placeholder="🔍 Search by username…" oninput="applyUsersFilter()">
     <span id="usersRoleTabs"></span>
+    <span style="display:flex;gap:8px;margin-left:auto">
+      <button class="users-add-btn" id="addLocationToggleBtn" style="display:none" onclick="openLocationsModal()">📍 Locations</button>
+      <button class="users-add-btn" id="addUserToggleBtn" style="display:none" onclick="openAddUserModal()">➕ Add User</button>
+    </span>
   </div>
   <div class="users-body">
-    <div class="users-main">
+    <div class="users-main" style="width:100%">
       <div id="usersList"></div>
-    </div>
-    <div class="users-side">
-      <div class="users-side-card">
-        <div class="users-add-form">
-          <div class="users-add-title">Add New User</div>
-          <input class="users-input" id="newUsername" type="text" placeholder="Username" autocomplete="off">
-          <input class="users-input" id="newPassword" type="password" placeholder="Password (min 6 chars)" autocomplete="new-password">
-          <select class="users-input" id="newUserRole" style="cursor:pointer" onchange="onNewUserRoleChange(this.value)">
-            <option value="user">Operator (can enter data)</option>
-            <option value="admin">Admin (full access)</option>
-            <option value="superadmin">Superadmin (all plants, no restrictions)</option>
-          </select>
-          <div id="newUserBizTypeField" style="display:none;margin-bottom:8px">
-            <div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:5px">BUSINESS TYPE</div>
-            <span id="newUserBizType"></span>
-          </div>
-          <div id="newUserPlant" style="display:none;border:1.5px solid var(--border);border-radius:8px;padding:8px 10px;max-height:150px;overflow-y:auto;margin-bottom:10px"></div>
-          <div id="usersFormErr" class="users-form-err"></div>
-          <button class="users-add-btn" onclick="addUser()">Add User</button>
-        </div>
-      </div>
-      <div class="users-side-card" id="addLocationCard" style="display:none;margin-top:14px">
-        <button class="users-collapsible-toggle" onclick="toggleAddLocationForm()">
-          <span>📍 Locations</span> <span id="addLocationChevron">▸</span>
-        </button>
-        <div id="addLocationFormBody" style="display:none">
-          <div id="locationsListWrap"></div>
-          <div class="users-add-form">
-            <div class="users-add-title">Add New Location</div>
-            <input class="users-input" id="newLocationName" type="text" placeholder="Location name, e.g. Rai-522-FnV" autocomplete="off">
-            <div style="font-size:11px;font-weight:700;color:var(--muted);margin:0 0 5px">BUSINESS TYPE</div>
-            <div id="newLocationBizType" style="margin-bottom:10px"></div>
-            <label style="display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--text);margin-bottom:10px;cursor:pointer">
-              <input type="checkbox" id="newLocationHasKg" checked style="cursor:pointer">
-              Has per-unit processing cost
-            </label>
-            <div id="locationFormErr" class="users-form-err"></div>
-            <button class="users-add-btn" onclick="addLocation()">Add Location</button>
-          </div>
-        </div>
-      </div>
     </div>
   </div>
 </div>

@@ -119,7 +119,7 @@ function isProdQtyBiz() {
 // Sale/Production Qty box is locked either because the record itself is
 // superadmin-locked, or because this business auto-fills it from KG quantities.
 function saleQtyLocked() {
-  return isProdQtyBiz() || (_currentRecordLocked && currentRole !== 'superadmin');
+  return isProdQtyBiz() || (_currentRecordLocked && !hasPerm('manage_records'));
 }
 // Same idea for Dashboard/Compare/Report views, which can be scoped to one plant OR
 // one business-type filter with no single plant — falls back to null (mixed/default kg).
@@ -257,7 +257,8 @@ async function initApp() {
   document.getElementById('navDaily').style.display       = isAllPlants ? 'none' : '';
   // Vendors are plant-specific — hide the tab whenever no single plant is in context
   const isSuperadmin = currentRole === 'superadmin';
-  document.getElementById('navVendors').style.display = (!isAllPlants && isSuperadmin) ? '' : 'none';
+  const canManageVendors = hasPerm('manage_vendors');
+  document.getElementById('navVendors').style.display = (!isAllPlants && canManageVendors) ? '' : 'none';
   document.getElementById('kgProcessingCard').style.display = hasKgProcessing ? '' : 'none';
   { const eab = document.getElementById('exportAllPlantsBtn'); if (eab) eab.style.display = (isAllPlants && isSuperadmin) ? 'block' : 'none'; }
 
@@ -1245,7 +1246,7 @@ function closePreviewModal() {
 }
 
 async function saveRecord() {
-  if (_currentRecordLocked && currentRole !== 'superadmin') {
+  if (_currentRecordLocked && !hasPerm('manage_records')) {
     showToast('⚠ This record is locked. Ask superadmin to unlock it.', true);
     return;
   }
@@ -1445,7 +1446,7 @@ function _updateLockUI() {
   const lockBadge = document.getElementById('lockBadge');
   const entryCards = document.getElementById('entryCards');
   const saleQty = document.getElementById('saleQtyInput');
-  const isLockedForUser = _currentRecordLocked && currentRole !== 'superadmin';
+  const isLockedForUser = _currentRecordLocked && !hasPerm('manage_records');
   if (_currentRecordLocked) {
     if (saveBtn) { saveBtn.disabled = true; saveBtn.title = 'Record is locked by superadmin'; saveBtn.style.opacity = '0.45'; }
     if (lockBadge) lockBadge.style.display = '';

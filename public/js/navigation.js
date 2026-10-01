@@ -195,20 +195,21 @@ async function loadHistoryRecords() {
         const dateStr = d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
         const cleanDate = (r.record_date + '').slice(0, 10);
         const isLocked = !!r.locked;
-        const lockedStyle = (isLocked && currentRole !== 'superadmin') ? 'opacity:0.5;' : '';
+        const canManageRecords = hasPerm('manage_records');
+        const lockedStyle = (isLocked && !canManageRecords) ? 'opacity:0.5;' : '';
         return `<div class="hist-item" style="${lockedStyle}">
           <div class="hist-item-body" onclick="loadHistoryRecord('${cleanDate}')">
-            <div class="hist-date" style="${isLocked && currentRole !== 'superadmin' ? 'color:var(--muted)' : ''}">${dateStr}</div>
+            <div class="hist-date" style="${isLocked && !canManageRecords ? 'color:var(--muted)' : ''}">${dateStr}</div>
             <div class="hist-meta">
               <span>Total: ${fc(parseFloat(r.total_cost))}</span>
               <span>MPK: ${parseFloat(r.mpk) > 0 ? fn(parseFloat(r.mpk)) : '—'}</span>
               ${r.updated_by ? `<span style="color:var(--muted);font-size:10px">by ${r.updated_by}</span>` : ''}
             </div>
           </div>
-          ${currentRole === 'superadmin' ? `
+          ${canManageRecords ? `
             <button class="hist-lock-btn" title="${isLocked ? 'Unlock this record' : 'Lock this record'}" onclick="event.stopPropagation();toggleRecordLock('${cleanDate}',${isLocked ? 'false' : 'true'})">${isLocked ? '🔒' : '🔓'}</button>
             <button class="hist-del-btn" title="Delete this record" onclick="deleteHistoryRecord('${cleanDate}')">🗑</button>` : ''}
-          ${currentRole !== 'superadmin' && isLocked ? `<span title="Locked by admin" style="font-size:13px;flex-shrink:0">🔒</span>` : ''}
+          ${!canManageRecords && isLocked ? `<span title="Locked by admin" style="font-size:13px;flex-shrink:0">🔒</span>` : ''}
         </div>`;
       }).join('');
       return `<div class="hist-month">

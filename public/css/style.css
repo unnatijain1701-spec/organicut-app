@@ -924,3 +924,17 @@ tr.dash-row-alt td { background: #f7fdf9; }
   /* Content flows full width under the mobile top bar */
   .topbar, .sumbar, .main { margin-left: 0; }
 }
+
+/* ═══════════════════ Generic popup/modal (Users & Locations, permission pickers) ═══════════════════ */
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 9999;
+  display: flex; align-items: center; justify-content: center; padding: 16px;
+}
+.modal-box {
+  background: #fff; border-radius: 14px; padding: 24px; min-width: 320px; width: 100%;
+  box-shadow: 0 8px 32px rgba(0,0,0,.18);
+}
+.modal-x {
+  border: none; background: none; font-size: 22px; line-height: 1; cursor: pointer;
+  color: var(--muted); padding: 2px 6px;
+}

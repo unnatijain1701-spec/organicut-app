@@ -3,6 +3,7 @@ const multer  = require('multer');
 const XLSX    = require('xlsx');
 const db = require('../db');
 const { authenticateToken } = require('../middleware/auth');
+const { hasPermission } = require('../utils/permissions');
 
 const router = express.Router();
 
@@ -101,7 +102,7 @@ router.get('/rates', async (req, res) => {
 
 // POST /api/sku/rates  — save a default SKU rate override
 router.post('/rates', (req, res, next) => {
-  if (req.user.role !== 'superadmin') return res.status(403).json({ error: 'Superadmin only' });
+  if (!hasPermission(req.user, 'manage_vendors')) return res.status(403).json({ error: 'You do not have permission to do this' });
   next();
 }, async (req, res) => {
   const { vendorName, skuIndex, rate } = req.body || {};
@@ -123,7 +124,7 @@ router.post('/rates', (req, res, next) => {
 
 // POST /api/sku  — add a custom SKU
 router.post('/', (req, res, next) => {
-  if (req.user.role !== 'superadmin') return res.status(403).json({ error: 'Superadmin only' });
+  if (!hasPermission(req.user, 'manage_vendors')) return res.status(403).json({ error: 'You do not have permission to do this' });
   next();
 }, async (req, res) => {
   const { vendorName, skuName, rate, caseSize } = req.body || {};
@@ -149,7 +150,7 @@ router.post('/', (req, res, next) => {
 // POST /api/sku/bulk  — add many custom SKUs at once from an uploaded CSV/Excel file.
 // Expected columns: SKU Name, Rate, Case Size (optional).
 router.post('/bulk', (req, res, next) => {
-  if (req.user.role !== 'superadmin') return res.status(403).json({ error: 'Superadmin only' });
+  if (!hasPermission(req.user, 'manage_vendors')) return res.status(403).json({ error: 'You do not have permission to do this' });
   next();
 }, (req, res) => {
   upload.single('file')(req, res, async (err) => {
@@ -191,7 +192,7 @@ router.post('/bulk', (req, res, next) => {
 
 // PATCH /api/sku/:id  — edit a custom SKU
 router.patch('/:id', (req, res, next) => {
-  if (req.user.role !== 'superadmin') return res.status(403).json({ error: 'Superadmin only' });
+  if (!hasPermission(req.user, 'manage_vendors')) return res.status(403).json({ error: 'You do not have permission to do this' });
   next();
 }, async (req, res) => {
   const { skuName, rate, caseSize } = req.body || {};
@@ -210,7 +211,7 @@ router.patch('/:id', (req, res, next) => {
 
 // DELETE /api/sku/:id
 router.delete('/:id', (req, res, next) => {
-  if (req.user.role !== 'superadmin') return res.status(403).json({ error: 'Superadmin only' });
+  if (!hasPermission(req.user, 'manage_vendors')) return res.status(403).json({ error: 'You do not have permission to do this' });
   next();
 }, async (req, res) => {
   try {

@@ -552,7 +552,7 @@ function _renderDashTable(data) {
       <td class="r">${parseFloat(r.sale_qty || 0).toFixed(0)} ${bizUnitAbbr(dashboardBizType())}</td>
       <td class="r">₹ ${parseFloat(r.mpk).toFixed(2)}</td>
       <td class="r">
-        ${currentRole === 'superadmin' ? `<button class="dash-row-del" onclick="dashDeleteRecord('${r.date}')">🗑 Delete</button>` : ''}
+        ${hasPerm('manage_records') ? `<button class="dash-row-del" onclick="dashDeleteRecord('${r.date}')">🗑 Delete</button>` : ''}
       </td>
     </tr>`).join('');
 }

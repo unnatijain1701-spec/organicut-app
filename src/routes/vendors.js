@@ -1,6 +1,7 @@
 const express = require('express');
 const db = require('../db');
 const { authenticateToken } = require('../middleware/auth');
+const { hasPermission } = require('../utils/permissions');
 
 const router = express.Router();
 
@@ -34,7 +35,7 @@ router.get('/', async (req, res) => {
 });
 
 router.post('/', (req, res, next) => {
-  if (req.user.role !== 'superadmin') return res.status(403).json({ error: 'Superadmin only' });
+  if (!hasPermission(req.user, 'manage_vendors')) return res.status(403).json({ error: 'You do not have permission to do this' });
   next();
 }, async (req, res) => {
   const { name } = req.body || {};
@@ -53,7 +54,7 @@ router.post('/', (req, res, next) => {
 });
 
 router.delete('/:id', (req, res, next) => {
-  if (req.user.role !== 'superadmin') return res.status(403).json({ error: 'Superadmin only' });
+  if (!hasPermission(req.user, 'manage_vendors')) return res.status(403).json({ error: 'You do not have permission to do this' });
   next();
 }, async (req, res) => {
   try {

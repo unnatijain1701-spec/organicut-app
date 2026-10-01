@@ -8,6 +8,7 @@ async function checkAuth() {
     if (user.username) {
       currentUsername  = user.username;
       currentRole      = user.role || 'user';
+      currentPermissions = user.permissions || [];
       currentPlantId   = user.plant_id   || null;
       currentPlantName = user.plant_name || null;
       activePlantId    = currentPlantId;
@@ -17,15 +18,20 @@ async function checkAuth() {
       const isPrivileged = currentRole === 'admin' || currentRole === 'superadmin';
       const isSuperadmin = currentRole === 'superadmin';
       const canSeeDashboard = isPrivileged || !user.plant_id;
-      document.getElementById('navUsers').style.display = isSuperadmin ? '' : 'none';
+      const canSeeUsers   = isSuperadmin || hasPerm('manage_users') || hasPerm('manage_locations') || hasPerm('delete_locations');
+      const canSeeVendors = isSuperadmin || hasPerm('manage_vendors');
+      const canSeeReport  = isSuperadmin || hasPerm('view_reports');
+      const canSeeTrend   = isSuperadmin || hasPerm('view_cost_trend');
+      document.getElementById('navUsers').style.display = canSeeUsers ? '' : 'none';
       document.getElementById('navDashboard').style.display = canSeeDashboard ? '' : 'none';
-      document.getElementById('navVendors').style.display = isSuperadmin ? '' : 'none';
-      document.getElementById('histBulkLockBtns').style.display = isSuperadmin ? 'flex' : 'none';
-      { const rb = document.getElementById('reportMenuBtn'); if (rb) rb.style.display = isSuperadmin ? 'block' : 'none'; }
-      { const nr = document.getElementById('navReport'); if (nr) nr.style.display = isSuperadmin ? '' : 'none'; }
-      { const nt = document.getElementById('navTrend');  if (nt) nt.style.display = isSuperadmin ? '' : 'none'; }
-      document.getElementById('navAdminToggle').style.display = isSuperadmin ? '' : 'none';
-      if (isSuperadmin) setAdminGroupOpen(sessionStorage.getItem('navAdminOpen') === '1');
+      document.getElementById('navVendors').style.display = canSeeVendors ? '' : 'none';
+      document.getElementById('histBulkLockBtns').style.display = (isSuperadmin || hasPerm('manage_records')) ? 'flex' : 'none';
+      { const rb = document.getElementById('reportMenuBtn'); if (rb) rb.style.display = (canSeeReport || canSeeTrend) ? 'block' : 'none'; }
+      { const nr = document.getElementById('navReport'); if (nr) nr.style.display = canSeeReport ? '' : 'none'; }
+      { const nt = document.getElementById('navTrend');  if (nt) nt.style.display = canSeeTrend ? '' : 'none'; }
+      const showAdminGroup = canSeeUsers || canSeeVendors || canSeeReport || canSeeTrend;
+      document.getElementById('navAdminToggle').style.display = showAdminGroup ? '' : 'none';
+      if (showAdminGroup) setAdminGroupOpen(sessionStorage.getItem('navAdminOpen') === '1');
       document.getElementById('preLoginOverlay').style.display = 'none';
       document.getElementById('loginOverlay').style.display = 'none';
       await setupPlantSelector();
@@ -95,6 +101,7 @@ async function doLogin() {
     const user = await api('POST', '/api/auth/login', { username, password });
     currentUsername  = user.username;
     currentRole      = user.role || 'user';
+    currentPermissions = user.permissions || [];
     currentPlantId   = user.plant_id   || null;
     currentPlantName = user.plant_name || null;
     activePlantId    = currentPlantId;
@@ -103,14 +110,19 @@ async function doLogin() {
     const isPrivileged = currentRole === 'admin' || currentRole === 'superadmin';
     const isSuperadmin = currentRole === 'superadmin';
     const canSeeDashboard = isPrivileged || !user.plant_id;
-    document.getElementById('navUsers').style.display = isSuperadmin ? '' : 'none';
+    const canSeeUsers   = isSuperadmin || hasPerm('manage_users') || hasPerm('manage_locations') || hasPerm('delete_locations');
+    const canSeeVendors = isSuperadmin || hasPerm('manage_vendors');
+    const canSeeReport  = isSuperadmin || hasPerm('view_reports');
+    const canSeeTrend   = isSuperadmin || hasPerm('view_cost_trend');
+    document.getElementById('navUsers').style.display = canSeeUsers ? '' : 'none';
     document.getElementById('navDashboard').style.display = canSeeDashboard ? '' : 'none';
-    document.getElementById('navVendors').style.display = isSuperadmin ? '' : 'none';
-    { const nr = document.getElementById('navReport'); if (nr) nr.style.display = isSuperadmin ? '' : 'none'; }
-    { const nt = document.getElementById('navTrend');  if (nt) nt.style.display = isSuperadmin ? '' : 'none'; }
-    document.getElementById('navAdminToggle').style.display = isSuperadmin ? '' : 'none';
-    if (isSuperadmin) setAdminGroupOpen(false);
-    document.getElementById('histBulkLockBtns').style.display = isSuperadmin ? 'flex' : 'none';
+    document.getElementById('navVendors').style.display = canSeeVendors ? '' : 'none';
+    { const nr = document.getElementById('navReport'); if (nr) nr.style.display = canSeeReport ? '' : 'none'; }
+    { const nt = document.getElementById('navTrend');  if (nt) nt.style.display = canSeeTrend ? '' : 'none'; }
+    const showAdminGroup = canSeeUsers || canSeeVendors || canSeeReport || canSeeTrend;
+    document.getElementById('navAdminToggle').style.display = showAdminGroup ? '' : 'none';
+    if (showAdminGroup) setAdminGroupOpen(false);
+    document.getElementById('histBulkLockBtns').style.display = (isSuperadmin || hasPerm('manage_records')) ? 'flex' : 'none';
     document.getElementById('loginOverlay').style.display = 'none';
     await setupPlantSelector();
     // The pre-login tile (or 'Admin Sign In') the user clicked decides the starting scope —
@@ -156,6 +168,7 @@ async function doLogout() {
   await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
   currentUsername  = '';
   currentRole      = '';
+  currentPermissions = [];
   currentPlantId   = null;
   currentPlantName = null;
   activePlantId    = null;
