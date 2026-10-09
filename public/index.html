@@ -98,38 +98,6 @@
   </div>
 </div>
 
-<!-- ═══════════════════ WORKER TYPES PANEL ═══════════════════ -->
-<div id="workerTypesPanel" style="display:none">
-  <div class="dash-header">
-    <span class="dash-header-title">👷 <em>Worker Types</em> &amp; Rates</span>
-    <button class="dash-close" onclick="toggleWorkerTypesPanel(false)">×</button>
-  </div>
-  <div class="users-toolbar">
-    <div style="font-size:12px;color:var(--muted);padding:2px 0">
-      Rates are per-plant. Set the daily wage for each worker designation — cost is auto-calculated from headcount × rate.
-    </div>
-  </div>
-  <div class="users-body">
-    <div class="users-main" style="width:100%">
-      <div id="workerTypesList"></div>
-    </div>
-    <div class="users-side">
-      <div class="users-side-card">
-        <div class="users-add-form">
-          <div class="users-add-title">Add Worker Type</div>
-          <input class="users-input" id="newWorkerTypeName" type="text" placeholder="e.g. Cutter, Guard…" autocomplete="off"
-            onkeydown="if(event.key==='Enter')addWorkerType()">
-          <div style="font-size:11px;font-weight:700;color:var(--muted);margin:6px 0 3px">DAILY RATE (₹)</div>
-          <input class="users-input" id="newWorkerTypeRate" type="number" min="0" step="0.01" placeholder="e.g. 350" autocomplete="off"
-            onkeydown="if(event.key==='Enter')addWorkerType()">
-          <div id="workerTypesFormErr" class="users-form-err"></div>
-          <button class="users-add-btn" onclick="addWorkerType()">Add Worker Type</button>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-
 <!-- ═══════════════════ HISTORY PANEL ═══════════════════ -->
 <div id="historyPanel">
   <div class="hist-header">
@@ -412,7 +380,6 @@
         <button class="nav-item nav-admin-item" id="navReport" onclick="navTo('report')"><span class="nav-ico">📑</span> Report</button>
         <button class="nav-item nav-admin-item" id="navTrend" onclick="navTo('trend')"><span class="nav-ico">📈</span> Cost Trend</button>
         <button class="nav-item nav-admin-item" id="navVendors" onclick="navTo('vendors')"><span class="nav-ico">⚙</span> Vendors</button>
-        <button class="nav-item nav-admin-item" id="navWorkerTypes" style="display:none" onclick="navTo('workerTypes')"><span class="nav-ico">👷</span> Worker Types</button>
         <button class="nav-item nav-admin-item" id="navUsers" onclick="navTo('users')"><span class="nav-ico">👤</span> Users &amp; Locations</button>
       </div>
     </div>
@@ -577,7 +544,6 @@
 <script src="js/vendors.js"></script>
 <script src="js/users.js"></script>
 <script src="js/dashboard.js"></script>
-<script src="js/worker-types.js"></script>
 <script src="js/boot.js"></script>
 </body>
 </html>
