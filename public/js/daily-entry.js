@@ -270,6 +270,7 @@ async function initApp() {
   }
 
   await loadSKURateOverrides();
+  await loadWorkerTypes();
   await loadKGVendors();
   await loadCustomSKUs();
   renderAtt();
@@ -642,24 +643,73 @@ function toggleDesigView() {
 }
 
 function renderAtt() {
+  // Build a map of designation → daily rate from the loaded worker types cache.
+  // If a designation appears in the CSV but has no rate configured, its cost
+  // contribution is 0 (and a warning style is shown) — the user can set rates
+  // in the Worker Types settings panel.
+  const rateMap = {};
+  (_workerTypesCache || []).forEach(wt => { rateMap[wt.name] = parseFloat(wt.rate) || 0; });
+  const hasRates = Object.keys(rateMap).length > 0;
+
+  // The "designation columns" are always the configured worker types (in order),
+  // plus any extra columns that appear in the current CSV data but aren't in the
+  // rates list yet (shown with a ⚠ header to prompt the user to add them).
+  const configuredCols = (_workerTypesCache || []).map(wt => wt.name);
+  const extraDesigCols = [];
+  if (_desigViewOn) {
+    ATT_VENDORS.forEach(v => {
+      Object.keys(attState[v]?.designations || {}).forEach(d => {
+        if (!configuredCols.includes(d) && !extraDesigCols.includes(d)) extraDesigCols.push(d);
+      });
+    });
+  }
+  const desigCols = _desigViewOn ? [...configuredCols, ...extraDesigCols] : [];
+
+  // When rates are configured, auto-recalculate each contractor's cost from their
+  // designation counts × rates.  Skip this when no rates are set at all — in that
+  // case the old manual-cost behaviour is preserved so existing data isn't broken.
+  if (hasRates && _desigViewOn) {
+    ATT_VENDORS.forEach(v => {
+      const desig = attState[v]?.designations || {};
+      let autoCost = 0;
+      configuredCols.forEach(col => {
+        const cnt = parseInt(desig[col]) || 0;
+        autoCost += cnt * (rateMap[col] || 0);
+      });
+      // Update in-memory cost so recalc() picks it up correctly
+      attState[v].cost = r2(autoCost);
+    });
+  }
+
+  // Show/hide the breakdown toggle button
   const hasAnyDesig = ATT_VENDORS.some(v => Object.keys(attState[v]?.designations || {}).length > 0);
   const toggleBtn = document.getElementById('desigToggleBtn');
-  if (toggleBtn) toggleBtn.style.display = hasAnyDesig ? '' : 'none';
+  if (toggleBtn) {
+    // Also show the button when worker types are configured (even with no CSV data),
+    // so users can manually enter counts and have costs auto-calculated.
+    toggleBtn.style.display = (hasAnyDesig || hasRates) ? '' : 'none';
+  }
 
-  const desigCols = _desigViewOn ? _getAllDesigCols() : [];
-  const totalCols = 3 + desigCols.length;
+  const totalCols = desigCols.length + (hasRates && _desigViewOn ? 2 : 3);
 
   // Rebuild thead
   const thead = document.getElementById('attThead');
   if (thead) {
-    const desigHeaders = desigCols.map(d =>
-      `<th class="r" style="font-size:11px;color:#1e6b45;white-space:nowrap;padding:8px 10px">${d}</th>`
-    ).join('');
+    const desigHeaders = desigCols.map(d => {
+      const rate = rateMap[d];
+      const rateLabel = rate != null
+        ? `<span style="font-weight:400;opacity:.7"> ₹${rate.toFixed(0)}</span>`
+        : `<span style="color:#f59e0b" title="No rate set — configure in Worker Types settings"> ⚠</span>`;
+      return `<th class="r" style="font-size:11px;color:#1e6b45;white-space:nowrap;padding:8px 10px">${d}${rateLabel}</th>`;
+    }).join('');
+    const costHeader = (hasRates && _desigViewOn)
+      ? `<th class="r" style="font-size:11px;color:var(--muted)">Auto Cost (₹)</th>`
+      : `<th class="r">Production Attendance Cost (₹)</th>`;
     thead.innerHTML = `<tr>
       <th>Contractor</th>
       ${desigHeaders}
       <th class="r">Workers Present</th>
-      <th class="r">Production Attendance Cost (₹)</th>
+      ${costHeader}
     </tr>`;
   }
 
@@ -667,15 +717,16 @@ function renderAtt() {
   const tfoot = document.getElementById('attTfoot');
   if (tfoot) {
     const totalWorkers = ATT_VENDORS.reduce((s, v) => s + (parseInt(attState[v]?.workers) || 0), 0);
+    const totalCost    = totalAtt();
     const desigTotals = desigCols.map(d => {
-      const total = ATT_VENDORS.reduce((s, v) => s + (attState[v]?.designations?.[d]?.workers || 0), 0);
+      const total = ATT_VENDORS.reduce((s, v) => s + (parseInt(attState[v]?.designations?.[d]) || 0), 0);
       return `<td class="r" style="font-size:12px;color:#4a7060">${total || '—'}</td>`;
     }).join('');
     tfoot.innerHTML = `<tr class="ft">
       <td>Total</td>
       ${desigTotals}
       <td class="r">${totalWorkers > 0 ? totalWorkers + ' workers' : ''}</td>
-      <td class="r" id="attTotal">₹ 0.00</td>
+      <td class="r" id="attTotal">${fc(totalCost)}</td>
     </tr>`;
   }
 
@@ -688,10 +739,30 @@ function renderAtt() {
     document.getElementById('attTbody').innerHTML = ATT_VENDORS.map(v => {
       const s = attState[v], vk = v.replace(/'/g, "\\'");
       const desig = s.designations || {};
+
+      // Build editable input cells for each designation column
       const desigCells = desigCols.map(d => {
-        const w = desig[d]?.workers || 0;
-        return `<td class="r" style="font-size:12px;color:${w ? '#1e6b45' : '#ccc'};padding:6px 10px">${w || '—'}</td>`;
+        const cnt = parseInt(desig[d]) || 0;
+        const hasRate = rateMap[d] != null;
+        // Each cell is an editable number input — changing it updates the designations
+        // map, recalculates the contractor's cost, and re-renders the attendance total.
+        const cellStyle = !hasRate && cnt === 0 ? 'opacity:.4' : '';
+        return `<td class="r" style="padding:4px 6px">
+          <input type="number" min="0" step="1" value="${cnt || ''}" placeholder="—"
+            style="width:64px;text-align:right;${cellStyle}"
+            onchange="onDesigCount(this,'${vk}','${d.replace(/'/g,"\\'")}')">
+        </td>`;
       }).join('');
+
+      // Cost cell: read-only (auto-calculated) when rates exist and breakdown is on;
+      // otherwise the classic manual input.
+      const costCell = (hasRates && _desigViewOn)
+        ? `<td class="r"><span class="att-auto-cost" style="font-size:13px;font-weight:600;color:#1e6b45">${fc(parseFloat(s.cost) || 0)}</span></td>`
+        : `<td class="r">
+            <input type="number" min="0" step="0.01" value="${s.cost}" style="width:130px"
+              onchange="attState['${vk}'].cost=parseFloat(this.value)||0;markDirty();recalc();">
+          </td>`;
+
       return `<tr>
         <td>${v} <button onclick="removeContractor('${vk}')" title="Remove row"
           style="border:none;background:none;cursor:pointer;color:#b04040;font-size:13px;padding:0 4px">×</button></td>
@@ -700,10 +771,7 @@ function renderAtt() {
           <input type="number" min="0" step="1" value="${s.workers}" style="width:80px"
             onchange="attState['${vk}'].workers=parseInt(this.value)||0;markDirty();recalc();">
         </td>
-        <td class="r">
-          <input type="number" min="0" step="0.01" value="${s.cost}" style="width:130px"
-            onchange="attState['${vk}'].cost=parseFloat(this.value)||0;markDirty();recalc();">
-        </td>
+        ${costCell}
       </tr>`;
     }).join('');
   }

@@ -3,11 +3,12 @@ const express      = require('express');
 const path         = require('path');
 const cookieParser = require('cookie-parser');
 
-const authRoutes    = require('./src/routes/auth');
-const recordRoutes  = require('./src/routes/records');
-const uploadRoutes  = require('./src/routes/upload');
-const skuRoutes     = require('./src/routes/sku');
-const vendorRoutes  = require('./src/routes/vendors');
+const authRoutes        = require('./src/routes/auth');
+const recordRoutes      = require('./src/routes/records');
+const uploadRoutes      = require('./src/routes/upload');
+const skuRoutes         = require('./src/routes/sku');
+const vendorRoutes      = require('./src/routes/vendors');
+const workerTypeRoutes  = require('./src/routes/workerTypes');
 const { authenticateToken } = require('./src/middleware/auth');
 const { runMigrations } = require('./src/db/migrate');
 
@@ -17,11 +18,12 @@ app.use(express.json());
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, 'public')));
 
-app.use('/api/auth',    authRoutes);
-app.use('/api/records', authenticateToken, recordRoutes);
-app.use('/api/upload',  authenticateToken, uploadRoutes);
-app.use('/api/sku',     authenticateToken, skuRoutes);
-app.use('/api/vendors', authenticateToken, vendorRoutes);
+app.use('/api/auth',         authRoutes);
+app.use('/api/records',      authenticateToken, recordRoutes);
+app.use('/api/upload',       authenticateToken, uploadRoutes);
+app.use('/api/sku',          authenticateToken, skuRoutes);
+app.use('/api/vendors',      authenticateToken, vendorRoutes);
+app.use('/api/worker-types', authenticateToken, workerTypeRoutes);
 
 app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 

@@ -492,7 +492,7 @@ router.get('/:date', async (req, res) => {
 
     const record = records[0];
     const { rows: attendance } = await db.query(
-      'SELECT contractor_name, workers, cost FROM contractor_attendance WHERE record_id = $1 ORDER BY contractor_name',
+      'SELECT contractor_name, workers, cost, designations FROM contractor_attendance WHERE record_id = $1 ORDER BY contractor_name',
       [record.id]
     );
     const { rows: kgEntries } = await db.query(
@@ -570,8 +570,8 @@ router.post('/', async (req, res) => {
     await client.query('DELETE FROM contractor_attendance WHERE record_id = $1', [recordId]);
     for (const a of (attendance || [])) {
       await client.query(
-        'INSERT INTO contractor_attendance (record_id, contractor_name, workers, cost) VALUES ($1,$2,$3,$4)',
-        [recordId, a.contractorName, a.workers ?? 0, a.cost ?? 0]
+        'INSERT INTO contractor_attendance (record_id, contractor_name, workers, cost, designations) VALUES ($1,$2,$3,$4,$5)',
+        [recordId, a.contractorName, a.workers ?? 0, a.cost ?? 0, JSON.stringify(a.designations || {})]
       );
     }
 
