@@ -9,6 +9,7 @@ const ALL_PERMISSIONS = [
   'view_reports',       // multi-plant Report / Compare / All-Plants views
   'view_cost_trend',    // multi-plant Cost Trend view
   'manage_records',     // lock/unlock and delete daily records, view audit log
+  'manage_worker_types', // set worker-type names & daily rates for attendance entry
 ];
 
 // Superadmin is always unrestricted. Everyone else needs the exact key present

@@ -8,6 +8,7 @@ const recordRoutes  = require('./src/routes/records');
 const uploadRoutes  = require('./src/routes/upload');
 const skuRoutes     = require('./src/routes/sku');
 const vendorRoutes  = require('./src/routes/vendors');
+const workerTypeRoutes = require('./src/routes/worker-types');
 const { authenticateToken } = require('./src/middleware/auth');
 const { runMigrations } = require('./src/db/migrate');
 
@@ -22,6 +23,7 @@ app.use('/api/records', authenticateToken, recordRoutes);
 app.use('/api/upload',  authenticateToken, uploadRoutes);
 app.use('/api/sku',     authenticateToken, skuRoutes);
 app.use('/api/vendors', authenticateToken, vendorRoutes);
+app.use('/api/worker-types', authenticateToken, workerTypeRoutes);
 
 app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 

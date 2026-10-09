@@ -15,6 +15,16 @@ async function loadSKURateOverrides() {
   }
 }
 
+async function loadWorkerTypes() {
+  try {
+    WORKER_TYPES = await api('GET', '/api/worker-types');
+    WORKER_TYPES_BY_NAME = Object.fromEntries(WORKER_TYPES.map(t => [t.name, parseFloat(t.daily_rate) || 0]));
+  } catch (e) {
+    WORKER_TYPES = []; WORKER_TYPES_BY_NAME = {};
+    console.error('Failed to load worker types:', e.message);
+  }
+}
+
 let PLANTS_BY_ID = {};
 
 async function setupPlantSelector() {
@@ -261,6 +271,9 @@ async function initApp() {
   document.getElementById('navVendors').style.display = (!isAllPlants && canManageVendors) ? '' : 'none';
   document.getElementById('kgProcessingCard').style.display = hasKgProcessing ? '' : 'none';
   { const eab = document.getElementById('exportAllPlantsBtn'); if (eab) eab.style.display = (isAllPlants && isSuperadmin) ? 'block' : 'none'; }
+  const isPrivileged = currentRole === 'admin' || currentRole === 'superadmin';
+  { const wb = document.getElementById('workerBreakdownAdminBtn'); if (wb) wb.style.display = (!isAllPlants && isPrivileged) ? '' : 'none'; }
+  { const wr = document.getElementById('workerTypesRatesBtn'); if (wr) wr.style.display = (!isAllPlants && hasPerm('manage_worker_types')) ? '' : 'none'; }
 
   if (isAllPlants) {
     loadHistory();
@@ -272,6 +285,7 @@ async function initApp() {
   await loadSKURateOverrides();
   await loadKGVendors();
   await loadCustomSKUs();
+  await loadWorkerTypes();
   renderAtt();
   renderKGTabs();
   recalc();
@@ -623,10 +637,78 @@ function recalc() {
 
 let _desigViewOn = false;
 
+// CSV gives each worker-type column {workers, totalCost} (summed from each individual
+// row's own wage × days present). There's no single "rate" in that, so we snapshot an
+// effective average (totalCost / workers) as the editable rate for that column — so if
+// the count is changed afterward, cost recalculates sensibly instead of staying frozen.
+function normalizeCSVDesignations(raw) {
+  const out = {};
+  Object.entries(raw || {}).forEach(([name, d]) => {
+    const workers = d.workers || 0;
+    const cost = r2(d.totalCost || 0);
+    out[name] = { workers, cost, rate: workers > 0 ? r2(cost / workers) : (WORKER_TYPES_BY_NAME[name] || 0) };
+  });
+  return out;
+}
+
+// Saved `types` rows (from GET /api/records/:date) -> the same {name: {workers, cost, rate}}
+// shape used everywhere in attState, so a reloaded day's breakdown is editable too.
+function designationsFromSavedTypes(types) {
+  const out = {};
+  (types || []).forEach(t => {
+    out[t.worker_type] = {
+      workers: t.count || 0,
+      cost: parseFloat(t.cost) || 0,
+      rate: t.rate_used != null ? parseFloat(t.rate_used) : (WORKER_TYPES_BY_NAME[t.worker_type] || 0),
+    };
+  });
+  return out;
+}
+
+// attState[v].designations -> the `types` array the backend persists for that contractor.
+function designationsToTypesPayload(designations) {
+  return Object.entries(designations || {})
+    .filter(([, d]) => (d.workers > 0) || (d.cost > 0))
+    .map(([name, d]) => ({ workerType: name, count: d.workers || 0, rate: d.rate ?? null, cost: r2(d.cost || 0) }));
+}
+
+// Whether the active plant has worker-type breakdown turned on at all (a per-plant
+// switch, admin/superadmin-only — see toggleWorkerBreakdown). When it's off, attendance
+// behaves exactly as before this feature: one total worker count + one total cost per
+// contractor, no columns.
+function plantBreakdownEnabled() {
+  const pid = currentPlantId || activePlantId;
+  return !!PLANTS_BY_ID[pid]?.has_worker_breakdown;
+}
+
+// Columns shown when the breakdown is on = every configured worker type for this plant
+// (so you can fill one in even with zero workers so far) plus any ad-hoc name already
+// present in the data (e.g. a CSV designation that isn't in the configured rate list).
 function _getAllDesigCols() {
-  const seen = new Set();
+  const seen = new Set(WORKER_TYPES.map(t => t.name));
   ATT_VENDORS.forEach(v => Object.keys(attState[v]?.designations || {}).forEach(d => seen.add(d)));
   return [...seen];
+}
+
+// Recompute a contractor's total workers/cost as the sum of its breakdown cells —
+// called whenever a breakdown cell changes, so the contractor row's totals always
+// reflect the sum instead of being separately (and inconsistently) hand-typed.
+function _recalcFromDesignations(v) {
+  const desig = attState[v]?.designations || {};
+  const entries = Object.values(desig);
+  if (!entries.length) return;
+  attState[v].workers = entries.reduce((s, d) => s + (d.workers || 0), 0);
+  attState[v].cost = r2(entries.reduce((s, d) => s + (d.cost || 0), 0));
+}
+
+function onDesigCellChange(v, colName, newCount) {
+  const count = parseInt(newCount) || 0;
+  const desig = attState[v].designations || (attState[v].designations = {});
+  const rate = desig[colName]?.rate ?? (WORKER_TYPES_BY_NAME[colName] || 0);
+  desig[colName] = { workers: count, rate, cost: r2(count * rate) };
+  _recalcFromDesignations(v);
+  markDirty();
+  renderAtt();
 }
 
 function toggleDesigView() {
@@ -642,11 +724,12 @@ function toggleDesigView() {
 }
 
 function renderAtt() {
-  const hasAnyDesig = ATT_VENDORS.some(v => Object.keys(attState[v]?.designations || {}).length > 0);
+  const breakdownOn = plantBreakdownEnabled();
   const toggleBtn = document.getElementById('desigToggleBtn');
-  if (toggleBtn) toggleBtn.style.display = hasAnyDesig ? '' : 'none';
+  if (toggleBtn) toggleBtn.style.display = breakdownOn ? '' : 'none';
+  if (!breakdownOn) _desigViewOn = false;
 
-  const desigCols = _desigViewOn ? _getAllDesigCols() : [];
+  const desigCols = (breakdownOn && _desigViewOn) ? _getAllDesigCols() : [];
   const totalCols = 3 + desigCols.length;
 
   // Rebuild thead
@@ -688,20 +771,27 @@ function renderAtt() {
     document.getElementById('attTbody').innerHTML = ATT_VENDORS.map(v => {
       const s = attState[v], vk = v.replace(/'/g, "\\'");
       const desig = s.designations || {};
+      const hasDesigEntries = desigCols.length > 0;
       const desigCells = desigCols.map(d => {
         const w = desig[d]?.workers || 0;
-        return `<td class="r" style="font-size:12px;color:${w ? '#1e6b45' : '#ccc'};padding:6px 10px">${w || '—'}</td>`;
+        return `<td class="r" style="padding:4px 6px">
+          <input type="number" min="0" step="1" value="${w}" style="width:60px"
+            onchange="onDesigCellChange('${vk}','${d.replace(/'/g,"\\'")}',this.value)">
+        </td>`;
       }).join('');
+      // Once the breakdown is on, the contractor's totals are the sum of its breakdown
+      // cells, not a separately hand-typed number — avoids the two ever disagreeing.
+      const totalsLocked = hasDesigEntries;
       return `<tr>
         <td>${v} <button onclick="removeContractor('${vk}')" title="Remove row"
           style="border:none;background:none;cursor:pointer;color:#b04040;font-size:13px;padding:0 4px">×</button></td>
         ${desigCells}
         <td class="r">
-          <input type="number" min="0" step="1" value="${s.workers}" style="width:80px"
+          <input type="number" min="0" step="1" value="${s.workers}" style="width:80px" ${totalsLocked ? 'readonly title="Auto-totaled from the breakdown columns"' : ''}
             onchange="attState['${vk}'].workers=parseInt(this.value)||0;markDirty();recalc();">
         </td>
         <td class="r">
-          <input type="number" min="0" step="0.01" value="${s.cost}" style="width:130px"
+          <input type="number" min="0" step="0.01" value="${s.cost}" style="width:130px" ${totalsLocked ? 'readonly title="Auto-totaled from the breakdown columns"' : ''}
             onchange="attState['${vk}'].cost=parseFloat(this.value)||0;markDirty();recalc();">
         </td>
       </tr>`;
@@ -1018,7 +1108,7 @@ async function onCSVUpload(e) {
     ATT_VENDORS = Object.keys(result.byContractor).sort();
     ATT_VENDORS.forEach(v => {
       const data = result.byContractor[v];
-      attState[v] = { workers: data.workers, cost: r2(data.totalCost), designations: data.designations || {} };
+      attState[v] = { workers: data.workers, cost: r2(data.totalCost), designations: normalizeCSVDesignations(data.designations) };
     });
     _freshCSVLoaded = true;
 
@@ -1050,7 +1140,7 @@ async function tryReprocessCSV() {
     ATT_VENDORS = Object.keys(result.byContractor).sort();
     ATT_VENDORS.forEach(v => {
       const data = result.byContractor[v];
-      attState[v] = { workers: data.workers, cost: r2(data.totalCost), designations: data.designations || {} };
+      attState[v] = { workers: data.workers, cost: r2(data.totalCost), designations: normalizeCSVDesignations(data.designations) };
     });
     _freshCSVLoaded = true;
     updateCSVMeta(result);
@@ -1273,6 +1363,7 @@ async function saveRecord() {
     contractorName: v,
     workers: attState[v].workers || 0,
     cost:    parseFloat(attState[v].cost) || 0,
+    types:   designationsToTypesPayload(attState[v].designations),
   }));
 
   const kgEntries = [];
@@ -1335,7 +1426,7 @@ function applyRecord(record) {
       if (!ATT_VENDORS.includes(v)) {
         ATT_VENDORS.push(v);
         const a = record.attendance.find(x => x.contractor_name === v);
-        attState[v] = { workers: a?.workers || 0, cost: parseFloat(a?.cost) || 0, designations: {} };
+        attState[v] = { workers: a?.workers || 0, cost: parseFloat(a?.cost) || 0, designations: designationsFromSavedTypes(a?.types) };
       }
     });
   } else {
@@ -1343,7 +1434,7 @@ function applyRecord(record) {
     ATT_VENDORS = (record.attendance || []).map(a => a.contractor_name);
     ATT_VENDORS.forEach(v => {
       const a = (record.attendance || []).find(x => x.contractor_name === v);
-      attState[v] = { workers: a ? (a.workers || 0) : 0, cost: a ? parseFloat(a.cost) || 0 : 0, designations: {} };
+      attState[v] = { workers: a ? (a.workers || 0) : 0, cost: a ? parseFloat(a.cost) || 0 : 0, designations: designationsFromSavedTypes(a?.types) };
     });
   }
 
@@ -1492,3 +1583,145 @@ async function toggleRecordLock(date, lock) {
   }
 }
 
+
+/* ═══════════════════════════════════════════════════════
+   WORKER-TYPE BREAKDOWN: admin on/off switch + rates settings
+═══════════════════════════════════════════════════════ */
+
+// Admin/superadmin-only switch for whether this location uses the worker-type
+// breakdown at all. Off = exactly the pre-feature experience (one total worker
+// count + one total cost per contractor). Deliberately a plain role check on the
+// frontend to match the backend route, not tied to the mix-and-match permission set.
+async function openWorkerBreakdownToggleModal() {
+  const pid = currentPlantId || activePlantId;
+  if (!pid) { showToast('⚠ Select a plant first', true); return; }
+  const enabled = plantBreakdownEnabled();
+  document.getElementById('wbToggleModal')?.remove();
+  const html = `<div id="wbToggleModal" class="modal-overlay">
+    <div class="modal-box" style="max-width:380px">
+      <div style="font-weight:700;font-size:15px;margin-bottom:8px">Worker-Type Breakdown</div>
+      <div style="font-size:13px;color:#4a7060;margin-bottom:16px">
+        ${enabled
+          ? 'This location currently tracks attendance by worker type (Worker / Labour / Cutter / ...). Turning it off goes back to one total worker count + one total cost per contractor.'
+          : 'This location currently just takes one total worker count + one total cost per contractor. Turning this on lets you break attendance down by worker type, auto-calculated from the rates in "💰 Worker Rates".'}
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button id="wbToggleCancelBtn" style="padding:7px 16px;border-radius:8px;border:1px solid var(--border);background:#fff;cursor:pointer;font-size:13px">Cancel</button>
+        <button id="wbToggleConfirmBtn" style="padding:7px 16px;border-radius:8px;border:none;background:var(--primary);color:#fff;cursor:pointer;font-size:13px;font-weight:600">${enabled ? 'Turn Off' : 'Turn On'}</button>
+      </div>
+    </div>
+  </div>`;
+  document.body.insertAdjacentHTML('beforeend', html);
+  document.getElementById('wbToggleCancelBtn').onclick = () => document.getElementById('wbToggleModal').remove();
+  document.getElementById('wbToggleConfirmBtn').onclick = async () => {
+    document.getElementById('wbToggleModal').remove();
+    try {
+      const plant = await api('PATCH', `/api/auth/plants/${pid}/worker-breakdown`, { enabled: !enabled });
+      PLANTS_BY_ID[pid] = { ...PLANTS_BY_ID[pid], ...plant };
+      showToast(`✓ Worker-type breakdown turned ${plant.has_worker_breakdown ? 'on' : 'off'} for this location`, false);
+      renderAtt();
+    } catch (e) {
+      showToast('⚠ ' + e.message, true);
+    }
+  };
+}
+
+// Manage the rate list itself — name + ₹/day, global or scoped to the active plant.
+// Gated by the manage_worker_types permission (grantable to specific admins/operators).
+async function openWorkerTypesModal() {
+  let types;
+  try { types = await api('GET', '/api/worker-types'); } catch (e) { showToast('⚠ ' + e.message, true); return; }
+
+  const rowsHtml = types.length ? types.map(t => `
+    <div class="loc-row" id="wtRow_${t.id}">
+      <span>
+        <span class="loc-row-name">${t.name}</span>
+        <span class="loc-row-type">₹${(parseFloat(t.daily_rate) || 0).toFixed(2)}/day${t.plant_id ? '' : ' · global default'}</span>
+      </span>
+      <span style="display:flex;gap:2px;flex-shrink:0">
+        <button class="loc-rename-btn" onclick="startEditWorkerType(${t.id},'${t.name.replace(/'/g,"\\'")}',${parseFloat(t.daily_rate) || 0})" title="Edit">✎</button>
+        <button class="loc-rename-btn" onclick="deleteWorkerType(${t.id})" title="Delete">🗑</button>
+      </span>
+    </div>
+  `).join('') : '<div class="hist-empty" style="padding:10px 16px">No worker types yet.</div>';
+
+  document.getElementById('workerTypesModal')?.remove();
+  const modalHtml = `<div id="workerTypesModal" class="modal-overlay">
+    <div class="modal-box" style="max-width:420px;max-height:85vh;overflow-y:auto">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <div style="font-weight:700;font-size:16px">💰 Worker Types &amp; Rates</div>
+        <button id="wtModalCloseBtn" class="modal-x">×</button>
+      </div>
+      <div id="wtListWrap">${rowsHtml}</div>
+      <div class="users-add-form" style="margin-top:14px">
+        <div class="users-add-title">Add Worker Type</div>
+        <input class="users-input" id="newWTName" type="text" placeholder="e.g. Worker, Labour, Cutter" autocomplete="off">
+        <input class="users-input" id="newWTRate" type="number" min="0" step="0.01" placeholder="Daily rate (₹)">
+        <label style="display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--text);margin-bottom:10px;cursor:pointer">
+          <input type="checkbox" id="newWTGlobal" style="cursor:pointer">
+          Apply to all locations (global default)
+        </label>
+        <div id="wtFormErr" class="users-form-err"></div>
+        <button class="users-add-btn" onclick="addWorkerType()">Add</button>
+      </div>
+    </div>
+  </div>`;
+  document.body.insertAdjacentHTML('beforeend', modalHtml);
+  document.getElementById('wtModalCloseBtn').onclick = () => document.getElementById('workerTypesModal').remove();
+}
+
+function startEditWorkerType(id, name, rate) {
+  const row = document.getElementById('wtRow_' + id);
+  if (!row) return;
+  row.innerHTML = `
+    <div style="width:100%">
+      <input class="loc-rename-input" id="wtNameInput_${id}" value="${name.replace(/"/g,'&quot;')}" style="width:100%;margin-bottom:6px">
+      <input class="loc-rename-input" id="wtRateInput_${id}" type="number" min="0" step="0.01" value="${rate}" style="width:100%;margin-bottom:8px">
+      <span style="display:flex;gap:4px;flex-shrink:0">
+        <button class="btn-save" onclick="saveEditWorkerType(${id})">✓ Save</button>
+        <button class="btn-cancel" onclick="openWorkerTypesModal()">✕</button>
+      </span>
+    </div>`;
+}
+
+async function saveEditWorkerType(id) {
+  const name = document.getElementById('wtNameInput_' + id)?.value.trim();
+  const dailyRate = document.getElementById('wtRateInput_' + id)?.value;
+  if (!name) { showToast('⚠ Name cannot be empty', true); return; }
+  try {
+    await api('PATCH', '/api/worker-types/' + id, { name, dailyRate });
+    showToast('✓ Updated', false);
+    await loadWorkerTypes();
+    openWorkerTypesModal();
+    renderAtt();
+  } catch (e) { showToast('⚠ ' + e.message, true); }
+}
+
+async function deleteWorkerType(id) {
+  if (!confirm('Delete this worker type? Already-saved attendance keeps its recorded numbers either way.')) return;
+  try {
+    await api('DELETE', '/api/worker-types/' + id);
+    await loadWorkerTypes();
+    openWorkerTypesModal();
+    renderAtt();
+  } catch (e) { showToast('⚠ ' + e.message, true); }
+}
+
+async function addWorkerType() {
+  const name = document.getElementById('newWTName').value.trim();
+  const dailyRate = document.getElementById('newWTRate').value;
+  const isGlobal = document.getElementById('newWTGlobal').checked;
+  const errEl = document.getElementById('wtFormErr');
+  errEl.textContent = '';
+  if (!name) { errEl.textContent = 'Name is required.'; return; }
+  if (dailyRate === '' || isNaN(parseFloat(dailyRate)) || parseFloat(dailyRate) < 0) { errEl.textContent = 'Enter a valid daily rate.'; return; }
+  try {
+    await api('POST', '/api/worker-types', { name, dailyRate, global: isGlobal });
+    showToast(`✓ Worker type "${name}" added`, false);
+    await loadWorkerTypes();
+    openWorkerTypesModal();
+    renderAtt();
+  } catch (e) {
+    errEl.textContent = e.message;
+  }
+}

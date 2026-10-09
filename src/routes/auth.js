@@ -147,7 +147,7 @@ router.get('/needs-setup', async (req, res) => {
 // the ones this user has been granted access to (via user_plants).
 router.get('/plants', authenticateToken, async (req, res) => {
   try {
-    const { rows } = await db.query('SELECT id, name, business_type, has_kg_processing FROM plants ORDER BY display_order');
+    const { rows } = await db.query('SELECT id, name, business_type, has_kg_processing, has_worker_breakdown FROM plants ORDER BY display_order');
     if (req.user.role === 'superadmin') return res.json(rows);
     const allowed = new Set(req.user.plantIds || (req.user.plant_id != null ? [req.user.plant_id] : []));
     res.json(rows.filter(p => allowed.has(p.id)));
@@ -202,6 +202,29 @@ router.patch('/plants/:id', authenticateToken, requirePermission('manage_locatio
       `UPDATE plants SET ${sets.join(', ')} WHERE id = $${params.length}
        RETURNING id, name, business_type, has_kg_processing, display_order`,
       params
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Location not found' });
+    res.json(rows[0]);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// PATCH /api/auth/plants/:id/worker-breakdown — turn the per-worker-type attendance
+// breakdown on/off for one location. Deliberately NOT gated by the manage_locations
+// permission — kept to plain role access (admin/superadmin), per explicit request,
+// so it isn't tangled up with who can rename/delete locations.
+router.patch('/plants/:id/worker-breakdown', authenticateToken, async (req, res) => {
+  const isPrivileged = req.user.role === 'admin' || req.user.role === 'superadmin';
+  if (!isPrivileged) return res.status(403).json({ error: 'Admin or superadmin only' });
+  const plantId = parseInt(req.params.id, 10);
+  if (isNaN(plantId)) return res.status(400).json({ error: 'Invalid plant id' });
+  const { enabled } = req.body || {};
+  try {
+    const { rows } = await db.query(
+      'UPDATE plants SET has_worker_breakdown = $1 WHERE id = $2 RETURNING id, name, business_type, has_kg_processing, has_worker_breakdown',
+      [!!enabled, plantId]
     );
     if (!rows.length) return res.status(404).json({ error: 'Location not found' });
     res.json(rows[0]);

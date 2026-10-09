@@ -492,13 +492,22 @@ router.get('/:date', async (req, res) => {
 
     const record = records[0];
     const { rows: attendance } = await db.query(
-      'SELECT contractor_name, workers, cost FROM contractor_attendance WHERE record_id = $1 ORDER BY contractor_name',
+      'SELECT id, contractor_name, workers, cost FROM contractor_attendance WHERE record_id = $1 ORDER BY contractor_name',
       [record.id]
     );
     const { rows: kgEntries } = await db.query(
       'SELECT vendor_name, sku_name, rate, qty, cost FROM vendor_kg_entries WHERE record_id = $1 ORDER BY vendor_name, sku_name',
       [record.id]
     );
+    if (attendance.length) {
+      const { rows: types } = await db.query(
+        'SELECT attendance_id, worker_type, count, rate_used, cost FROM contractor_attendance_types WHERE attendance_id = ANY($1)',
+        [attendance.map(a => a.id)]
+      );
+      const typesByAtt = {};
+      types.forEach(t => (typesByAtt[t.attendance_id] = typesByAtt[t.attendance_id] || []).push(t));
+      attendance.forEach(a => { a.types = typesByAtt[a.id] || []; });
+    }
 
     res.json({ ...record, attendance, kgEntries });
   } catch (e) {
@@ -567,12 +576,21 @@ router.post('/', async (req, res) => {
         [pid, date, 'remove_entries', auditParts.join('; '), req.user.username]);
     }
 
+    // Cascades into contractor_attendance_types too (FK ON DELETE CASCADE)
     await client.query('DELETE FROM contractor_attendance WHERE record_id = $1', [recordId]);
     for (const a of (attendance || [])) {
-      await client.query(
-        'INSERT INTO contractor_attendance (record_id, contractor_name, workers, cost) VALUES ($1,$2,$3,$4)',
+      const { rows: attRows } = await client.query(
+        'INSERT INTO contractor_attendance (record_id, contractor_name, workers, cost) VALUES ($1,$2,$3,$4) RETURNING id',
         [recordId, a.contractorName, a.workers ?? 0, a.cost ?? 0]
       );
+      const attendanceId = attRows[0].id;
+      for (const t of (a.types || [])) {
+        if (!(t.count > 0) && !(t.cost > 0)) continue;
+        await client.query(
+          'INSERT INTO contractor_attendance_types (attendance_id, worker_type, count, rate_used, cost) VALUES ($1,$2,$3,$4,$5)',
+          [attendanceId, t.workerType, t.count ?? 0, t.rate ?? null, t.cost ?? 0]
+        );
+      }
     }
 
     await client.query('DELETE FROM vendor_kg_entries WHERE record_id = $1', [recordId]);

@@ -82,7 +82,7 @@ function renderLocationsList(canDelete) {
     <div class="loc-row" id="locRow_${p.id}">
       <span>
         <span class="loc-row-name" id="locName_${p.id}">${p.name}</span>
-        <span class="loc-row-type">${p.business_type}${p.has_kg_processing === false ? ' · no per-unit cost' : ''}</span>
+        <span class="loc-row-type">${p.business_type}${p.has_kg_processing === false ? ' · no per-unit cost' : ''}${p.has_worker_breakdown ? ' · worker breakdown on' : ''}</span>
       </span>
       <span style="display:flex;gap:2px;flex-shrink:0">
         <button class="loc-rename-btn" onclick="startEditLocation(${p.id})" title="Edit">✎</button>
