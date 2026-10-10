@@ -322,10 +322,16 @@ router.get('/report', async (req, res) => {
     const iso = x => `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}-${String(x.getDate()).padStart(2,'0')}`;
     const daysInMonth = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
 
-    // A day counts as COMPLETE only when attendance cost, sale qty AND per-kg cost
-    // are all filled. Plants with has_kg_processing=false (e.g. Jaipur-FnV) are exempt from the KG check.
+    // A day counts as COMPLETE only when attendance cost, sale qty, AND (for plants
+    // with per-unit processing on) the per-kg/vendor section are all filled in.
+    // "Filled in" is deliberately NOT "kg_cost > 0" — RTE/Beverage have no real
+    // per-kg vendor rate (their SKU table exists only so Production Qty can be
+    // summed from it), so kg_cost is always 0 there by design even on a fully
+    // entered day. The actual signal that the section was used is a saved
+    // vendor_kg_entries row with real quantity, regardless of what it costs.
+    // Plants with has_kg_processing=false (e.g. Jaipur-FnV) are exempt entirely.
     // (Fixed SQL fragment — no user input, safe to interpolate.)
-    const COMPLETE = "dr.attendance_cost > 0 AND dr.sale_qty > 0 AND (NOT p.has_kg_processing OR dr.kg_cost > 0)";
+    const COMPLETE = "dr.attendance_cost > 0 AND dr.sale_qty > 0 AND (NOT p.has_kg_processing OR EXISTS (SELECT 1 FROM vendor_kg_entries vke WHERE vke.record_id = dr.id AND vke.qty > 0))";
 
     const currentParams = [from, to];
     let btFilterCurrent = '';
@@ -404,11 +410,10 @@ router.get('/trend', async (req, res) => {
     if (businessType) { params.push(businessType); btFilter = `AND p.business_type = $${params.length}`; }
     const scopeFilter = plantScopeClause(req, params);
 
-    // Same "complete day" rule as /report: a day only counts once attendance cost,
-    // sale qty AND per-kg cost are all filled in (kg cost exempt where the plant has
-    // none) — otherwise a half-entered day (e.g. cost saved, qty not yet typed in)
-    // divides by zero qty and craters that month's MPK to 0.
-    const COMPLETE = "dr.attendance_cost > 0 AND dr.sale_qty > 0 AND (NOT p.has_kg_processing OR dr.kg_cost > 0)";
+    // Same "complete day" rule as /report — see the comment there for why this checks
+    // for a real vendor_kg_entries row rather than kg_cost > 0 (RTE/Beverage always
+    // have kg_cost = 0 by design, even on a fully entered day).
+    const COMPLETE = "dr.attendance_cost > 0 AND dr.sale_qty > 0 AND (NOT p.has_kg_processing OR EXISTS (SELECT 1 FROM vendor_kg_entries vke WHERE vke.record_id = dr.id AND vke.qty > 0))";
 
     const { rows } = await db.query(`
       SELECT p.id, p.name, p.display_order, p.business_type,
