@@ -1835,9 +1835,9 @@ async function openContractorsModal() {
       </div>
       <div class="ctr-modal-footer">
         <div style="display:flex;gap:6px;margin-top:10px">
-          <input class="users-input wt-cell-input" id="newCtrName" type="text" placeholder="Contractor name" autocomplete="off" style="margin-bottom:0;flex:1"
+          <input class="users-input wt-cell-input" id="newCtrName" type="text" placeholder="Contractor name" autocomplete="off" style="margin-bottom:0;flex:1 1 auto;min-width:0"
             onkeydown="if(event.key==='Enter')addContractorFromModal();">
-          <button class="users-add-btn" style="padding:8px 16px;font-size:13px" onclick="addContractorFromModal()">+ Add row</button>
+          <button class="users-add-btn" style="width:auto;flex:0 0 auto;white-space:nowrap;padding:8px 16px;font-size:13px" onclick="addContractorFromModal()">+ Add row</button>
         </div>
         <div id="ctrFormErr" class="users-form-err"></div>
         <button class="btn btn-card-outline" style="width:100%;margin-top:10px" onclick="openContractorMergeModal()">🧹 Clean Up Historical Names</button>
