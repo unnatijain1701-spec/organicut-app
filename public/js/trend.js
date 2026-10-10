@@ -525,14 +525,12 @@ function _writeMultiPlantWorkbook(records, filename) {
   const attRows     = [['Plant','Date','Contractor','Workers','Cost (₹)']];
   const kgRows      = [['Plant','Date','Vendor','SKU','Rate (₹)','Qty','Cost (₹)']];
 
-  let grandCost = 0, grandQty = 0;
   for (const detail of records) {
     const dateStr = toISODateStr(detail.record_date);
     const xd = xlDate(dateStr);
     const plant = detail.plant_name || '';
     const totalCost = parseFloat(detail.total_cost) || 0;
     const saleQty   = parseFloat(detail.sale_qty) || 0;
-    grandCost += totalCost; grandQty += saleQty;
     summaryRows.push([plant, detail.business_type || '', xd,
       r2(parseFloat(detail.attendance_cost)||0), r2(parseFloat(detail.kg_cost)||0),
       r2(totalCost), saleQty,
@@ -546,8 +544,10 @@ function _writeMultiPlantWorkbook(records, filename) {
       else kgRows.push([plant, xd, e.vendor_name, e.sku_name, parseFloat(e.rate)||0, parseFloat(e.qty)||0, r2(parseFloat(e.cost)||0)]);
     });
   }
-  summaryRows.push(['TOTAL', '', '', '', '', r2(grandCost), grandQty,
-    grandQty > 0 ? r2(grandCost/grandQty) : '', '']);
+  // Deliberately no trailing TOTAL row here — it would put a blank/text value in the
+  // Date column, which breaks Excel's "Group" feature on a pivot table built from this
+  // sheet (a mixed-type date field can't be grouped). Totals are what a pivot table is
+  // for anyway; grandCost/grandQty above are computed but no longer written to the sheet.
 
   const ws1 = XLSX.utils.aoa_to_sheet(summaryRows); applyDateColumnFormat(ws1); ws1['!cols']=[14,14,12,22,14,12,14,10,16].map(w=>({wch:w}));
   const ws2 = XLSX.utils.aoa_to_sheet(attRows);     applyDateColumnFormat(ws2); ws2['!cols']=[14,12,32,10,12].map(w=>({wch:w}));
@@ -660,14 +660,12 @@ async function exportAllRecords() {
       const summaryRows = [['Plant','Business Type','Date','Production Attendance Cost','Per-Unit Cost','Total Cost','Sale Qty','MPK','Last Saved By']];
       const attRows = [['Plant','Date','Contractor','Workers','Cost (₹)']];
       const kgRows  = [['Plant','Date','Vendor','SKU','Rate (₹)','Qty','Cost (₹)']];
-      let grandCost = 0, grandQty = 0;
       records.forEach(detail => {
         const dateStr = toISODateStr(detail.record_date);
         const xd = xlDate(dateStr);
         const plant = detail.plant_name || '';
         const totalCost = parseFloat(detail.total_cost) || 0;
         const saleQty   = parseFloat(detail.sale_qty) || 0;
-        grandCost += totalCost; grandQty += saleQty;
         summaryRows.push([plant, detail.business_type || '', xd,
           r2(parseFloat(detail.attendance_cost)||0), r2(parseFloat(detail.kg_cost)||0),
           r2(totalCost), saleQty,
@@ -679,7 +677,8 @@ async function exportAllRecords() {
           else kgRows.push([plant, xd, e.vendor_name, e.sku_name, parseFloat(e.rate)||0, parseFloat(e.qty)||0, r2(parseFloat(e.cost)||0)]);
         });
       });
-      summaryRows.push(['TOTAL', '', '', '', '', r2(grandCost), grandQty, grandQty > 0 ? r2(grandCost/grandQty) : '', '']);
+      // No trailing TOTAL row — see _writeMultiPlantWorkbook's comment: a blank/text
+      // Date cell there breaks Excel's pivot table "Group" feature on this column.
       const ws1 = XLSX.utils.aoa_to_sheet(summaryRows); applyDateColumnFormat(ws1); ws1['!cols']=[14,14,12,22,14,12,14,10,16].map(w=>({wch:w}));
       const wsAD = XLSX.utils.aoa_to_sheet(attRows); applyDateColumnFormat(wsAD); wsAD['!cols']=[14,12,32,10,12].map(w=>({wch:w}));
       const wsKD = XLSX.utils.aoa_to_sheet(kgRows);  applyDateColumnFormat(wsKD); wsKD['!cols']=[14,12,20,28,12,10,12].map(w=>({wch:w}));
