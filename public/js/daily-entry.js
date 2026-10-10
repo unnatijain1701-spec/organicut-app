@@ -411,42 +411,52 @@ function showAddContractorPanel() {
   const html = `<div id="addContractorModal" style="position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:9999;display:flex;align-items:center;justify-content:center">
     <div style="background:#fff;border-radius:14px;padding:24px;min-width:320px;max-width:480px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,.18)">
       <div style="font-weight:700;font-size:14px;margin-bottom:4px">Add Contractor</div>
-      <div style="font-size:11px;color:var(--muted);margin-bottom:14px">Click a name to add to today's list.</div>
-      <div id="savedContractorList" style="display:flex;flex-wrap:wrap;gap:7px;margin-bottom:16px">${_renderSavedList()}</div>
-      <div style="border-top:1px solid var(--border);padding-top:14px">
-        <div style="font-size:11px;font-weight:600;color:#4a7060;margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">+ New Contractor (not in the list above)</div>
-        <div style="display:flex;gap:6px">
-          <input id="newContractorName" type="text" placeholder="Contractor name" class="input" style="flex:1"
-            onkeydown="if(event.key==='Enter')confirmAddContractor();if(event.key==='Escape')closeAddContractorPanel();">
-          <button class="btn btn-save-rec" onclick="confirmAddContractor()">Add</button>
-        </div>
-      </div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:10px">Start typing a name — pick a match, or add it as new.</div>
+      <input id="contractorSearchInput" type="text" placeholder="Search contractors…" class="input" style="width:100%;margin-bottom:10px"
+        oninput="renderContractorSearch()" onkeydown="if(event.key==='Escape')closeAddContractorPanel();">
+      <div id="contractorSearchResults" style="max-height:260px;overflow-y:auto;border:1px solid var(--border);border-radius:10px"></div>
       <div style="display:flex;justify-content:flex-end;margin-top:14px">
         <button class="btn btn-card-outline" onclick="closeAddContractorPanel()">Close</button>
       </div>
     </div>
   </div>`;
   document.body.insertAdjacentHTML('beforeend', html);
-  document.getElementById('newContractorName').focus();
+  renderContractorSearch();
+  document.getElementById('contractorSearchInput').focus();
 }
 
-function _renderSavedList() {
-  if (!CONTRACTORS.length) return '<span style="font-size:12px;color:#8a9a90">No contractors set up yet for this location — add one below.</span>';
-  return CONTRACTORS.map(c => {
+function renderContractorSearch() {
+  const q = (document.getElementById('contractorSearchInput')?.value || '').trim().toLowerCase();
+  const wrap = document.getElementById('contractorSearchResults');
+  if (!wrap) return;
+
+  const matches = q ? CONTRACTORS.filter(c => c.name.toLowerCase().includes(q)) : CONTRACTORS;
+  const exactMatch = CONTRACTORS.some(c => c.name.toLowerCase() === q);
+
+  const rowsHtml = matches.map(c => {
     const safe = c.name.replace(/'/g, "\\'");
     const alreadyIn = ATT_VENDORS.includes(c.name);
-    return `<span style="display:inline-flex;align-items:center;border-radius:20px;overflow:hidden;border:1px solid ${alreadyIn ? '#ccc' : '#1e6b45'};font-size:12px">
-      <button onclick="quickAddContractor('${safe}')" style="padding:5px 10px;border:none;background:${alreadyIn ? '#f0f0f0' : '#e8f4ed'};color:${alreadyIn ? '#999' : '#1e6b45'};cursor:${alreadyIn ? 'default' : 'pointer'};font-weight:600" ${alreadyIn ? 'disabled title="Already added"' : ''}>${c.name}${alreadyIn ? ' ✓' : ''}</button>
-    </span>`;
+    return `<div class="cr-search-row${alreadyIn ? ' cr-search-row-disabled' : ''}" ${alreadyIn ? '' : `onclick="quickAddContractor('${safe}')"`}>
+      <span>${c.name}</span>${alreadyIn ? '<span style="font-size:11px;color:#999">Already added</span>' : ''}
+    </div>`;
   }).join('');
+
+  const newRowHtml = (q && !exactMatch)
+    ? `<div class="cr-search-row cr-search-row-new" onclick="confirmAddContractor()">+ Add "${q.replace(/"/g,'&quot;')}" as a new contractor</div>`
+    : '';
+
+  const emptyHtml = (!matches.length && !newRowHtml)
+    ? '<div style="padding:14px;font-size:12px;color:var(--muted)">No contractors set up yet — type a name above to add one.</div>'
+    : '';
+
+  wrap.innerHTML = rowsHtml + newRowHtml + emptyHtml;
 }
 
 function quickAddContractor(name) {
   if (!ATT_VENDORS.includes(name)) {
     ATT_VENDORS.push(name);
     attState[name] = { workers: 0, cost: 0, designations: {} };
-    const el = document.getElementById('savedContractorList');
-    if (el) el.innerHTML = _renderSavedList();
+    renderContractorSearch();
     renderAtt();
   }
 }
@@ -456,11 +466,11 @@ function closeAddContractorPanel() {
 }
 
 async function confirmAddContractor() {
-  const inp = document.getElementById('newContractorName');
+  const inp = document.getElementById('contractorSearchInput');
   if (!inp) return;
   const name = inp.value.trim();
   if (!name) { showToast('⚠ Enter a contractor name.', true); return; }
-  if (ATT_VENDORS.includes(name)) { showToast('⚠ Already in list.', true); closeAddContractorPanel(); return; }
+  if (ATT_VENDORS.includes(name)) { showToast('⚠ Already in list.', true); return; }
   try {
     const existing = CONTRACTORS.find(c => c.name.toLowerCase() === name.toLowerCase());
     if (!existing) {
@@ -470,7 +480,8 @@ async function confirmAddContractor() {
     const canonicalName = existing ? existing.name : name;
     ATT_VENDORS.push(canonicalName);
     attState[canonicalName] = { workers: 0, cost: 0, designations: {} };
-    closeAddContractorPanel();
+    inp.value = '';
+    renderContractorSearch();
     renderAtt();
   } catch (e) {
     showToast('⚠ ' + e.message, true);
@@ -1799,31 +1810,38 @@ async function openContractorsModal() {
   await loadContractors();
 
   const rowsHtml = CONTRACTORS.length ? CONTRACTORS.map(c => `
-    <div class="loc-row" id="ctrRow_${c.id}">
-      <span class="loc-row-name">${c.name}</span>
-      <span style="display:flex;gap:2px;flex-shrink:0">
+    <tr id="ctrRow_${c.id}">
+      <td>${c.name}</td>
+      <td style="white-space:nowrap;text-align:right">
         <button class="loc-rename-btn" onclick="startEditContractor(${c.id},'${c.name.replace(/'/g,"\\'")}')" title="Edit">✎</button>
         <button class="loc-rename-btn" onclick="deleteContractor(${c.id})" title="Delete">🗑</button>
-      </span>
-    </div>
-  `).join('') : '<div class="hist-empty" style="padding:10px 16px">No contractors yet.</div>';
+      </td>
+    </tr>
+  `).join('') : '<tr><td colspan="2" style="text-align:center;color:var(--muted);padding:14px">No contractors yet.</td></tr>';
 
   document.getElementById('contractorsModal')?.remove();
   const modalHtml = `<div id="contractorsModal" class="modal-overlay">
-    <div class="modal-box" style="max-width:440px;max-height:85vh;overflow-y:auto">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+    <div class="modal-box ctr-modal-box" style="max-width:480px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
         <div style="font-weight:700;font-size:16px">🏗 Contractors</div>
         <button id="ctrModalCloseBtn" class="modal-x">×</button>
       </div>
       <div style="font-size:12px;color:var(--muted);margin-bottom:10px">This is the canonical contractor list for this location — manual entry and CSV uploads both resolve onto these names instead of free text.</div>
-      <div id="ctrListWrap">${rowsHtml}</div>
-      <div class="users-add-form" style="margin-top:14px">
-        <div class="users-add-title">Add Contractor</div>
-        <input class="users-input" id="newCtrName" type="text" placeholder="Contractor name" autocomplete="off">
-        <div id="ctrFormErr" class="users-form-err"></div>
-        <button class="users-add-btn" onclick="addContractorFromModal()">Add</button>
+      <div class="ctr-table-scroll">
+        <table class="wt-table">
+          <thead><tr><th>Contractor Name</th><th></th></tr></thead>
+          <tbody id="ctrTableBody">${rowsHtml}</tbody>
+        </table>
       </div>
-      <button class="btn btn-card-outline" style="width:100%;margin-top:12px" onclick="openContractorMergeModal()">🧹 Clean Up Historical Names</button>
+      <div class="ctr-modal-footer">
+        <div style="display:flex;gap:6px;margin-top:10px">
+          <input class="users-input wt-cell-input" id="newCtrName" type="text" placeholder="Contractor name" autocomplete="off" style="margin-bottom:0;flex:1"
+            onkeydown="if(event.key==='Enter')addContractorFromModal();">
+          <button class="users-add-btn" style="padding:8px 16px;font-size:13px" onclick="addContractorFromModal()">+ Add row</button>
+        </div>
+        <div id="ctrFormErr" class="users-form-err"></div>
+        <button class="btn btn-card-outline" style="width:100%;margin-top:10px" onclick="openContractorMergeModal()">🧹 Clean Up Historical Names</button>
+      </div>
     </div>
   </div>`;
   document.body.insertAdjacentHTML('beforeend', modalHtml);
@@ -1834,13 +1852,11 @@ function startEditContractor(id, name) {
   const row = document.getElementById('ctrRow_' + id);
   if (!row) return;
   row.innerHTML = `
-    <div style="width:100%">
-      <input class="loc-rename-input" id="ctrNameInput_${id}" value="${name.replace(/"/g,'&quot;')}" style="width:100%;margin-bottom:8px">
-      <span style="display:flex;gap:4px;flex-shrink:0">
-        <button class="btn-save" onclick="saveEditContractor(${id})">✓ Save</button>
-        <button class="btn-cancel" onclick="openContractorsModal()">✕</button>
-      </span>
-    </div>`;
+    <td><input class="users-input wt-cell-input" id="ctrNameInput_${id}" value="${name.replace(/"/g,'&quot;')}" style="margin-bottom:0;width:100%"></td>
+    <td style="white-space:nowrap;text-align:right">
+      <button class="btn-save" onclick="saveEditContractor(${id})">✓</button>
+      <button class="btn-cancel" onclick="openContractorsModal()">✕</button>
+    </td>`;
 }
 
 async function saveEditContractor(id) {

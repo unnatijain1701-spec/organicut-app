@@ -960,3 +960,21 @@ tr.dash-row-alt td { background: #f7fdf9; }
 .wt-table td { padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: middle; }
 .wt-table tr:last-child td { border-bottom: none; }
 .wt-cell-input { padding: 6px 8px !important; font-size: 13px !important; }
+
+/* ═══════════════════ Contractors modal: scrollable table, fixed add-row footer ═══════════════════ */
+.ctr-modal-box { display: flex; flex-direction: column; max-height: 85vh; }
+.ctr-table-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; border: 1px solid var(--border); border-radius: 10px; }
+.ctr-table-scroll .wt-table thead th { position: sticky; top: 0; background: #fff; }
+.ctr-modal-footer { flex: 0 0 auto; border-top: 1px solid var(--border); padding-top: 10px; margin-top: 10px; }
+
+/* ═══════════════════ Add Contractor: searchable list ═══════════════════ */
+.cr-search-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 9px 12px; font-size: 13px; cursor: pointer; border-bottom: 1px solid var(--border);
+}
+.cr-search-row:last-child { border-bottom: none; }
+.cr-search-row:hover { background: #f0f7f4; }
+.cr-search-row-disabled { cursor: default; color: #999; }
+.cr-search-row-disabled:hover { background: none; }
+.cr-search-row-new { color: var(--primary); font-weight: 600; }
+.cr-search-row-new:hover { background: #e8f4ed; }
