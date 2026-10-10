@@ -2,8 +2,60 @@ const express = require('express');
 const multer  = require('multer');
 const XLSX    = require('xlsx');
 const { processCSV } = require('../utils/csvParser');
+const db = require('../db');
 
 const router = express.Router();
+
+// Same scoping rule as vendors.js/sku.js's getPlantId.
+function getPlantId(req) {
+  if (req.user.role === 'superadmin') {
+    const pid = parseInt(req.query.plantId || req.body?.plantId);
+    return isNaN(pid) ? null : pid;
+  }
+  const allowed = req.user.plantIds || (req.user.plant_id != null ? [req.user.plant_id] : []);
+  if (!allowed.length) return null;
+  const requested = parseInt(req.query.plantId || req.body?.plantId);
+  return !isNaN(requested) && allowed.includes(requested) ? requested : allowed[0];
+}
+
+const normalize = s => String(s || '').trim().toLowerCase();
+
+// Re-keys a parsed CSV's byContractor map from raw biometric-export spellings onto the
+// plant's canonical contractor names wherever a match (direct or via a saved alias)
+// exists — merging any raw names that resolve to the same canonical contractor. Raw
+// names with no match are left as-is and returned separately in `unmatched`, so the
+// frontend can prompt a one-time resolution (after which it's remembered as an alias
+// and never asked again).
+async function canonicalizeContractors(byContractor, plantId) {
+  if (!plantId) return { byContractor, unmatched: Object.keys(byContractor) };
+  const { rows: contractors } = await db.query('SELECT name FROM contractors WHERE plant_id = $1', [plantId]);
+  const { rows: aliases } = await db.query(
+    `SELECT a.raw_name, c.name AS canonical_name FROM contractor_aliases a
+     JOIN contractors c ON c.id = a.contractor_id WHERE a.plant_id = $1`,
+    [plantId]
+  );
+  const byNormalized = {};
+  contractors.forEach(c => { byNormalized[normalize(c.name)] = c.name; });
+  aliases.forEach(a => { byNormalized[normalize(a.raw_name)] = a.canonical_name; });
+
+  const merged = {};
+  const unmatched = [];
+  Object.entries(byContractor).forEach(([rawName, data]) => {
+    const canonical = byNormalized[normalize(rawName)];
+    if (!canonical) { unmatched.push(rawName); merged[rawName] = data; return; }
+    if (!merged[canonical]) {
+      merged[canonical] = { workers: 0, totalCost: 0, designations: {} };
+    }
+    merged[canonical].workers += data.workers || 0;
+    merged[canonical].totalCost = Math.round((merged[canonical].totalCost + (data.totalCost || 0)) * 100) / 100;
+    Object.entries(data.designations || {}).forEach(([d, dd]) => {
+      if (!merged[canonical].designations[d]) merged[canonical].designations[d] = { workers: 0, totalCost: 0 };
+      merged[canonical].designations[d].workers += dd.workers || 0;
+      merged[canonical].designations[d].totalCost = Math.round((merged[canonical].designations[d].totalCost + (dd.totalCost || 0)) * 100) / 100;
+    });
+  });
+  return { byContractor: merged, unmatched };
+}
 const CSV_MIMETYPES = new Set([
   'text/csv', 'application/csv', 'text/plain',
   'application/vnd.ms-excel',            // Excel-exported CSVs often use this
@@ -59,7 +111,7 @@ function excelBufferToCSV(buffer) {
 
 // POST /api/upload/csv
 router.post('/csv', (req, res) => {
-  upload.single('file')(req, res, (err) => {
+  upload.single('file')(req, res, async (err) => {
     // multer errors (bad type, too large) land here — return a clear 400, not a 500
     if (err) {
       const msg = err.code === 'LIMIT_FILE_SIZE'
@@ -75,7 +127,9 @@ router.post('/csv', (req, res) => {
         : req.file.buffer.toString('utf-8');
       const filterDate = (req.body.date || '').trim() || null;
       const result = processCSV(text, filterDate);
-      res.json(result);
+      const pid = getPlantId(req);
+      const { byContractor, unmatched } = await canonicalizeContractors(result.byContractor, pid);
+      res.json({ ...result, byContractor, unmatchedContractors: unmatched });
     } catch (e) {
       res.status(400).json({ error: e.message });
     }

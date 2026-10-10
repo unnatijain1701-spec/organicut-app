@@ -30,6 +30,7 @@ let ATT_VENDORS = [];  // populated dynamically from CSV or saved record
 let KG_VENDORS = [];  // populated from /api/vendors on init
 let WORKER_TYPES = [];        // [{id, plant_id, name, daily_rate, display_order}, ...] for the active plant
 let WORKER_TYPES_BY_NAME = {}; // name -> daily_rate, for quick lookup when auto-calculating cost
+let CONTRACTORS = [];          // [{id, name}, ...] canonical contractor list for the active plant
 
 /* ═══════════════════════════════════════════════════════
    STATE

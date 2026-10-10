@@ -15,6 +15,15 @@ async function loadSKURateOverrides() {
   }
 }
 
+async function loadContractors() {
+  try {
+    CONTRACTORS = await api('GET', '/api/contractors');
+  } catch (e) {
+    CONTRACTORS = [];
+    console.error('Failed to load contractors:', e.message);
+  }
+}
+
 async function loadWorkerTypes() {
   try {
     WORKER_TYPES = await api('GET', '/api/worker-types');
@@ -274,6 +283,7 @@ async function initApp() {
   const isPrivileged = currentRole === 'admin' || currentRole === 'superadmin';
   { const wb = document.getElementById('workerBreakdownAdminBtn'); if (wb) wb.style.display = (!isAllPlants && isPrivileged) ? '' : 'none'; }
   { const wr = document.getElementById('workerTypesRatesBtn'); if (wr) wr.style.display = (!isAllPlants && hasPerm('manage_worker_types')) ? '' : 'none'; }
+  { const cm = document.getElementById('contractorsManageBtn'); if (cm) cm.style.display = (!isAllPlants && hasPerm('manage_vendors')) ? '' : 'none'; }
 
   if (isAllPlants) {
     loadHistory();
@@ -286,6 +296,7 @@ async function initApp() {
   await loadKGVendors();
   await loadCustomSKUs();
   await loadWorkerTypes();
+  await loadContractors();
   renderAtt();
   renderKGTabs();
   recalc();
@@ -386,42 +397,23 @@ async function loadCustomSKUs() {
 }
 
 
-/* ── Manual contractor add / remove ── */
-
-/* ── Saved contractor list (per plant, stored in localStorage) ── */
-
-function _savedContractorKey() {
-  return 'savedContractors_' + (currentPlantId || 'all');
-}
-const _DEFAULT_CONTRACTORS = [
-  'Krish Enterprises',
-  'Sai Enterprises',
-  'RS',
-  'SATENDRA SINGH Bhadoriya',
-  'Bhadawar Service Corporation',
-];
-function getSavedContractors() {
-  try {
-    const stored = localStorage.getItem(_savedContractorKey());
-    if (stored) return JSON.parse(stored);
-    // First visit — seed defaults and save them
-    setSavedContractors(_DEFAULT_CONTRACTORS);
-    return [..._DEFAULT_CONTRACTORS];
-  } catch { return [..._DEFAULT_CONTRACTORS]; }
-}
-function setSavedContractors(list) {
-  localStorage.setItem(_savedContractorKey(), JSON.stringify(list));
-}
+/* ── Manual contractor add / remove ──
+   Contractors are picked from the canonical per-plant list (CONTRACTORS, loaded via
+   loadContractors()) instead of free-typed — the free-text + per-browser localStorage
+   list this used to be is exactly what fragmented the same real contractor into a dozen
+   near-duplicate spellings ("Factotum" / "Foctotum" / "FACTOUM" / ...). A deliberate
+   "+ New Contractor" sub-flow still exists for genuinely new vendors, but it creates one
+   canonical row (POST /api/contractors) rather than a loose per-browser suggestion. */
 
 function showAddContractorPanel() {
   if (document.getElementById('addContractorModal')) return;
   const html = `<div id="addContractorModal" style="position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:9999;display:flex;align-items:center;justify-content:center">
     <div style="background:#fff;border-radius:14px;padding:24px;min-width:320px;max-width:480px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,.18)">
       <div style="font-weight:700;font-size:14px;margin-bottom:4px">Add Contractor</div>
-      <div style="font-size:11px;color:var(--muted);margin-bottom:14px">Click a name to add to today's list. Press ✕ to remove from saved.</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:14px">Click a name to add to today's list.</div>
       <div id="savedContractorList" style="display:flex;flex-wrap:wrap;gap:7px;margin-bottom:16px">${_renderSavedList()}</div>
       <div style="border-top:1px solid var(--border);padding-top:14px">
-        <div style="font-size:11px;font-weight:600;color:#4a7060;margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">New contractor</div>
+        <div style="font-size:11px;font-weight:600;color:#4a7060;margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">+ New Contractor (not in the list above)</div>
         <div style="display:flex;gap:6px">
           <input id="newContractorName" type="text" placeholder="Contractor name" class="input" style="flex:1"
             onkeydown="if(event.key==='Enter')confirmAddContractor();if(event.key==='Escape')closeAddContractorPanel();">
@@ -438,23 +430,14 @@ function showAddContractorPanel() {
 }
 
 function _renderSavedList() {
-  const saved = getSavedContractors();
-  if (!saved.length) return '<span style="font-size:12px;color:#8a9a90">No saved contractors yet. Add one below.</span>';
-  return saved.map(n => {
-    const safe = n.replace(/'/g, "\\'");
-    const alreadyIn = ATT_VENDORS.includes(n);
-    return `<span style="display:inline-flex;align-items:center;gap:0;border-radius:20px;overflow:hidden;border:1px solid ${alreadyIn ? '#ccc' : '#1e6b45'};font-size:12px">
-      <button onclick="quickAddContractor('${safe}')" style="padding:5px 10px;border:none;background:${alreadyIn ? '#f0f0f0' : '#e8f4ed'};color:${alreadyIn ? '#999' : '#1e6b45'};cursor:${alreadyIn ? 'default' : 'pointer'};font-weight:600" ${alreadyIn ? 'disabled title="Already added"' : ''}>${n}${alreadyIn ? ' ✓' : ''}</button>
-      <button onclick="removeFromSavedList('${safe}')" title="Remove from saved list"
-        style="padding:5px 7px;border:none;border-left:1px solid ${alreadyIn ? '#ccc' : '#1e6b45'};background:${alreadyIn ? '#f0f0f0' : '#e8f4ed'};color:#b04040;cursor:pointer;font-size:13px;line-height:1">×</button>
+  if (!CONTRACTORS.length) return '<span style="font-size:12px;color:#8a9a90">No contractors set up yet for this location — add one below.</span>';
+  return CONTRACTORS.map(c => {
+    const safe = c.name.replace(/'/g, "\\'");
+    const alreadyIn = ATT_VENDORS.includes(c.name);
+    return `<span style="display:inline-flex;align-items:center;border-radius:20px;overflow:hidden;border:1px solid ${alreadyIn ? '#ccc' : '#1e6b45'};font-size:12px">
+      <button onclick="quickAddContractor('${safe}')" style="padding:5px 10px;border:none;background:${alreadyIn ? '#f0f0f0' : '#e8f4ed'};color:${alreadyIn ? '#999' : '#1e6b45'};cursor:${alreadyIn ? 'default' : 'pointer'};font-weight:600" ${alreadyIn ? 'disabled title="Already added"' : ''}>${c.name}${alreadyIn ? ' ✓' : ''}</button>
     </span>`;
   }).join('');
-}
-
-function removeFromSavedList(name) {
-  const saved = getSavedContractors().filter(n => n !== name);
-  setSavedContractors(saved);
-  document.getElementById('savedContractorList').innerHTML = _renderSavedList();
 }
 
 function quickAddContractor(name) {
@@ -471,19 +454,26 @@ function closeAddContractorPanel() {
   document.getElementById('addContractorModal')?.remove();
 }
 
-function confirmAddContractor() {
+async function confirmAddContractor() {
   const inp = document.getElementById('newContractorName');
   if (!inp) return;
   const name = inp.value.trim();
   if (!name) { showToast('⚠ Enter a contractor name.', true); return; }
   if (ATT_VENDORS.includes(name)) { showToast('⚠ Already in list.', true); closeAddContractorPanel(); return; }
-  // Auto-save to saved list
-  const saved = getSavedContractors();
-  if (!saved.includes(name)) { saved.push(name); setSavedContractors(saved); }
-  ATT_VENDORS.push(name);
-  attState[name] = { workers: 0, cost: 0, designations: {} };
-  closeAddContractorPanel();
-  renderAtt();
+  try {
+    const existing = CONTRACTORS.find(c => c.name.toLowerCase() === name.toLowerCase());
+    if (!existing) {
+      const created = await api('POST', '/api/contractors', { name });
+      CONTRACTORS.push(created);
+    }
+    const canonicalName = existing ? existing.name : name;
+    ATT_VENDORS.push(canonicalName);
+    attState[canonicalName] = { workers: 0, cost: 0, designations: {} };
+    closeAddContractorPanel();
+    renderAtt();
+  } catch (e) {
+    showToast('⚠ ' + e.message, true);
+  }
 }
 
 function removeContractor(v) {
@@ -1087,6 +1077,84 @@ function showToast(msg, isError) {
   t._timer = setTimeout(() => { t.style.opacity = '0'; }, isError ? 12000 : 4000);
 }
 
+// Shared by onCSVUpload and tryReprocessCSV. The backend already canonicalizes
+// whatever raw contractor spellings it recognizes (via contractors + aliases for
+// this plant); anything left unmatched is listed in result.unmatchedContractors,
+// which triggers a one-time resolution prompt so it's never asked again.
+function applyCSVResult(result) {
+  ATT_VENDORS = Object.keys(result.byContractor).sort();
+  ATT_VENDORS.forEach(v => {
+    const data = result.byContractor[v];
+    attState[v] = { workers: data.workers, cost: r2(data.totalCost), designations: normalizeCSVDesignations(data.designations) };
+  });
+  _freshCSVLoaded = true;
+  if (result.unmatchedContractors && result.unmatchedContractors.length) {
+    openContractorResolveModal(result.unmatchedContractors);
+  }
+}
+
+// One raw CSV contractor name didn't match the canonical list — let the user either
+// fold it into an existing contractor or confirm it's genuinely new. Resolved once,
+// remembered forever via a saved alias (or a new canonical row), via POST /api/contractors/resolve.
+function openContractorResolveModal(rawNames) {
+  document.getElementById('contractorResolveModal')?.remove();
+  const rowsHtml = rawNames.map((raw, i) => `
+    <div style="padding:8px 0;border-bottom:1px solid var(--border)">
+      <div style="font-size:13px;font-weight:600;margin-bottom:6px">"${raw}"</div>
+      <select id="crRowSelect_${i}" class="users-input" style="margin-bottom:0" onchange="document.getElementById('crRowNew_${i}').style.display=this.value==='__new__'?'':'none'">
+        ${CONTRACTORS.map(c => `<option value="${c.id}">Same as: ${c.name}</option>`).join('')}
+        <option value="__new__" selected>This is a new contractor</option>
+      </select>
+      <input id="crRowNew_${i}" class="users-input" style="margin-top:6px" placeholder="Canonical name to save it as" value="${raw.replace(/"/g,'&quot;')}">
+    </div>
+  `).join('');
+
+  const modalHtml = `<div id="contractorResolveModal" class="modal-overlay">
+    <div class="modal-box" style="max-width:460px;max-height:85vh;overflow-y:auto">
+      <div style="font-weight:700;font-size:15px;margin-bottom:6px">Match ${rawNames.length} contractor name${rawNames.length===1?'':'s'} from this file</div>
+      <div style="font-size:13px;color:#4a7060;margin-bottom:10px">This CSV used ${rawNames.length === 1 ? 'a spelling' : 'spellings'} we haven't seen before. Match each one once — it'll be remembered for every future upload.</div>
+      <div id="crRowsWrap">${rowsHtml}</div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:18px;padding-top:14px;border-top:1px solid var(--border)">
+        <button id="crConfirmBtn" style="padding:7px 16px;border-radius:8px;border:none;background:var(--primary);color:#fff;cursor:pointer;font-size:13px;font-weight:600">Confirm</button>
+      </div>
+    </div>
+  </div>`;
+  document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+  document.getElementById('crConfirmBtn').onclick = async () => {
+    const resolutions = rawNames.map((raw, i) => {
+      const sel = document.getElementById('crRowSelect_' + i).value;
+      if (sel === '__new__') {
+        return { rawName: raw, action: 'new', newName: document.getElementById('crRowNew_' + i).value.trim() || raw };
+      }
+      return { rawName: raw, action: 'existing', contractorId: parseInt(sel, 10) };
+    });
+    try {
+      const { results } = await api('POST', '/api/contractors/resolve', { resolutions });
+      document.getElementById('contractorResolveModal').remove();
+      // Fold each raw name's attendance data into its now-canonical name in-place.
+      results.forEach(({ rawName, canonicalName }) => {
+        if (!canonicalName || canonicalName === rawName || !attState[rawName]) return;
+        if (!attState[canonicalName]) {
+          attState[canonicalName] = attState[rawName];
+        } else {
+          attState[canonicalName].workers += attState[rawName].workers || 0;
+          attState[canonicalName].cost = r2(attState[canonicalName].cost + (attState[rawName].cost || 0));
+        }
+        delete attState[rawName];
+        ATT_VENDORS = ATT_VENDORS.filter(v => v !== rawName);
+        if (!ATT_VENDORS.includes(canonicalName)) ATT_VENDORS.push(canonicalName);
+      });
+      ATT_VENDORS.sort();
+      await loadContractors();
+      renderAtt();
+      showToast('✓ Contractor names matched', false);
+    } catch (e) {
+      showToast('⚠ ' + e.message, true);
+    }
+  };
+}
+
 async function onCSVUpload(e) {
   const file = e.target.files[0];
   if (!file) return;
@@ -1105,12 +1173,7 @@ async function onCSVUpload(e) {
 
     if (result.date) document.getElementById('dateInput').value = result.date;
 
-    ATT_VENDORS = Object.keys(result.byContractor).sort();
-    ATT_VENDORS.forEach(v => {
-      const data = result.byContractor[v];
-      attState[v] = { workers: data.workers, cost: r2(data.totalCost), designations: normalizeCSVDesignations(data.designations) };
-    });
-    _freshCSVLoaded = true;
+    applyCSVResult(result);
 
     showToast('✓ ' + file.name + ' — ' + result.totalRows + ' rows loaded', false);
 
@@ -1137,12 +1200,7 @@ async function tryReprocessCSV() {
     // selected. If it doesn't, the parser falls back to some other day — in that case
     // do nothing: never override the chosen date, and let the saved DB record load.
     if (result.date !== date) return;
-    ATT_VENDORS = Object.keys(result.byContractor).sort();
-    ATT_VENDORS.forEach(v => {
-      const data = result.byContractor[v];
-      attState[v] = { workers: data.workers, cost: r2(data.totalCost), designations: normalizeCSVDesignations(data.designations) };
-    });
-    _freshCSVLoaded = true;
+    applyCSVResult(result);
     updateCSVMeta(result);
     renderAtt();
   } catch (err) {
@@ -1724,4 +1782,150 @@ async function addWorkerType() {
   } catch (e) {
     errEl.textContent = e.message;
   }
+}
+
+/* ═══════════════════════════════════════════════════════
+   CONTRACTORS: canonical list manager + historical merge tool
+═══════════════════════════════════════════════════════ */
+
+async function openContractorsModal() {
+  await loadContractors();
+
+  const rowsHtml = CONTRACTORS.length ? CONTRACTORS.map(c => `
+    <div class="loc-row" id="ctrRow_${c.id}">
+      <span class="loc-row-name">${c.name}</span>
+      <span style="display:flex;gap:2px;flex-shrink:0">
+        <button class="loc-rename-btn" onclick="startEditContractor(${c.id},'${c.name.replace(/'/g,"\\'")}')" title="Edit">✎</button>
+        <button class="loc-rename-btn" onclick="deleteContractor(${c.id})" title="Delete">🗑</button>
+      </span>
+    </div>
+  `).join('') : '<div class="hist-empty" style="padding:10px 16px">No contractors yet.</div>';
+
+  document.getElementById('contractorsModal')?.remove();
+  const modalHtml = `<div id="contractorsModal" class="modal-overlay">
+    <div class="modal-box" style="max-width:440px;max-height:85vh;overflow-y:auto">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <div style="font-weight:700;font-size:16px">🏗 Contractors</div>
+        <button id="ctrModalCloseBtn" class="modal-x">×</button>
+      </div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:10px">This is the canonical contractor list for this location — manual entry and CSV uploads both resolve onto these names instead of free text.</div>
+      <div id="ctrListWrap">${rowsHtml}</div>
+      <div class="users-add-form" style="margin-top:14px">
+        <div class="users-add-title">Add Contractor</div>
+        <input class="users-input" id="newCtrName" type="text" placeholder="Contractor name" autocomplete="off">
+        <div id="ctrFormErr" class="users-form-err"></div>
+        <button class="users-add-btn" onclick="addContractorFromModal()">Add</button>
+      </div>
+      <button class="btn btn-card-outline" style="width:100%;margin-top:12px" onclick="openContractorMergeModal()">🧹 Clean Up Historical Names</button>
+    </div>
+  </div>`;
+  document.body.insertAdjacentHTML('beforeend', modalHtml);
+  document.getElementById('ctrModalCloseBtn').onclick = () => document.getElementById('contractorsModal').remove();
+}
+
+function startEditContractor(id, name) {
+  const row = document.getElementById('ctrRow_' + id);
+  if (!row) return;
+  row.innerHTML = `
+    <div style="width:100%">
+      <input class="loc-rename-input" id="ctrNameInput_${id}" value="${name.replace(/"/g,'&quot;')}" style="width:100%;margin-bottom:8px">
+      <span style="display:flex;gap:4px;flex-shrink:0">
+        <button class="btn-save" onclick="saveEditContractor(${id})">✓ Save</button>
+        <button class="btn-cancel" onclick="openContractorsModal()">✕</button>
+      </span>
+    </div>`;
+}
+
+async function saveEditContractor(id) {
+  const name = document.getElementById('ctrNameInput_' + id)?.value.trim();
+  if (!name) { showToast('⚠ Name cannot be empty', true); return; }
+  try {
+    await api('PATCH', '/api/contractors/' + id, { name });
+    showToast('✓ Updated', false);
+    openContractorsModal();
+    renderAtt();
+  } catch (e) { showToast('⚠ ' + e.message, true); }
+}
+
+async function deleteContractor(id) {
+  if (!confirm('Delete this contractor from the canonical list? Already-saved attendance records are unaffected.')) return;
+  try {
+    await api('DELETE', '/api/contractors/' + id);
+    openContractorsModal();
+  } catch (e) { showToast('⚠ ' + e.message, true); }
+}
+
+async function addContractorFromModal() {
+  const name = document.getElementById('newCtrName').value.trim();
+  const errEl = document.getElementById('ctrFormErr');
+  errEl.textContent = '';
+  if (!name) { errEl.textContent = 'Name is required.'; return; }
+  try {
+    await api('POST', '/api/contractors', { name });
+    showToast(`✓ Contractor "${name}" added`, false);
+    openContractorsModal();
+  } catch (e) {
+    errEl.textContent = e.message;
+  }
+}
+
+// One-off cleanup tool: finds every distinct contractor_name already saved in this
+// plant's history that doesn't match the canonical list or a known alias, and lets you
+// fold each one onto a real contractor — reassigning all its historical records at once.
+async function openContractorMergeModal() {
+  let unmatched;
+  try { unmatched = await api('GET', '/api/contractors/unmatched'); } catch (e) { showToast('⚠ ' + e.message, true); return; }
+
+  document.getElementById('contractorsModal')?.remove();
+  document.getElementById('contractorMergeModal')?.remove();
+
+  if (!unmatched.length) {
+    const html = `<div id="contractorMergeModal" class="modal-overlay">
+      <div class="modal-box" style="max-width:420px">
+        <div style="font-weight:700;font-size:15px;margin-bottom:10px">🧹 Clean Up Historical Names</div>
+        <div style="font-size:13px;color:#4a7060;margin-bottom:16px">No unmatched historical contractor names found — your saved records already line up with the canonical list.</div>
+        <div style="display:flex;justify-content:flex-end"><button id="cmCloseBtn" style="padding:7px 16px;border-radius:8px;border:1px solid var(--border);background:#fff;cursor:pointer;font-size:13px">Close</button></div>
+      </div>
+    </div>`;
+    document.body.insertAdjacentHTML('beforeend', html);
+    document.getElementById('cmCloseBtn').onclick = () => document.getElementById('contractorMergeModal').remove();
+    return;
+  }
+
+  const rowsHtml = unmatched.map((raw, i) => `
+    <div style="padding:8px 0;border-bottom:1px solid var(--border)">
+      <div style="font-size:13px;font-weight:600;margin-bottom:6px">"${raw}"</div>
+      <select id="cmRowSelect_${i}" class="users-input" style="margin-bottom:0">
+        <option value="">— Skip (leave as-is) —</option>
+        ${CONTRACTORS.map(c => `<option value="${c.id}">Merge into: ${c.name}</option>`).join('')}
+      </select>
+    </div>
+  `).join('');
+
+  const modalHtml = `<div id="contractorMergeModal" class="modal-overlay">
+    <div class="modal-box" style="max-width:460px;max-height:85vh;overflow-y:auto">
+      <div style="font-weight:700;font-size:15px;margin-bottom:6px">🧹 Clean Up Historical Names</div>
+      <div style="font-size:13px;color:#4a7060;margin-bottom:10px">Found ${unmatched.length} historical name${unmatched.length===1?'':'s'} not yet matched to your canonical list. Pick where each one should fold in — this reassigns every past record under that name.</div>
+      <div id="cmRowsWrap">${rowsHtml}</div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:18px;padding-top:14px;border-top:1px solid var(--border)">
+        <button id="cmCancelBtn" style="padding:7px 16px;border-radius:8px;border:1px solid var(--border);background:#fff;cursor:pointer;font-size:13px">Close</button>
+        <button id="cmApplyBtn" style="padding:7px 16px;border-radius:8px;border:none;background:var(--primary);color:#fff;cursor:pointer;font-size:13px;font-weight:600">Apply Merges</button>
+      </div>
+    </div>
+  </div>`;
+  document.body.insertAdjacentHTML('beforeend', modalHtml);
+  document.getElementById('cmCancelBtn').onclick = () => document.getElementById('contractorMergeModal').remove();
+  document.getElementById('cmApplyBtn').onclick = async () => {
+    const mappings = unmatched
+      .map((raw, i) => ({ rawName: raw, contractorId: document.getElementById('cmRowSelect_' + i).value }))
+      .filter(m => m.contractorId);
+    if (!mappings.length) { showToast('⚠ Nothing selected to merge', true); return; }
+    try {
+      const { updatedRows } = await api('POST', '/api/contractors/merge', { mappings });
+      document.getElementById('contractorMergeModal').remove();
+      showToast(`✓ Merged ${mappings.length} name(s), updated ${updatedRows} historical record(s)`, false);
+    } catch (e) {
+      showToast('⚠ ' + e.message, true);
+    }
+  };
 }
