@@ -17,6 +17,22 @@ function hasPerm(key) {
   return currentRole === 'superadmin' || (currentPermissions || []).includes(key);
 }
 
+// Several backend routes send a raw DATE column (record_date) without wrapping it in
+// TO_CHAR(...) — node-postgres parses those into real JS Date objects, not strings. A
+// few places here used to assume it was always a string (`r.record_date.slice(0,10)`,
+// `r.record_date + ''`), which either threw (Date has no .slice) or silently produced
+// garbage (string-concatenating a Date calls its verbose .toString(), not an ISO date).
+// Always route a record_date value through this before treating it as 'YYYY-MM-DD'.
+function toISODateStr(val) {
+  if (!val) return '';
+  if (typeof val === 'string') return val.slice(0, 10);
+  if (val instanceof Date) {
+    const pad = n => String(n).padStart(2, '0');
+    return `${val.getFullYear()}-${pad(val.getMonth() + 1)}-${pad(val.getDate())}`;
+  }
+  return String(val).slice(0, 10);
+}
+
 /* ═══════════════════════════════════════════════════════
    SKU CONFIGURATION
 ═══════════════════════════════════════════════════════ */

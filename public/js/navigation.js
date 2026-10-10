@@ -120,7 +120,7 @@ async function loadHistoryForPlant(plantId, plantName) {
     const nowKey = new Date().toISOString().slice(0, 7);
     const groups = {};
     records.forEach(r => {
-      const key = (r.record_date + '').slice(0, 7);
+      const key = toISODateStr(r.record_date).slice(0, 7);
       if (!groups[key]) groups[key] = [];
       groups[key].push(r);
     });
@@ -129,9 +129,9 @@ async function loadHistoryForPlant(plantId, plantName) {
       const monthName = new Date(yr, mo - 1, 1).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
       const isCurrentMonth = key === nowKey;
       const rowsHTML = groups[key].map(r => {
-        const d = new Date(r.record_date);
+        const cleanDate = toISODateStr(r.record_date);
+        const d = new Date(cleanDate + 'T00:00:00');
         const dateStr = d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
-        const cleanDate = (r.record_date + '').slice(0, 10);
         return `<div class="hist-item">
           <div class="hist-item-body" onclick="loadHistoryRecordForPlant('${cleanDate}',${plantId})">
             <div class="hist-date">${dateStr}</div>
@@ -183,7 +183,7 @@ async function loadHistoryRecords() {
     const nowKey = new Date().toISOString().slice(0, 7);
     const groups = {};
     records.forEach(r => {
-      const key = (r.record_date + '').slice(0, 7);
+      const key = toISODateStr(r.record_date).slice(0, 7);
       if (!groups[key]) groups[key] = [];
       groups[key].push(r);
     });
@@ -192,9 +192,9 @@ async function loadHistoryRecords() {
       const monthName = new Date(yr, mo - 1, 1).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
       const isCurrentMonth = key === nowKey;
       const rowsHTML = groups[key].map(r => {
-        const d = new Date(r.record_date);
+        const cleanDate = toISODateStr(r.record_date);
+        const d = new Date(cleanDate + 'T00:00:00');
         const dateStr = d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
-        const cleanDate = (r.record_date + '').slice(0, 10);
         const isLocked = !!r.locked;
         const canManageRecords = hasPerm('manage_records');
         const lockedStyle = (isLocked && !canManageRecords) ? 'opacity:0.5;' : '';

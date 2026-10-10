@@ -1307,7 +1307,7 @@ async function showAuditLog() {
       <tbody>${rows.map(r => `<tr style="border-bottom:1px solid #f0f0f0">
         <td style="padding:8px 6px;white-space:nowrap;color:#555">${fmt(r.created_at)}</td>
         <td style="padding:8px 6px;font-weight:700;color:#1e3a28">${r.username || '—'}</td>
-        <td style="padding:8px 6px;white-space:nowrap">${r.plant_name || '—'}<br><span style="color:#888">${(r.record_date||'').slice(0,10)}</span></td>
+        <td style="padding:8px 6px;white-space:nowrap">${r.plant_name || '—'}<br><span style="color:#888">${toISODateStr(r.record_date)}</span></td>
         <td style="padding:8px 6px">${label(r.action)}</td>
         <td style="padding:8px 6px;color:#444">${(r.details || '').replace(/</g,'&lt;')}</td>
       </tr>`).join('')}</tbody></table>`;

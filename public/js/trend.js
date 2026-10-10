@@ -470,7 +470,7 @@ async function exportMonthRecords() {
     if (pid) {
       const all = await api('GET', '/api/records/export');
       const records = all.filter(r => {
-        const rd = typeof r.record_date === 'string' ? r.record_date.slice(0, 7) : '';
+        const rd = toISODateStr(r.record_date).slice(0, 7);
         return rd === month;
       });
       if (!records.length) { showToast('⚠ No records found for ' + month, true); return; }
@@ -495,7 +495,7 @@ function _writeSinglePlantWorkbook(records, _u, filename) {
   const attRows     = [['Date','Contractor','Workers','Cost (₹)']];
   const kgRows      = [['Date','Vendor','SKU',`Rate (₹/${_u})`,`Qty (${_u})`,'Cost (₹)']];
   for (const detail of records) {
-    const dateStr = typeof detail.record_date === 'string' ? detail.record_date.slice(0, 10) : detail.record_date;
+    const dateStr = toISODateStr(detail.record_date);
     const xd = xlDate(dateStr);
     summaryRows.push([xd,
       r2(parseFloat(detail.attendance_cost)||0), r2(parseFloat(detail.kg_cost)||0),
@@ -527,7 +527,7 @@ function _writeMultiPlantWorkbook(records, filename) {
 
   let grandCost = 0, grandQty = 0;
   for (const detail of records) {
-    const dateStr = typeof detail.record_date === 'string' ? detail.record_date.slice(0, 10) : detail.record_date;
+    const dateStr = toISODateStr(detail.record_date);
     const xd = xlDate(dateStr);
     const plant = detail.plant_name || '';
     const totalCost = parseFloat(detail.total_cost) || 0;
@@ -662,7 +662,7 @@ async function exportAllRecords() {
       const kgRows  = [['Plant','Date','Vendor','SKU','Rate (₹)','Qty','Cost (₹)']];
       let grandCost = 0, grandQty = 0;
       records.forEach(detail => {
-        const dateStr = typeof detail.record_date === 'string' ? detail.record_date.slice(0, 10) : detail.record_date;
+        const dateStr = toISODateStr(detail.record_date);
         const xd = xlDate(dateStr);
         const plant = detail.plant_name || '';
         const totalCost = parseFloat(detail.total_cost) || 0;
@@ -693,7 +693,7 @@ async function exportAllRecords() {
       const attRows = [['Date','Contractor','Workers','Cost (₹)']];
       const kgRows  = [['Date','Vendor','SKU',`Rate (₹/${_u})`,`Qty (${_u})`,'Cost (₹)']];
       records.forEach(detail => {
-        const dateStr = typeof detail.record_date === 'string' ? detail.record_date.slice(0, 10) : detail.record_date;
+        const dateStr = toISODateStr(detail.record_date);
         const xd = xlDate(dateStr);
         summaryRows.push([xd,
           r2(parseFloat(detail.attendance_cost)||0), r2(parseFloat(detail.kg_cost)||0),
