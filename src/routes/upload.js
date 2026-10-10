@@ -20,19 +20,28 @@ function getPlantId(req) {
 
 const normalize = s => String(s || '').trim().toLowerCase();
 
+// Resolves a plant to its business type — contractors are scoped by business type
+// (one shared list for all FnV plants, one for RTE, etc.), not per plant.
+async function getBusinessType(plantId) {
+  if (!plantId) return null;
+  const { rows } = await db.query('SELECT business_type FROM plants WHERE id = $1', [plantId]);
+  return rows[0]?.business_type || null;
+}
+
 // Re-keys a parsed CSV's byContractor map from raw biometric-export spellings onto the
-// plant's canonical contractor names wherever a match (direct or via a saved alias)
-// exists — merging any raw names that resolve to the same canonical contractor. Raw
-// names with no match are left as-is and returned separately in `unmatched`, so the
+// business type's canonical contractor names wherever a match (direct or via a saved
+// alias) exists — merging any raw names that resolve to the same canonical contractor.
+// Raw names with no match are left as-is and returned separately in `unmatched`, so the
 // frontend can prompt a one-time resolution (after which it's remembered as an alias
-// and never asked again).
+// and never asked again, for any plant of this business type).
 async function canonicalizeContractors(byContractor, plantId) {
-  if (!plantId) return { byContractor, unmatched: Object.keys(byContractor) };
-  const { rows: contractors } = await db.query('SELECT name FROM contractors WHERE plant_id = $1', [plantId]);
+  const businessType = await getBusinessType(plantId);
+  if (!businessType) return { byContractor, unmatched: Object.keys(byContractor) };
+  const { rows: contractors } = await db.query('SELECT name FROM contractors WHERE business_type = $1', [businessType]);
   const { rows: aliases } = await db.query(
     `SELECT a.raw_name, c.name AS canonical_name FROM contractor_aliases a
-     JOIN contractors c ON c.id = a.contractor_id WHERE a.plant_id = $1`,
-    [plantId]
+     JOIN contractors c ON c.id = a.contractor_id WHERE a.business_type = $1`,
+    [businessType]
   );
   const byNormalized = {};
   contractors.forEach(c => { byNormalized[normalize(c.name)] = c.name; });

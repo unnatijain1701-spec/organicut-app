@@ -1808,6 +1808,8 @@ async function addWorkerType() {
 
 async function openContractorsModal() {
   await loadContractors();
+  const pid = currentPlantId || activePlantId;
+  const bizType = PLANTS_BY_ID[pid]?.business_type || null;
 
   const rowsHtml = CONTRACTORS.length ? CONTRACTORS.map(c => `
     <tr id="ctrRow_${c.id}">
@@ -1823,10 +1825,10 @@ async function openContractorsModal() {
   const modalHtml = `<div id="contractorsModal" class="modal-overlay">
     <div class="modal-box ctr-modal-box" style="max-width:480px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-        <div style="font-weight:700;font-size:16px">🏗 Contractors</div>
+        <div style="font-weight:700;font-size:16px">🏗 Contractors${bizType ? ' — ' + bizType : ''}</div>
         <button id="ctrModalCloseBtn" class="modal-x">×</button>
       </div>
-      <div style="font-size:12px;color:var(--muted);margin-bottom:10px">This is the canonical contractor list for this location — manual entry and CSV uploads both resolve onto these names instead of free text.</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:10px">This is the shared contractor list for every ${bizType || 'this business type'} location — manual entry and CSV uploads at any ${bizType || 'such'} plant both resolve onto these names instead of free text.</div>
       <div class="ctr-table-scroll">
         <table class="wt-table">
           <thead><tr><th>Contractor Name</th><th></th></tr></thead>
