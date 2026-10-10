@@ -2,8 +2,39 @@
    EXCEL EXPORT
 ═══════════════════════════════════════════════════════ */
 
-// Convert "YYYY-MM-DD" string to a JS Date that SheetJS writes as a real Excel date
-function xlDate(str) { return str ? new Date(str + 'T00:00:00') : str; }
+// Converts "YYYY-MM-DD" into the raw Excel serial day number directly — deliberately NOT
+// a JS Date object handed to SheetJS's {cellDates:true}. That path has a real bug: the
+// library's own Date->serial math (datenum_local in xlsx.js) references a hardcoded
+// 1899-12-31 reference date and calls .getTimezoneOffset() on it — for any timezone whose
+// standard UTC offset has changed since 1899 (India moved from a historical +5:21 to
+// today's +5:30 in 1941), that offset difference leaks into the result, silently adding a
+// ~10-second fractional error to every single date. Computing the serial ourselves with
+// pure Date.UTC() arithmetic sidesteps that bug entirely, in any browser timezone. Pair
+// this with applyDateColumnFormat() below so the resulting plain number still displays as
+// a date instead of a raw integer.
+function xlDate(str) {
+  if (!str) return str;
+  const [y, m, d] = str.split('-').map(Number);
+  let days = Math.round((Date.UTC(y, m - 1, d) - Date.UTC(1899, 11, 31)) / 86400000);
+  if (Date.UTC(y, m - 1, d) >= Date.UTC(1900, 2, 1)) days += 1; // Excel's fake 1900-02-29 leap-day bug, preserved for compatibility
+  return days;
+}
+
+// xlDate() now returns a plain number, not a JS Date — a bare number cell displays as a
+// raw integer unless given a date format. Call this after aoa_to_sheet() for every sheet
+// that has a "Date" column header, to make those numeric cells render as dates again.
+function applyDateColumnFormat(ws) {
+  if (!ws['!ref']) return;
+  const range = XLSX.utils.decode_range(ws['!ref']);
+  for (let c = range.s.c; c <= range.e.c; c++) {
+    const headerCell = ws[XLSX.utils.encode_cell({ r: range.s.r, c })];
+    if (!headerCell || headerCell.v !== 'Date') continue;
+    for (let r = range.s.r + 1; r <= range.e.r; r++) {
+      const cell = ws[XLSX.utils.encode_cell({ r, c })];
+      if (cell && typeof cell.v === 'number') cell.z = 'dd-mmm-yyyy';
+    }
+  }
+}
 
 // Filesystem-safe plant name for export filenames, e.g. "Rai-FnV" or "AllPlants"
 // Short, clear tag identifying the current export scope:
@@ -41,7 +72,8 @@ function exportExcel() {
   const ws1 = XLSX.utils.aoa_to_sheet([
     ['Date','Attendance Cost','KG Cost','Total Cost',`Sale Qty (${_u})`,'MPK'],
     [xd, r2(attCost), r2(kgCost), r2(total), saleQty, mpk]
-  ], {cellDates: true});
+  ]);
+  applyDateColumnFormat(ws1);
   ws1['!cols'] = [12,16,12,12,14,10].map(w => ({ wch: w }));
 
   // Sheet 2: Attendance Detail
@@ -49,7 +81,8 @@ function exportExcel() {
   ATT_VENDORS.forEach(v => {
     attRows.push([xd, v, attState[v]?.workers || 0, parseFloat(attState[v]?.cost) || 0]);
   });
-  const ws2 = XLSX.utils.aoa_to_sheet(attRows, {cellDates: true});
+  const ws2 = XLSX.utils.aoa_to_sheet(attRows);
+  applyDateColumnFormat(ws2);
   ws2['!cols'] = [12,32,10,12].map(w => ({ wch: w }));
 
   // Sheet 3: KG Detail
@@ -65,7 +98,8 @@ function exportExcel() {
     const ul = unloadingCosts[v] || 0;
     if (ul > 0) kgRows.push([xd, v, 'Unloading Cost', '', '', r2(ul)]);
   });
-  const ws3 = XLSX.utils.aoa_to_sheet(kgRows, {cellDates: true});
+  const ws3 = XLSX.utils.aoa_to_sheet(kgRows);
+  applyDateColumnFormat(ws3);
   ws3['!cols'] = [12,14,28,12,10,12].map(w => ({ wch: w }));
 
   // Sheet 4: Attendance Summary (one row per contractor)

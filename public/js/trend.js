@@ -510,9 +510,9 @@ function _writeSinglePlantWorkbook(records, _u, filename) {
       else kgRows.push([xd, e.vendor_name, e.sku_name, parseFloat(e.rate)||0, parseFloat(e.qty)||0, r2(parseFloat(e.cost)||0)]);
     });
   }
-  const ws1 = XLSX.utils.aoa_to_sheet(summaryRows, {cellDates:true}); ws1['!cols']=[12,22,14,12,14,10,16].map(w=>({wch:w}));
-  const ws2 = XLSX.utils.aoa_to_sheet(attRows,     {cellDates:true}); ws2['!cols']=[12,32,10,12].map(w=>({wch:w}));
-  const ws3 = XLSX.utils.aoa_to_sheet(kgRows,      {cellDates:true}); ws3['!cols']=[12,20,28,12,10,12].map(w=>({wch:w}));
+  const ws1 = XLSX.utils.aoa_to_sheet(summaryRows); applyDateColumnFormat(ws1); ws1['!cols']=[12,22,14,12,14,10,16].map(w=>({wch:w}));
+  const ws2 = XLSX.utils.aoa_to_sheet(attRows);     applyDateColumnFormat(ws2); ws2['!cols']=[12,32,10,12].map(w=>({wch:w}));
+  const ws3 = XLSX.utils.aoa_to_sheet(kgRows);      applyDateColumnFormat(ws3); ws3['!cols']=[12,20,28,12,10,12].map(w=>({wch:w}));
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws1, 'Summary');
   XLSX.utils.book_append_sheet(wb, ws2, 'Attendance Detail');
@@ -549,9 +549,9 @@ function _writeMultiPlantWorkbook(records, filename) {
   summaryRows.push(['TOTAL', '', '', '', '', r2(grandCost), grandQty,
     grandQty > 0 ? r2(grandCost/grandQty) : '', '']);
 
-  const ws1 = XLSX.utils.aoa_to_sheet(summaryRows, {cellDates:true}); ws1['!cols']=[14,14,12,22,14,12,14,10,16].map(w=>({wch:w}));
-  const ws2 = XLSX.utils.aoa_to_sheet(attRows,     {cellDates:true}); ws2['!cols']=[14,12,32,10,12].map(w=>({wch:w}));
-  const ws3 = XLSX.utils.aoa_to_sheet(kgRows,      {cellDates:true}); ws3['!cols']=[14,12,20,28,12,10,12].map(w=>({wch:w}));
+  const ws1 = XLSX.utils.aoa_to_sheet(summaryRows); applyDateColumnFormat(ws1); ws1['!cols']=[14,14,12,22,14,12,14,10,16].map(w=>({wch:w}));
+  const ws2 = XLSX.utils.aoa_to_sheet(attRows);     applyDateColumnFormat(ws2); ws2['!cols']=[14,12,32,10,12].map(w=>({wch:w}));
+  const ws3 = XLSX.utils.aoa_to_sheet(kgRows);      applyDateColumnFormat(ws3); ws3['!cols']=[14,12,20,28,12,10,12].map(w=>({wch:w}));
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws1, 'Summary');
   XLSX.utils.book_append_sheet(wb, ws2, 'Attendance Detail');
@@ -680,9 +680,9 @@ async function exportAllRecords() {
         });
       });
       summaryRows.push(['TOTAL', '', '', '', '', r2(grandCost), grandQty, grandQty > 0 ? r2(grandCost/grandQty) : '', '']);
-      const ws1 = XLSX.utils.aoa_to_sheet(summaryRows, {cellDates:true}); ws1['!cols']=[14,14,12,22,14,12,14,10,16].map(w=>({wch:w}));
-      const wsAD = XLSX.utils.aoa_to_sheet(attRows, {cellDates:true}); wsAD['!cols']=[14,12,32,10,12].map(w=>({wch:w}));
-      const wsKD = XLSX.utils.aoa_to_sheet(kgRows,  {cellDates:true}); wsKD['!cols']=[14,12,20,28,12,10,12].map(w=>({wch:w}));
+      const ws1 = XLSX.utils.aoa_to_sheet(summaryRows); applyDateColumnFormat(ws1); ws1['!cols']=[14,14,12,22,14,12,14,10,16].map(w=>({wch:w}));
+      const wsAD = XLSX.utils.aoa_to_sheet(attRows); applyDateColumnFormat(wsAD); wsAD['!cols']=[14,12,32,10,12].map(w=>({wch:w}));
+      const wsKD = XLSX.utils.aoa_to_sheet(kgRows);  applyDateColumnFormat(wsKD); wsKD['!cols']=[14,12,20,28,12,10,12].map(w=>({wch:w}));
       XLSX.utils.book_append_sheet(wb, ws1,  'Daily Summary');
       XLSX.utils.book_append_sheet(wb, wsAD, 'Attendance Detail');
       XLSX.utils.book_append_sheet(wb, wsAS, 'Attendance Summary');
@@ -706,9 +706,9 @@ async function exportAllRecords() {
           else kgRows.push([xd, e.vendor_name, e.sku_name, parseFloat(e.rate)||0, parseFloat(e.qty)||0, r2(parseFloat(e.cost)||0)]);
         });
       });
-      const ws1  = XLSX.utils.aoa_to_sheet(summaryRows, {cellDates:true}); ws1['!cols']  = [12,22,14,12,14,10,16].map(w=>({wch:w}));
-      const wsAD = XLSX.utils.aoa_to_sheet(attRows,     {cellDates:true}); wsAD['!cols'] = [12,32,10,12].map(w=>({wch:w}));
-      const wsKD = XLSX.utils.aoa_to_sheet(kgRows,      {cellDates:true}); wsKD['!cols'] = [12,20,28,12,10,12].map(w=>({wch:w}));
+      const ws1  = XLSX.utils.aoa_to_sheet(summaryRows); applyDateColumnFormat(ws1);  ws1['!cols']  = [12,22,14,12,14,10,16].map(w=>({wch:w}));
+      const wsAD = XLSX.utils.aoa_to_sheet(attRows);     applyDateColumnFormat(wsAD); wsAD['!cols'] = [12,32,10,12].map(w=>({wch:w}));
+      const wsKD = XLSX.utils.aoa_to_sheet(kgRows);      applyDateColumnFormat(wsKD); wsKD['!cols'] = [12,20,28,12,10,12].map(w=>({wch:w}));
       wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws1,  'Daily Summary');
       XLSX.utils.book_append_sheet(wb, wsAD, 'Attendance Detail');
