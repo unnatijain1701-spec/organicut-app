@@ -380,6 +380,7 @@
         <button class="nav-item nav-admin-item" id="navReport" onclick="navTo('report')"><span class="nav-ico">📑</span> Report</button>
         <button class="nav-item nav-admin-item" id="navTrend" onclick="navTo('trend')"><span class="nav-ico">📈</span> Cost Trend</button>
         <button class="nav-item nav-admin-item" id="navVendors" onclick="navTo('vendors')"><span class="nav-ico">⚙</span> Vendors</button>
+        <button class="nav-item nav-admin-item" id="navContractors" onclick="navTo('contractors')"><span class="nav-ico">🏗</span> Contractors</button>
         <button class="nav-item nav-admin-item" id="navUsers" onclick="navTo('users')"><span class="nav-ico">👤</span> Users &amp; Locations</button>
       </div>
     </div>
@@ -485,9 +486,7 @@
         <button class="btn btn-card-upload" onclick="document.getElementById('csvInput').click()" title="Upload biometric CSV or Excel file">📂 Upload CSV / Excel</button>
         <input type="file" id="csvInput" accept=".csv,.CSV,.xlsx,.xls" style="display:none" onchange="onCSVUpload(event)">
         <button class="btn btn-card-outline" id="desigToggleBtn" onclick="toggleDesigView()" title="Show/hide designation breakdown" style="display:none">Show Breakdown</button>
-        <button class="btn btn-card-outline" id="workerBreakdownAdminBtn" onclick="openWorkerBreakdownToggleModal()" title="Turn the worker-type breakdown on/off for this location" style="display:none">⚙ Breakdown Settings</button>
-        <button class="btn btn-card-outline" id="workerTypesRatesBtn" onclick="openWorkerTypesModal()" title="Manage worker types & rates" style="display:none">💰 Worker Rates</button>
-        <button class="btn btn-card-outline" id="contractorsManageBtn" onclick="openContractorsModal()" title="Manage the canonical contractor list" style="display:none">🏗 Contractors</button>
+        <button class="btn btn-card-outline" id="workerTypesRatesBtn" onclick="openWorkerTypesModal()" title="Worker-type breakdown settings & rates" style="display:none">⚙ Worker Settings</button>
         <button class="btn btn-card-outline" onclick="showAddContractorPanel()" id="addContractorBtn">+ Add manually</button>
       </div>
     </div>

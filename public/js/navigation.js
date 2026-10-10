@@ -53,6 +53,7 @@ function navTo(section) {
     case 'history':   toggleHistory(true);      break;
     case 'vendors':   toggleVendorsPanel(true); break;
     case 'users':     toggleUsersPanel(true);   break;
+    case 'contractors': openContractorsModal(); break;
   }
 }
 

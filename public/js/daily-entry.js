@@ -281,9 +281,10 @@ async function initApp() {
   document.getElementById('kgProcessingCard').style.display = hasKgProcessing ? '' : 'none';
   { const eab = document.getElementById('exportAllPlantsBtn'); if (eab) eab.style.display = (isAllPlants && isSuperadmin) ? 'block' : 'none'; }
   const isPrivileged = currentRole === 'admin' || currentRole === 'superadmin';
-  { const wb = document.getElementById('workerBreakdownAdminBtn'); if (wb) wb.style.display = (!isAllPlants && isPrivileged) ? '' : 'none'; }
-  { const wr = document.getElementById('workerTypesRatesBtn'); if (wr) wr.style.display = (!isAllPlants && hasPerm('manage_worker_types')) ? '' : 'none'; }
-  { const cm = document.getElementById('contractorsManageBtn'); if (cm) cm.style.display = (!isAllPlants && hasPerm('manage_vendors')) ? '' : 'none'; }
+  // One combined "Worker Rates" button covers both the breakdown on/off toggle
+  // (admin/superadmin only) and the rate table (manage_worker_types permission) —
+  // visible if either applies; the modal itself shows only the section you can use.
+  { const wr = document.getElementById('workerTypesRatesBtn'); if (wr) wr.style.display = (!isAllPlants && (isPrivileged || hasPerm('manage_worker_types'))) ? '' : 'none'; }
 
   if (isAllPlants) {
     loadHistory();
@@ -1643,103 +1644,109 @@ async function toggleRecordLock(date, lock) {
 
 
 /* ═══════════════════════════════════════════════════════
-   WORKER-TYPE BREAKDOWN: admin on/off switch + rates settings
+   WORKER SETTINGS: on/off breakdown toggle + rate table, one combined modal
 ═══════════════════════════════════════════════════════ */
 
-// Admin/superadmin-only switch for whether this location uses the worker-type
-// breakdown at all. Off = exactly the pre-feature experience (one total worker
-// count + one total cost per contractor). Deliberately a plain role check on the
-// frontend to match the backend route, not tied to the mix-and-match permission set.
-async function openWorkerBreakdownToggleModal() {
-  const pid = currentPlantId || activePlantId;
-  if (!pid) { showToast('⚠ Select a plant first', true); return; }
-  const enabled = plantBreakdownEnabled();
-  document.getElementById('wbToggleModal')?.remove();
-  const html = `<div id="wbToggleModal" class="modal-overlay">
-    <div class="modal-box" style="max-width:380px">
-      <div style="font-weight:700;font-size:15px;margin-bottom:8px">Worker-Type Breakdown</div>
-      <div style="font-size:13px;color:#4a7060;margin-bottom:16px">
-        ${enabled
-          ? 'This location currently tracks attendance by worker type (Worker / Labour / Cutter / ...). Turning it off goes back to one total worker count + one total cost per contractor.'
-          : 'This location currently just takes one total worker count + one total cost per contractor. Turning this on lets you break attendance down by worker type, auto-calculated from the rates in "💰 Worker Rates".'}
-      </div>
-      <div style="display:flex;gap:8px;justify-content:flex-end">
-        <button id="wbToggleCancelBtn" style="padding:7px 16px;border-radius:8px;border:1px solid var(--border);background:#fff;cursor:pointer;font-size:13px">Cancel</button>
-        <button id="wbToggleConfirmBtn" style="padding:7px 16px;border-radius:8px;border:none;background:var(--primary);color:#fff;cursor:pointer;font-size:13px;font-weight:600">${enabled ? 'Turn Off' : 'Turn On'}</button>
-      </div>
-    </div>
-  </div>`;
-  document.body.insertAdjacentHTML('beforeend', html);
-  document.getElementById('wbToggleCancelBtn').onclick = () => document.getElementById('wbToggleModal').remove();
-  document.getElementById('wbToggleConfirmBtn').onclick = async () => {
-    document.getElementById('wbToggleModal').remove();
-    try {
-      const plant = await api('PATCH', `/api/auth/plants/${pid}/worker-breakdown`, { enabled: !enabled });
-      PLANTS_BY_ID[pid] = { ...PLANTS_BY_ID[pid], ...plant };
-      showToast(`✓ Worker-type breakdown turned ${plant.has_worker_breakdown ? 'on' : 'off'} for this location`, false);
-      renderAtt();
-    } catch (e) {
-      showToast('⚠ ' + e.message, true);
-    }
-  };
-}
-
-// Manage the rate list itself — name + ₹/day, global or scoped to the active plant.
-// Gated by the manage_worker_types permission (grantable to specific admins/operators).
+// One modal covers both pieces so they don't fight for space in the toolbar:
+// - The on/off toggle (admin/superadmin only — a plain role check, not a grantable
+//   permission, per the original request) for whether this location uses the
+//   worker-type breakdown at all.
+// - The rate table itself (manage_worker_types permission), shown as a proper table
+//   with a trailing inline "add row" instead of a separate form below a loose list.
+// Either section renders only for someone who can actually use it.
 async function openWorkerTypesModal() {
-  let types;
-  try { types = await api('GET', '/api/worker-types'); } catch (e) { showToast('⚠ ' + e.message, true); return; }
+  const pid = currentPlantId || activePlantId;
+  const isPrivileged = currentRole === 'admin' || currentRole === 'superadmin';
+  const canManageRates = hasPerm('manage_worker_types');
+  const breakdownOn = plantBreakdownEnabled();
 
-  const rowsHtml = types.length ? types.map(t => `
-    <div class="loc-row" id="wtRow_${t.id}">
-      <span>
-        <span class="loc-row-name">${t.name}</span>
-        <span class="loc-row-type">₹${(parseFloat(t.daily_rate) || 0).toFixed(2)}/day${t.plant_id ? '' : ' · global default'}</span>
-      </span>
-      <span style="display:flex;gap:2px;flex-shrink:0">
-        <button class="loc-rename-btn" onclick="startEditWorkerType(${t.id},'${t.name.replace(/'/g,"\\'")}',${parseFloat(t.daily_rate) || 0})" title="Edit">✎</button>
-        <button class="loc-rename-btn" onclick="deleteWorkerType(${t.id})" title="Delete">🗑</button>
-      </span>
-    </div>
-  `).join('') : '<div class="hist-empty" style="padding:10px 16px">No worker types yet.</div>';
+  let types = [];
+  if (canManageRates) {
+    try { types = await api('GET', '/api/worker-types'); } catch (e) { showToast('⚠ ' + e.message, true); }
+  }
+
+  const toggleHtml = isPrivileged ? `
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border);margin-bottom:${canManageRates ? '14px' : '0'}">
+      <div>
+        <div style="font-weight:600;font-size:13.5px">Worker-type breakdown</div>
+        <div style="font-size:11.5px;color:var(--muted)">${breakdownOn ? 'On — attendance is tracked per worker type' : 'Off — just one total worker count + one total cost per contractor'}</div>
+      </div>
+      <label class="wt-switch">
+        <input type="checkbox" id="wbToggleCb" ${breakdownOn ? 'checked' : ''} onchange="onWorkerBreakdownToggle(${pid})">
+        <span class="wt-switch-track"></span>
+      </label>
+    </div>` : '';
+
+  const tableHtml = canManageRates ? `
+    <table class="wt-table">
+      <thead><tr><th>Worker Type</th><th>Daily Rate (₹)</th><th>Scope</th><th></th></tr></thead>
+      <tbody id="wtTableBody">
+        ${types.map(t => `
+          <tr id="wtRow_${t.id}">
+            <td>${t.name}</td>
+            <td>₹${(parseFloat(t.daily_rate) || 0).toFixed(2)}</td>
+            <td style="color:var(--muted);font-size:11.5px">${t.plant_id ? 'This location' : 'All locations'}</td>
+            <td style="white-space:nowrap">
+              <button class="loc-rename-btn" onclick="startEditWorkerType(${t.id},'${t.name.replace(/'/g,"\\'")}',${parseFloat(t.daily_rate) || 0})" title="Edit">✎</button>
+              <button class="loc-rename-btn" onclick="deleteWorkerType(${t.id})" title="Delete">🗑</button>
+            </td>
+          </tr>
+        `).join('')}
+        <tr id="wtAddRow">
+          <td><input class="users-input wt-cell-input" id="newWTName" type="text" placeholder="e.g. Worker, Labour, Cutter" style="margin-bottom:0"></td>
+          <td><input class="users-input wt-cell-input" id="newWTRate" type="number" min="0" step="0.01" placeholder="0.00" style="margin-bottom:0"></td>
+          <td><label style="display:flex;align-items:center;gap:5px;font-size:11px;white-space:nowrap;cursor:pointer">
+            <input type="checkbox" id="newWTGlobal" style="cursor:pointer"> All locations
+          </label></td>
+          <td><button class="users-add-btn" style="padding:6px 12px;font-size:12px" onclick="addWorkerType()">+ Add row</button></td>
+        </tr>
+      </tbody>
+    </table>
+    <div id="wtFormErr" class="users-form-err"></div>` : '';
 
   document.getElementById('workerTypesModal')?.remove();
   const modalHtml = `<div id="workerTypesModal" class="modal-overlay">
-    <div class="modal-box" style="max-width:420px;max-height:85vh;overflow-y:auto">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-        <div style="font-weight:700;font-size:16px">💰 Worker Types &amp; Rates</div>
+    <div class="modal-box" style="max-width:560px;max-height:85vh;overflow-y:auto">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <div style="font-weight:700;font-size:16px">⚙ Worker Settings</div>
         <button id="wtModalCloseBtn" class="modal-x">×</button>
       </div>
-      <div id="wtListWrap">${rowsHtml}</div>
-      <div class="users-add-form" style="margin-top:14px">
-        <div class="users-add-title">Add Worker Type</div>
-        <input class="users-input" id="newWTName" type="text" placeholder="e.g. Worker, Labour, Cutter" autocomplete="off">
-        <input class="users-input" id="newWTRate" type="number" min="0" step="0.01" placeholder="Daily rate (₹)">
-        <label style="display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--text);margin-bottom:10px;cursor:pointer">
-          <input type="checkbox" id="newWTGlobal" style="cursor:pointer">
-          Apply to all locations (global default)
-        </label>
-        <div id="wtFormErr" class="users-form-err"></div>
-        <button class="users-add-btn" onclick="addWorkerType()">Add</button>
-      </div>
+      ${toggleHtml}
+      ${tableHtml}
+      ${!isPrivileged && !canManageRates ? '<div class="hist-empty" style="padding:10px 0">You do not have access to any worker settings.</div>' : ''}
     </div>
   </div>`;
   document.body.insertAdjacentHTML('beforeend', modalHtml);
   document.getElementById('wtModalCloseBtn').onclick = () => document.getElementById('workerTypesModal').remove();
 }
 
+async function onWorkerBreakdownToggle(pid) {
+  const cb = document.getElementById('wbToggleCb');
+  const wantOn = cb.checked;
+  try {
+    const plant = await api('PATCH', `/api/auth/plants/${pid}/worker-breakdown`, { enabled: wantOn });
+    PLANTS_BY_ID[pid] = { ...PLANTS_BY_ID[pid], ...plant };
+    showToast(`✓ Worker-type breakdown turned ${plant.has_worker_breakdown ? 'on' : 'off'} for this location`, false);
+    renderAtt();
+    openWorkerTypesModal();
+  } catch (e) {
+    cb.checked = !wantOn; // revert the switch on failure
+    showToast('⚠ ' + e.message, true);
+  }
+}
+
 function startEditWorkerType(id, name, rate) {
   const row = document.getElementById('wtRow_' + id);
   if (!row) return;
   row.innerHTML = `
-    <div style="width:100%">
-      <input class="loc-rename-input" id="wtNameInput_${id}" value="${name.replace(/"/g,'&quot;')}" style="width:100%;margin-bottom:6px">
-      <input class="loc-rename-input" id="wtRateInput_${id}" type="number" min="0" step="0.01" value="${rate}" style="width:100%;margin-bottom:8px">
-      <span style="display:flex;gap:4px;flex-shrink:0">
-        <button class="btn-save" onclick="saveEditWorkerType(${id})">✓ Save</button>
-        <button class="btn-cancel" onclick="openWorkerTypesModal()">✕</button>
-      </span>
-    </div>`;
+    <td colspan="3"><div style="display:flex;gap:6px">
+      <input class="users-input wt-cell-input" id="wtNameInput_${id}" value="${name.replace(/"/g,'&quot;')}" style="margin-bottom:0">
+      <input class="users-input wt-cell-input" id="wtRateInput_${id}" type="number" min="0" step="0.01" value="${rate}" style="margin-bottom:0;max-width:110px">
+    </div></td>
+    <td style="white-space:nowrap">
+      <button class="btn-save" onclick="saveEditWorkerType(${id})">✓</button>
+      <button class="btn-cancel" onclick="openWorkerTypesModal()">✕</button>
+    </td>`;
 }
 
 async function saveEditWorkerType(id) {

@@ -1,6 +1,11 @@
 const express = require('express');
 const db = require('../db');
-const { hasPermission } = require('../utils/permissions');
+
+// The contractor list is deliberately open to every authenticated user with access to
+// this plant (not gated by manage_vendors like the KG vendor list) — unlike vendor
+// rates, a contractor name isn't sensitive, and locking it down just reintroduces the
+// free-text fragmentation problem this feature exists to fix (anyone blocked from
+// adding a real new contractor will just type a near-duplicate name instead).
 
 const router = express.Router();
 
@@ -35,7 +40,6 @@ router.get('/', async (req, res) => {
 
 // POST /api/contractors — add a new canonical contractor
 router.post('/', async (req, res) => {
-  if (!hasPermission(req.user, 'manage_vendors')) return res.status(403).json({ error: 'You do not have permission to do this' });
   const { name } = req.body || {};
   if (!name || !name.trim()) return res.status(400).json({ error: 'Contractor name is required' });
   const pid = getPlantId(req);
@@ -57,7 +61,6 @@ router.post('/', async (req, res) => {
 
 // PATCH /api/contractors/:id — rename a contractor
 router.patch('/:id', async (req, res) => {
-  if (!hasPermission(req.user, 'manage_vendors')) return res.status(403).json({ error: 'You do not have permission to do this' });
   const { name } = req.body || {};
   if (!name || !name.trim()) return res.status(400).json({ error: 'Contractor name is required' });
   try {
@@ -76,7 +79,6 @@ router.patch('/:id', async (req, res) => {
 
 // DELETE /api/contractors/:id
 router.delete('/:id', async (req, res) => {
-  if (!hasPermission(req.user, 'manage_vendors')) return res.status(403).json({ error: 'You do not have permission to do this' });
   try {
     const { rowCount } = await db.query('DELETE FROM contractors WHERE id = $1', [req.params.id]);
     if (!rowCount) return res.status(404).json({ error: 'Contractor not found' });
@@ -93,7 +95,6 @@ router.delete('/:id', async (req, res) => {
 // spelling auto-resolves on every future upload without asking again. For 'new', creates
 // the contractor (and an alias too, if the chosen name differs from the raw spelling).
 router.post('/resolve', async (req, res) => {
-  if (!hasPermission(req.user, 'manage_vendors')) return res.status(403).json({ error: 'You do not have permission to do this' });
   const pid = getPlantId(req);
   if (!pid) return res.status(400).json({ error: 'No plant selected' });
   const { resolutions } = req.body || {};
@@ -139,7 +140,6 @@ router.post('/resolve', async (req, res) => {
 // plant's history that don't match any canonical contractor or alias (case-insensitive) —
 // the raw material for the one-off historical cleanup tool.
 router.get('/unmatched', async (req, res) => {
-  if (!hasPermission(req.user, 'manage_vendors')) return res.status(403).json({ error: 'You do not have permission to do this' });
   const pid = getPlantId(req);
   if (!pid) return res.status(400).json({ error: 'No plant selected' });
   try {
@@ -169,7 +169,6 @@ router.get('/unmatched', async (req, res) => {
 // spelling resolves correctly in any future CSV upload too.
 // Body: { mappings: [{ rawName, contractorId }] }
 router.post('/merge', async (req, res) => {
-  if (!hasPermission(req.user, 'manage_vendors')) return res.status(403).json({ error: 'You do not have permission to do this' });
   const pid = getPlantId(req);
   if (!pid) return res.status(400).json({ error: 'No plant selected' });
   const { mappings } = req.body || {};
