@@ -60,9 +60,9 @@ router.post('/', async (req, res) => {
   try {
     const { rows } = await db.query(
       `INSERT INTO contractors (business_type, name, display_order)
-       VALUES ($1, $2, COALESCE((SELECT MAX(display_order)+1 FROM contractors WHERE business_type = $1), 0))
+       VALUES ($1, $2, COALESCE((SELECT MAX(display_order)+1 FROM contractors WHERE business_type = $3), 0))
        RETURNING id, name`,
-      [bt, name.trim()]
+      [bt, name.trim(), bt]
     );
     res.json(rows[0]);
   } catch (e) {
@@ -123,10 +123,10 @@ router.post('/resolve', async (req, res) => {
         if (!newName) continue;
         const { rows } = await db.query(
           `INSERT INTO contractors (business_type, name, display_order)
-           VALUES ($1, $2, COALESCE((SELECT MAX(display_order)+1 FROM contractors WHERE business_type = $1), 0))
+           VALUES ($1, $2, COALESCE((SELECT MAX(display_order)+1 FROM contractors WHERE business_type = $3), 0))
            ON CONFLICT (business_type, name) DO UPDATE SET name = EXCLUDED.name
            RETURNING id, name`,
-          [bt, newName]
+          [bt, newName, bt]
         );
         contractorId = rows[0].id; canonicalName = rows[0].name;
       } else {

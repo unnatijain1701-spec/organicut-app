@@ -58,9 +58,9 @@ router.post('/', async (req, res) => {
   try {
     const { rows } = await db.query(
       `INSERT INTO worker_types (plant_id, name, daily_rate, display_order)
-       VALUES ($1, $2, $3, COALESCE((SELECT MAX(display_order)+1 FROM worker_types WHERE plant_id IS NOT DISTINCT FROM $1), 0))
+       VALUES ($1, $2, $3, COALESCE((SELECT MAX(display_order)+1 FROM worker_types WHERE plant_id IS NOT DISTINCT FROM $4), 0))
        RETURNING id, plant_id, name, daily_rate, display_order`,
-      [plantId, name.trim(), rate]
+      [plantId, name.trim(), rate, plantId]
     );
     res.json(rows[0]);
   } catch (e) {
