@@ -349,6 +349,29 @@
   </div>
 </div>
 
+<!-- ═══════════════════ COST INSIGHTS OVERLAY ═══════════════════ -->
+<div id="insightsOverlay" style="display:none">
+  <div class="dash-header">
+    <span class="dash-header-title">🔍 Cost <em>Insights</em></span>
+    <button class="dash-close" onclick="closeInsights()">×</button>
+  </div>
+  <div class="dash-body">
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:16px 20px;background:#fff;border-bottom:1px solid var(--border)">
+      <span style="font-size:12px;font-weight:700;color:var(--muted)">BUSINESS TYPE</span>
+      <span id="insightsBizTypeWrap"></span>
+      <span style="font-size:12px;font-weight:700;color:var(--muted);margin-left:12px">MONTH</span>
+      <input type="month" id="insightsMonthInput" onchange="loadInsights()" style="height:30px;border:1px solid var(--border);border-radius:6px;padding:0 8px;font-size:12px;font-weight:600">
+    </div>
+    <div style="display:flex;gap:0;border-bottom:1px solid var(--border);background:#fff;padding:0 20px">
+      <button class="ins-tab active" data-tab="overview" onclick="setInsightsTab('overview')" style="padding:10px 16px;font-size:12px;font-weight:700;border:none;background:none;cursor:pointer;border-bottom:2px solid transparent;color:var(--muted)">📊 Overview</button>
+      <button class="ins-tab" data-tab="variance" onclick="setInsightsTab('variance')" style="padding:10px 16px;font-size:12px;font-weight:700;border:none;background:none;cursor:pointer;border-bottom:2px solid transparent;color:var(--muted)">🔀 Variance</button>
+      <button class="ins-tab" data-tab="anomalies" onclick="setInsightsTab('anomalies')" style="padding:10px 16px;font-size:12px;font-weight:700;border:none;background:none;cursor:pointer;border-bottom:2px solid transparent;color:var(--muted)">⚠️ Anomalies</button>
+      <button class="ins-tab" data-tab="forecast" onclick="setInsightsTab('forecast')" style="padding:10px 16px;font-size:12px;font-weight:700;border:none;background:none;cursor:pointer;border-bottom:2px solid transparent;color:var(--muted)">📈 Forecast</button>
+    </div>
+    <div id="insightsContent" style="padding:16px 20px"><p style="color:var(--muted);text-align:center;padding:20px">Loading…</p></div>
+  </div>
+</div>
+
 <!-- ═══════════════════ SIDEBAR ═══════════════════ -->
 <!-- Mobile top bar (phones only) -->
 <div class="mobile-topbar">
@@ -379,6 +402,7 @@
       <div id="navAdminItems" style="display:none">
         <button class="nav-item nav-admin-item" id="navReport" onclick="navTo('report')"><span class="nav-ico">📑</span> Report</button>
         <button class="nav-item nav-admin-item" id="navTrend" onclick="navTo('trend')"><span class="nav-ico">📈</span> Cost Trend</button>
+        <button class="nav-item nav-admin-item" id="navInsights" onclick="navTo('insights')"><span class="nav-ico">🔍</span> Insights</button>
         <button class="nav-item nav-admin-item" id="navVendors" onclick="navTo('vendors')"><span class="nav-ico">⚙</span> Vendors</button>
         <button class="nav-item nav-admin-item" id="navContractors" onclick="navTo('contractors')"><span class="nav-ico">🏗</span> Contractors</button>
         <button class="nav-item nav-admin-item" id="navUsers" onclick="navTo('users')"><span class="nav-ico">👤</span> Users &amp; Locations</button>
@@ -546,6 +570,7 @@
 <script src="js/vendors.js"></script>
 <script src="js/users.js"></script>
 <script src="js/dashboard.js"></script>
+<script src="js/insights.js"></script>
 <script src="js/boot.js"></script>
 </body>
 </html>

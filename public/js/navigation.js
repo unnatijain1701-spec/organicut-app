@@ -41,6 +41,7 @@ function navTo(section) {
   closeDashboard();
   closeReport();
   closeTrend();
+  closeInsights();
   toggleHistory(false);
   toggleVendorsPanel(false);
   toggleUsersPanel(false);
@@ -50,6 +51,7 @@ function navTo(section) {
     case 'dashboard': loadDashboard();          break;
     case 'report':    openReport();             break;
     case 'trend':     openTrend();              break;
+    case 'insights':  openInsights();           break;
     case 'history':   toggleHistory(true);      break;
     case 'vendors':   toggleVendorsPanel(true); break;
     case 'users':     toggleUsersPanel(true);   break;

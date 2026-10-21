@@ -29,6 +29,7 @@ async function checkAuth() {
       { const rb = document.getElementById('reportMenuBtn'); if (rb) rb.style.display = (canSeeReport || canSeeTrend) ? 'block' : 'none'; }
       { const nr = document.getElementById('navReport'); if (nr) nr.style.display = canSeeReport ? '' : 'none'; }
       { const nt = document.getElementById('navTrend');  if (nt) nt.style.display = canSeeTrend ? '' : 'none'; }
+      { const ni = document.getElementById('navInsights'); if (ni) ni.style.display = canSeeTrend ? '' : 'none'; }
       const showAdminGroup = canSeeUsers || canSeeVendors || canSeeReport || canSeeTrend;
       document.getElementById('navAdminToggle').style.display = showAdminGroup ? '' : 'none';
       if (showAdminGroup) setAdminGroupOpen(sessionStorage.getItem('navAdminOpen') === '1');
@@ -119,6 +120,7 @@ async function doLogin() {
     document.getElementById('navVendors').style.display = canSeeVendors ? '' : 'none';
     { const nr = document.getElementById('navReport'); if (nr) nr.style.display = canSeeReport ? '' : 'none'; }
     { const nt = document.getElementById('navTrend');  if (nt) nt.style.display = canSeeTrend ? '' : 'none'; }
+    { const ni = document.getElementById('navInsights'); if (ni) ni.style.display = canSeeTrend ? '' : 'none'; }
     const showAdminGroup = canSeeUsers || canSeeVendors || canSeeReport || canSeeTrend;
     document.getElementById('navAdminToggle').style.display = showAdminGroup ? '' : 'none';
     if (showAdminGroup) setAdminGroupOpen(false);
@@ -188,10 +190,12 @@ async function doLogout() {
   document.getElementById('navVendors').style.display = 'none';
   { const nr = document.getElementById('navReport'); if (nr) nr.style.display = 'none'; }
   { const nt = document.getElementById('navTrend');  if (nt) nt.style.display = 'none'; }
+  { const ni = document.getElementById('navInsights'); if (ni) ni.style.display = 'none'; }
   document.getElementById('navAdminToggle').style.display = 'none';
   setAdminGroupOpen(false);
   setActiveNav('daily');
   closeDashboard();
+  closeInsights();
   toggleUsersPanel(false);
   document.getElementById('loginUser').value = '';
   document.getElementById('loginPass').value = '';

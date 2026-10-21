@@ -11,6 +11,7 @@ const vendorRoutes  = require('./src/routes/vendors');
 const workerTypeRoutes = require('./src/routes/worker-types');
 const contractorRoutes = require('./src/routes/contractors');
 const holidayRoutes = require('./src/routes/holidays');
+const insightsRoutes = require('./src/routes/insights');
 const { authenticateToken } = require('./src/middleware/auth');
 const { runMigrations } = require('./src/db/migrate');
 
@@ -28,6 +29,7 @@ app.use('/api/vendors', authenticateToken, vendorRoutes);
 app.use('/api/worker-types', authenticateToken, workerTypeRoutes);
 app.use('/api/contractors', authenticateToken, contractorRoutes);
 app.use('/api/holidays', authenticateToken, holidayRoutes);
+app.use('/api/insights', authenticateToken, insightsRoutes);
 
 app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 
