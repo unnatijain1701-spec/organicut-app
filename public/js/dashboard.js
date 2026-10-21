@@ -379,7 +379,15 @@ function _renderDashPrediction(recs) {
   // entered it yet. Both kinds of missing days get the same daily-average estimate;
   // treating only future days as "missing" would silently count already-lagging
   // past days as ₹0, understating the real month.
-  const daysMissing = Math.max(0, daysInMonth - daysRecorded);
+  // Use WORKING days in the month for this plant (excludes its weekly off-day and, if
+  // it opts in, holidays) — a plant closed every Sunday should never have Sundays
+  // projected as "missing" and inflate the month-end estimate.
+  const _predPid = currentPlantId || activePlantId;
+  const _predPlant = _predPid ? PLANTS_BY_ID[_predPid] : null;
+  const workingDaysInMonth = _predPlant
+    ? countWorkingDaysClient(`${curY}-${String(curM+1).padStart(2,'0')}-01`, lastDay, _predPlant.weekly_off_day, _predPlant.observes_holidays)
+    : daysInMonth;
+  const daysMissing = Math.max(0, workingDaysInMonth - daysRecorded);
 
   const actualCost = recs.reduce((s, r) => s + parseFloat(r.total_cost || 0), 0);
   const actualQty  = recs.reduce((s, r) => s + parseFloat(r.sale_qty  || 0), 0);

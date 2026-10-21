@@ -33,6 +33,32 @@ function toISODateStr(val) {
   return String(val).slice(0, 10);
 }
 
+// The shared holiday calendar (see src/routes/holidays.js) — loaded once via
+// loadHolidays() in initApp(), used by countWorkingDaysClient() below.
+let HOLIDAYS = [];
+async function loadHolidays() {
+  try { HOLIDAYS = await api('GET', '/api/holidays'); } catch (e) { HOLIDAYS = []; console.error('Failed to load holidays:', e.message); }
+}
+
+// Client-side mirror of src/utils/workingDays.js's countWorkingDays — counts days in
+// [fromISO, toISO] (inclusive) a plant was expected to work, excluding its weekly
+// off-day and (if it opts in) holidays from HOLIDAYS. Used by the Dashboard's
+// month-end projection so a plant closed every Sunday isn't told Sundays are "missing".
+function countWorkingDaysClient(fromISO, toISO, weeklyOffDay, observesHolidays) {
+  const from = new Date(fromISO + 'T00:00:00');
+  const to = new Date(toISO + 'T00:00:00');
+  if (isNaN(from) || isNaN(to) || from > to) return 0;
+  const holidaySet = observesHolidays ? new Set(HOLIDAYS.map(h => h.date)) : null;
+  let count = 0;
+  for (let d = new Date(from); d <= to; d.setDate(d.getDate() + 1)) {
+    if (weeklyOffDay != null && d.getDay() === weeklyOffDay) continue;
+    const iso = toISODateStr(d);
+    if (holidaySet && holidaySet.has(iso)) continue;
+    count++;
+  }
+  return count;
+}
+
 /* ═══════════════════════════════════════════════════════
    SKU CONFIGURATION
 ═══════════════════════════════════════════════════════ */

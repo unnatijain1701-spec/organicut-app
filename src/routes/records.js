@@ -2,6 +2,7 @@ const express = require('express');
 const db = require('../db');
 const { authenticateToken } = require('../middleware/auth');
 const { hasPermission } = require('../utils/permissions');
+const { countWorkingDays } = require('../utils/workingDays');
 
 const router = express.Router();
 
@@ -339,7 +340,7 @@ router.get('/report', async (req, res) => {
     const scopeFilterCurrent = plantScopeClause(req, currentParams);
 
     const { rows: current } = await db.query(`
-      SELECT p.id, p.name, p.display_order, p.business_type,
+      SELECT p.id, p.name, p.display_order, p.business_type, p.weekly_off_day, p.observes_holidays,
         COUNT(*) FILTER (WHERE ${COMPLETE})                    AS days,
         COUNT(*)                                               AS days_saved,
         COALESCE(SUM(dr.total_cost) FILTER (WHERE ${COMPLETE}), 0)::NUMERIC(14,2) AS total_cost,
@@ -349,9 +350,20 @@ router.get('/report', async (req, res) => {
           ELSE 0 END AS mpk
       FROM daily_records dr JOIN plants p ON p.id = dr.plant_id
       WHERE dr.record_date BETWEEN $1 AND $2 ${btFilterCurrent} ${scopeFilterCurrent}
-      GROUP BY p.id, p.name, p.display_order, p.business_type
+      GROUP BY p.id, p.name, p.display_order, p.business_type, p.weekly_off_day, p.observes_holidays
       ORDER BY p.display_order
     `, currentParams);
+
+    // Holidays spanning both the selected range and the full report month (the latter
+    // needed for the working-days-in-month figure used by the month-end projection).
+    const monthFirstISO = iso(new Date(d.getFullYear(), d.getMonth(), 1));
+    const monthLastISO  = iso(new Date(d.getFullYear(), d.getMonth(), daysInMonth));
+    const spanFrom = [from, monthFirstISO].sort()[0];
+    const spanTo   = [to, monthLastISO].sort()[1];
+    const { rows: holidayRows } = await db.query(
+      "SELECT TO_CHAR(date, 'YYYY-MM-DD') AS date FROM holidays WHERE date BETWEEN $1 AND $2", [spanFrom, spanTo]
+    );
+    const holidaySet = new Set(holidayRows.map(h => h.date));
 
     const prevParams = [iso(prevFirst), iso(prevLast)];
     let btFilterPrev = '';
@@ -372,17 +384,26 @@ router.get('/report', async (req, res) => {
 
     const prevMap = {};
     prev.forEach(r => { prevMap[r.id] = { mpk: parseFloat(r.mpk), cost: parseFloat(r.total_cost), qty: parseFloat(r.total_qty) }; });
-    const plants = current.map(r => ({
-      name: r.name,
-      businessType: r.business_type,
-      days: parseInt(r.days),
-      total_cost: parseFloat(r.total_cost),
-      total_qty:  parseFloat(r.total_qty),
-      mpk:        parseFloat(r.mpk),
-      last_month_mpk:  prevMap[r.id]?.mpk  ?? null,
-      last_month_cost: prevMap[r.id]?.cost ?? null,
-      last_month_qty:  prevMap[r.id]?.qty  ?? null,
-    }));
+    const plants = current.map(r => {
+      const offDay = r.weekly_off_day != null ? parseInt(r.weekly_off_day, 10) : null;
+      const holidays = r.observes_holidays ? holidaySet : null;
+      return {
+        name: r.name,
+        businessType: r.business_type,
+        days: parseInt(r.days),
+        // Expected working days in the selected range / in the full report month —
+        // excludes this plant's weekly off-day and (if it opts in) holidays, so a
+        // plant closed every Sunday never shows Sundays as "missing" data.
+        expected_days: countWorkingDays(from, to, offDay, holidays),
+        working_days_in_month: countWorkingDays(monthFirstISO, monthLastISO, offDay, holidays),
+        total_cost: parseFloat(r.total_cost),
+        total_qty:  parseFloat(r.total_qty),
+        mpk:        parseFloat(r.mpk),
+        last_month_mpk:  prevMap[r.id]?.mpk  ?? null,
+        last_month_cost: prevMap[r.id]?.cost ?? null,
+        last_month_qty:  prevMap[r.id]?.qty  ?? null,
+      };
+    });
 
     res.json({ from, to, daysInMonth, prevMonthLabel: iso(prevFirst).slice(0,7), plants });
   } catch (e) {

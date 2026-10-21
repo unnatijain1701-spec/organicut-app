@@ -298,6 +298,7 @@ async function initApp() {
   await loadCustomSKUs();
   await loadWorkerTypes();
   await loadContractors();
+  await loadHolidays();
   renderAtt();
   renderKGTabs();
   recalc();

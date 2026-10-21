@@ -192,7 +192,11 @@ function _computeReport(data) {
   const rows = data.plants.map(p => {
     const avgDailyCost = p.days ? p.total_cost / p.days : 0;
     const avgDailyQty  = p.days ? p.total_qty  / p.days : 0;
-    const missingDays  = Math.max(0, dim - (p.days || 0));
+    // Working days in the month, not calendar days — a plant with a weekly off-day
+    // (e.g. closed every Sunday) or that observes holidays should never have those
+    // days projected as "missing" and inflate its month-end estimate.
+    const workingDaysInMonth = p.working_days_in_month ?? dim;
+    const missingDays  = Math.max(0, workingDaysInMonth - (p.days || 0));
     const projCost = p.total_cost + avgDailyCost * missingDays;
     const projQty  = p.total_qty  + avgDailyQty  * missingDays;
     const projMPK  = projQty > 0 ? projCost / projQty : 0;
@@ -221,7 +225,7 @@ function _computeReport(data) {
     if (lmCost) tLCost += lmCost;
     if (lmQty)  tLQty  += lmQty;
 
-    return { name: p.name, businessType: p.businessType, days: p.days, cost: p.total_cost, qty: p.total_qty, mpk: p.mpk,
+    return { name: p.name, businessType: p.businessType, days: p.days, expectedDays: p.expected_days, cost: p.total_cost, qty: p.total_qty, mpk: p.mpk,
              lmQty, lmMPK, changePct, status, qtyChangePct, qtyStatus, projCost, projQty, projMPK };
   });
 
@@ -273,7 +277,7 @@ async function generatePlantReport(from, to, businessType) {
                     `Last Month Tonnage (${_vu})`,'Last Month MPK (₹)','MPK Change','Status',
                     'Proj. Month-End Cost (L)',`Proj. Tonnage (${_vu})`,'Tonnage Change (Proj. vs LM)','Proj. MPK (₹)'];
     const rowFor = r => [
-      r.name, r.days != null ? `${r.days} / ${rangeDays}` : `${rangeDays} days`,
+      r.name, r.days != null ? `${r.days} / ${r.expectedDays ?? rangeDays}` : `${rangeDays} days`,
       _repL(r.cost), _repMT(r.qty), +r.mpk.toFixed(2),
       r.lmQty > 0 ? _repMT(r.lmQty) : '—',
       r.lmMPK != null ? +r.lmMPK.toFixed(2) : '—',
@@ -374,7 +378,7 @@ function _renderReportView(data) {
 
   const vu = bizVolUnitAbbr(bizChipValue('repBizType') || null);
   const body = [
-    row('Days Recorded',              p => `<span class="${p.days >= rangeDays ? '' : 'rep-down'}">${p.days} / ${rangeDays}</span>`, `${rangeDays} days`),
+    row('Days Recorded',              p => `<span class="${p.days >= (p.expectedDays ?? rangeDays) ? '' : 'rep-down'}">${p.days} / ${p.expectedDays ?? rangeDays}</span>`, `${rangeDays} days`),
     row('Total Cost (₹ L)',           p => L(p.cost),  L(T.cost)),
     row(`Total Tonnage (${vu})`,      p => MT(p.qty),  MT(T.qty)),
     row('Avg MPK (₹)',                p => p.mpk.toFixed(2), T.mpk.toFixed(2)),

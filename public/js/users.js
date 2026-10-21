@@ -65,6 +65,7 @@ async function openLocationsModal() {
         <div id="locationFormErr" class="users-form-err"></div>
         <button class="users-add-btn" onclick="addLocation()">Add Location</button>
       </div>
+      ${currentRole === 'admin' || currentRole === 'superadmin' ? `<button class="btn btn-card-outline" style="width:100%;margin-top:12px" onclick="openHolidaysModal()">🗓 Holiday Calendar</button>` : ''}
     </div>
   </div>`;
   document.body.insertAdjacentHTML('beforeend', modalHtml);
@@ -72,6 +73,8 @@ async function openLocationsModal() {
   document.getElementById('newLocationBizType').innerHTML = bizChipsHTML('newLocationBizType', '', 'null', { noAll: true });
   renderLocationsList(canDelete);
 }
+
+const WEEKDAY_NAMES = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 
 function renderLocationsList(canDelete) {
   const wrap = document.getElementById('locationsListWrap');
@@ -82,7 +85,7 @@ function renderLocationsList(canDelete) {
     <div class="loc-row" id="locRow_${p.id}">
       <span>
         <span class="loc-row-name" id="locName_${p.id}">${p.name}</span>
-        <span class="loc-row-type">${p.business_type}${p.has_kg_processing === false ? ' · no per-unit cost' : ''}${p.has_worker_breakdown ? ' · worker breakdown on' : ''}</span>
+        <span class="loc-row-type">${p.business_type}${p.has_kg_processing === false ? ' · no per-unit cost' : ''}${p.has_worker_breakdown ? ' · worker breakdown on' : ''}${p.weekly_off_day != null ? ' · off ' + WEEKDAY_NAMES[p.weekly_off_day] : ''}${p.observes_holidays ? ' · observes holidays' : ''}</span>
       </span>
       <span style="display:flex;gap:2px;flex-shrink:0">
         <button class="loc-rename-btn" onclick="startEditLocation(${p.id})" title="Edit">✎</button>
@@ -97,6 +100,9 @@ function startEditLocation(plantId) {
   if (!row) return;
   const plant = (allPlantsCache || []).find(p => p.id === plantId);
   if (!plant) return;
+  const isPrivileged = currentRole === 'admin' || currentRole === 'superadmin';
+  const offDayOptions = [`<option value="">No weekly off-day</option>`]
+    .concat(WEEKDAY_NAMES.map((n, i) => `<option value="${i}" ${plant.weekly_off_day === i ? 'selected' : ''}>Closed every ${n}</option>`)).join('');
   row.innerHTML = `
     <div style="width:100%">
       <input class="loc-rename-input" id="locNameInput_${plantId}" value="${plant.name.replace(/"/g,'&quot;')}"
@@ -106,6 +112,12 @@ function startEditLocation(plantId) {
         <input type="checkbox" id="locHasKg_${plantId}" ${plant.has_kg_processing !== false ? 'checked' : ''} style="cursor:pointer">
         Has per-unit processing cost
       </label>
+      ${isPrivileged ? `
+      <select class="users-input" id="locOffDay_${plantId}" style="margin-bottom:8px">${offDayOptions}</select>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text);margin-bottom:8px;cursor:pointer">
+        <input type="checkbox" id="locObservesHolidays_${plantId}" ${plant.observes_holidays ? 'checked' : ''} style="cursor:pointer">
+        Observes the shared holiday calendar
+      </label>` : ''}
       <span style="display:flex;gap:4px;flex-shrink:0">
         <button class="btn-save" onclick="saveEditLocation(${plantId})" title="Save">✓ Save</button>
         <button class="btn-cancel" onclick="renderLocationsList(true)" title="Cancel">✕</button>
@@ -120,7 +132,13 @@ async function saveEditLocation(plantId) {
   const hasKgProcessing = document.getElementById('locHasKg_' + plantId)?.checked;
   if (!name) { showToast('⚠ Location name cannot be empty', true); return; }
   try {
-    const plant = await api('PATCH', '/api/auth/plants/' + plantId, { name, hasKgProcessing });
+    let plant = await api('PATCH', '/api/auth/plants/' + plantId, { name, hasKgProcessing });
+    const offDaySel = document.getElementById('locOffDay_' + plantId);
+    if (offDaySel) {
+      const weeklyOffDay = offDaySel.value === '' ? null : parseInt(offDaySel.value, 10);
+      const observesHolidays = document.getElementById('locObservesHolidays_' + plantId)?.checked;
+      plant = await api('PATCH', `/api/auth/plants/${plantId}/off-days`, { weeklyOffDay, observesHolidays });
+    }
     const idx = allPlantsCache.findIndex(p => p.id === plantId);
     if (idx !== -1) allPlantsCache[idx] = plant;
     PLANTS_BY_ID[plantId] = plant;
@@ -163,6 +181,76 @@ async function addLocation() {
     await openLocationsModal();
   } catch (e) {
     errEl.textContent = e.message;
+  }
+}
+
+/* ─────────────────────── Holiday calendar (shared, admin/superadmin only) ───────────────────────
+   One flat list of dates, used by any location with "observes_holidays" turned on — see
+   the weekly-off-day + holiday fields in the Locations edit flow above. */
+
+async function openHolidaysModal() {
+  let holidays;
+  try { holidays = await api('GET', '/api/holidays'); } catch (e) { showToast('⚠ ' + e.message, true); return; }
+
+  const rowsHtml = holidays.length ? holidays.map(h => `
+    <tr>
+      <td>${new Date(h.date + 'T00:00:00').toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' })}</td>
+      <td>${h.name}</td>
+      <td style="text-align:right"><button class="loc-rename-btn" onclick="deleteHoliday(${h.id})" title="Delete">🗑</button></td>
+    </tr>
+  `).join('') : '<tr><td colspan="3" style="text-align:center;color:var(--muted);padding:14px">No holidays added yet.</td></tr>';
+
+  document.getElementById('holidaysModal')?.remove();
+  const modalHtml = `<div id="holidaysModal" class="modal-overlay">
+    <div class="modal-box ctr-modal-box" style="max-width:460px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <div style="font-weight:700;font-size:16px">🗓 Holiday Calendar</div>
+        <button id="holModalCloseBtn" class="modal-x">×</button>
+      </div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:10px">Shared across every location that has "Observes the shared holiday calendar" turned on.</div>
+      <div class="ctr-table-scroll">
+        <table class="wt-table">
+          <thead><tr><th>Date</th><th>Name</th><th></th></tr></thead>
+          <tbody id="holTableBody">${rowsHtml}</tbody>
+        </table>
+      </div>
+      <div class="ctr-modal-footer">
+        <div style="display:flex;gap:6px;margin-top:10px">
+          <input class="users-input wt-cell-input" id="newHolDate" type="date" style="margin-bottom:0">
+          <input class="users-input wt-cell-input" id="newHolName" type="text" placeholder="Holiday name" style="margin-bottom:0;flex:1">
+        </div>
+        <button class="users-add-btn" style="margin-top:8px" onclick="addHoliday()">+ Add Holiday</button>
+        <div id="holFormErr" class="users-form-err"></div>
+      </div>
+    </div>
+  </div>`;
+  document.body.insertAdjacentHTML('beforeend', modalHtml);
+  document.getElementById('holModalCloseBtn').onclick = () => document.getElementById('holidaysModal').remove();
+}
+
+async function addHoliday() {
+  const date = document.getElementById('newHolDate').value;
+  const name = document.getElementById('newHolName').value.trim();
+  const errEl = document.getElementById('holFormErr');
+  errEl.textContent = '';
+  if (!date) { errEl.textContent = 'Pick a date.'; return; }
+  if (!name) { errEl.textContent = 'Holiday name is required.'; return; }
+  try {
+    await api('POST', '/api/holidays', { date, name });
+    showToast(`✓ "${name}" added`, false);
+    openHolidaysModal();
+  } catch (e) {
+    errEl.textContent = e.message;
+  }
+}
+
+async function deleteHoliday(id) {
+  if (!confirm('Remove this holiday from the shared calendar?')) return;
+  try {
+    await api('DELETE', '/api/holidays/' + id);
+    openHolidaysModal();
+  } catch (e) {
+    showToast('⚠ ' + e.message, true);
   }
 }
 
