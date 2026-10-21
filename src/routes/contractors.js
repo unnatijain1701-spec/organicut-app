@@ -24,13 +24,23 @@ function getPlantId(req) {
   return !isNaN(requested) && allowed.includes(requested) ? requested : allowed[0];
 }
 
-// Resolves the active plant to its business type server-side (never trusts a client-
-// supplied business type) — that's the actual scope key for the whole contractor list.
+const VALID_BUSINESS_TYPES = ['FnV', 'RTE', 'Beverage', 'Coco-Sutra'];
+
+// Resolves the active business type — normally derived from the active plant (trusted,
+// server-looked-up). But the Contractors list is scoped by business type, not by plant,
+// so it also needs to resolve in an "All <Business Type> Locations" view where no single
+// plant is selected at all — there, fall back to a client-supplied businessType, which
+// is safe to trust directly here only because every contractor route is already
+// deliberately open to any authenticated user (see the file header comment) — accepting
+// it just changes WHICH shared list they see/edit, not any plant-scoped data.
 async function getBusinessType(req) {
   const pid = getPlantId(req);
-  if (!pid) return null;
-  const { rows } = await db.query('SELECT business_type FROM plants WHERE id = $1', [pid]);
-  return rows[0]?.business_type || null;
+  if (pid) {
+    const { rows } = await db.query('SELECT business_type FROM plants WHERE id = $1', [pid]);
+    if (rows[0]?.business_type) return rows[0].business_type;
+  }
+  const bt = req.query.businessType || req.body?.businessType;
+  return VALID_BUSINESS_TYPES.includes(bt) ? bt : null;
 }
 
 const normalize = s => String(s || '').trim().toLowerCase();

@@ -105,6 +105,17 @@ async function api(method, url, body) {
     } else if (body) {
       body = { ...body, plantId: activePlantId };
     }
+  } else if (!currentPlantId && !activePlantId && activeBizType) {
+    // "All <Business Type> Locations" view — no single plant selected, but the
+    // business type is known. Some data (e.g. the shared Contractors list) is scoped
+    // by business type rather than by plant, and needs this to resolve at all.
+    if (method === 'GET' || method === 'DELETE') {
+      url += (url.includes('?') ? '&' : '?') + 'businessType=' + encodeURIComponent(activeBizType);
+    } else if (body instanceof FormData) {
+      body.append('businessType', activeBizType);
+    } else if (body) {
+      body = { ...body, businessType: activeBizType };
+    }
   }
   const opts = { method, credentials: 'include' };
   if (body instanceof FormData) {
