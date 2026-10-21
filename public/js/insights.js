@@ -1,8 +1,10 @@
 /* ═══════════════════════════════════════════════════════
-   COST INSIGHTS — Layers 1-3
+   COST INSIGHTS — Layers 1-5
    Layer 1: Cost Visibility (where the money goes)
    Layer 2: Variance & Root-Cause Analysis (why costs changed)
    Layer 3: Anomaly Detection (flag values that deserve investigation)
+   Layer 4: Forecasting & Targets (estimate where costs are heading)
+   Layer 5: Recommendations & Actions (translate findings into action)
 ═══════════════════════════════════════════════════════ */
 
 let insightsBizType = '';
@@ -61,6 +63,12 @@ async function loadInsights() {
     } else if (_insightsTab === 'forecast') {
       const data = await api('GET', `/api/insights/forecast?month=${_insightsMonth}${btParam}`);
       _renderForecast(data, content);
+    } else if (_insightsTab === 'actions') {
+      const [actions, recs] = await Promise.all([
+        api('GET', `/api/insights/actions?month=${_insightsMonth}`),
+        api('GET', `/api/insights/recommendations?month=${_insightsMonth}${btParam}`),
+      ]);
+      _renderActions(actions, recs, content);
     }
   } catch (e) {
     content.innerHTML = `<p style="color:#c00;text-align:center;padding:20px">⚠ ${e.message}</p>`;
@@ -977,5 +985,417 @@ async function _saveTargets() {
       document.getElementById('targetModal').style.display = 'none';
       loadInsights();
     }, 800);
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// LAYER 5: RECOMMENDATIONS & ACTIONS
+// ═══════════════════════════════════════════════════════
+
+function _renderActions(actions, recsData, el) {
+  const recs = recsData.recommendations || [];
+
+  const [yr, mo] = _insightsMonth.split('-').map(Number);
+  const monthLabel = new Date(yr, mo - 1, 1).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+
+  // Stats
+  const open = actions.filter(a => a.status === 'open').length;
+  const inProgress = actions.filter(a => a.status === 'in_progress').length;
+  const completed = actions.filter(a => a.status === 'completed').length;
+  const dismissed = actions.filter(a => a.status === 'dismissed').length;
+  const totalSaving = actions.filter(a => a.status === 'completed' && a.estimated_saving)
+    .reduce((s, a) => s + parseFloat(a.estimated_saving), 0);
+
+  let html = '';
+
+  // ── Summary cards ──
+  html += `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px">
+    <div style="padding:10px 16px;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;text-align:center">
+      <div style="font-size:18px;font-weight:800;color:#991b1b">${open}</div>
+      <div style="font-size:11px;color:#991b1b">Open</div>
+    </div>
+    <div style="padding:10px 16px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;text-align:center">
+      <div style="font-size:18px;font-weight:800;color:#92400e">${inProgress}</div>
+      <div style="font-size:11px;color:#92400e">In Progress</div>
+    </div>
+    <div style="padding:10px 16px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;text-align:center">
+      <div style="font-size:18px;font-weight:800;color:#166534">${completed}</div>
+      <div style="font-size:11px;color:#166534">Completed</div>
+    </div>
+    <div style="padding:10px 16px;background:#f5f5f5;border:1px solid #e5e7eb;border-radius:8px;text-align:center">
+      <div style="font-size:18px;font-weight:800;color:var(--muted)">${dismissed}</div>
+      <div style="font-size:11px;color:var(--muted)">Dismissed</div>
+    </div>
+    ${totalSaving > 0 ? `<div style="padding:10px 16px;background:#ecfdf5;border:1px solid #6ee7b7;border-radius:8px;text-align:center;margin-left:auto">
+      <div style="font-size:18px;font-weight:800;color:#047857">${fcShort(totalSaving)}</div>
+      <div style="font-size:11px;color:#047857">Est. Savings (Completed)</div>
+    </div>` : ''}
+  </div>`;
+
+  // ── Suggested recommendations ──
+  if (recs.length > 0) {
+    html += `<div style="margin-bottom:24px">
+      <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:4px">Suggested Actions</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:10px">Based on this month's variance and anomaly analysis. Click to add as an action item.</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:10px">`;
+
+    recs.forEach((r, i) => {
+      const prioColor = r.priority === 'high' ? '#991b1b' : r.priority === 'medium' ? '#92400e' : '#166534';
+      const prioBg = r.priority === 'high' ? '#fef2f2' : r.priority === 'medium' ? '#fffbeb' : '#f0fdf4';
+      const prioBorder = r.priority === 'high' ? '#fecaca' : r.priority === 'medium' ? '#fde68a' : '#bbf7d0';
+      html += `<div style="padding:12px;background:${prioBg};border:1px solid ${prioBorder};border-radius:8px;cursor:pointer" onclick="_addRecommendation(${i})" id="recCard${i}">
+        <div style="display:flex;justify-content:space-between;align-items:start;gap:8px;margin-bottom:6px">
+          <div style="font-size:12px;font-weight:700;color:${prioColor}">${r.title}</div>
+          <span style="font-size:10px;font-weight:700;color:${prioColor};background:${prioBg};border:1px solid ${prioBorder};padding:1px 6px;border-radius:4px;white-space:nowrap">${r.priority}</span>
+        </div>
+        <div style="font-size:11px;color:var(--text);margin-bottom:6px">${r.description || ''}</div>
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span style="font-size:11px;color:var(--muted)">${r.plant_name}</span>
+          ${r.estimated_saving ? `<span style="font-size:11px;font-weight:700;color:#047857">Est. saving: ${fcShort(r.estimated_saving)}</span>` : ''}
+        </div>
+        <div style="font-size:10px;color:${prioColor};margin-top:6px;text-align:right">Click to add as action →</div>
+      </div>`;
+    });
+
+    html += '</div></div>';
+  }
+
+  // ── Action items table ──
+  html += `<div style="margin-bottom:20px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <div>
+        <div style="font-size:13px;font-weight:700;color:var(--text)">Action Items — ${monthLabel}</div>
+        <div style="font-size:11px;color:var(--muted)">Track recommendations and their outcomes</div>
+      </div>
+      ${currentRole === 'superadmin' ? `<button onclick="_openActionModal()" style="background:var(--primary);color:#fff;border:none;border-radius:8px;padding:8px 16px;font-weight:700;font-size:12px;cursor:pointer">+ New Action</button>` : ''}
+    </div>`;
+
+  if (actions.length === 0) {
+    html += `<div style="text-align:center;padding:30px;color:var(--muted)">
+      <div style="font-size:32px;margin-bottom:8px">📋</div>
+      <div style="font-size:13px">No action items for this month yet.</div>
+      <div style="font-size:11px;margin-top:4px">${recs.length > 0 ? 'Click a suggestion above to get started.' : 'Use the + button to create one manually.'}</div>
+    </div>`;
+  } else {
+    html += `<div class="rep-table-wrap"><table class="rep-table">
+      <thead><tr>
+        <th style="width:30px">⚡</th>
+        <th style="text-align:left">Action</th>
+        <th>Plant</th>
+        <th>Owner</th>
+        <th>Due</th>
+        <th>Est. Saving</th>
+        <th>Status</th>
+        <th>MPK Impact</th>
+        <th style="width:50px"></th>
+      </tr></thead>
+      <tbody>`;
+
+    actions.forEach(a => {
+      const prioIcon = a.priority === 'high' ? '🔴' : a.priority === 'medium' ? '🟡' : '🟢';
+      const statusBadge = _actionStatusBadge(a.status);
+      const mpkImpact = a.status === 'completed' && a.baseline_mpk && a.actual_mpk
+        ? _actionMPKImpact(parseFloat(a.baseline_mpk), parseFloat(a.actual_mpk))
+        : '<span style="color:var(--muted);font-size:11px">—</span>';
+      const dueStr = a.due_date ? new Date(a.due_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : '—';
+      const isOverdue = a.due_date && a.status !== 'completed' && a.status !== 'dismissed' && new Date(a.due_date) < new Date();
+
+      html += `<tr style="${a.status === 'dismissed' ? 'opacity:.5' : ''}">
+        <td style="text-align:center">${prioIcon}</td>
+        <td>
+          <div style="font-size:12px;font-weight:700;color:var(--text)">${a.title}</div>
+          ${a.description ? `<div style="font-size:11px;color:var(--muted);margin-top:2px;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a.description}</div>` : ''}
+          ${a.finding_ref ? `<div style="font-size:10px;color:var(--muted);margin-top:2px">Ref: ${a.finding_ref}</div>` : ''}
+        </td>
+        <td style="font-size:12px">${a.plant_name}</td>
+        <td style="font-size:12px">${a.owner || '—'}</td>
+        <td style="font-size:12px;${isOverdue ? 'color:#991b1b;font-weight:700' : ''}">${dueStr}${isOverdue ? ' ⚠' : ''}</td>
+        <td style="font-size:12px;font-weight:700;color:#047857">${a.estimated_saving ? fcShort(parseFloat(a.estimated_saving)) : '—'}</td>
+        <td>${statusBadge}</td>
+        <td>${mpkImpact}</td>
+        <td>
+          <button onclick="_openActionModal(${a.id})" style="border:none;background:none;cursor:pointer;font-size:14px" title="Edit">✏️</button>
+        </td>
+      </tr>`;
+    });
+
+    html += '</tbody></table></div>';
+  }
+  html += '</div>';
+
+  // ── Completed actions with MPK impact ──
+  const completedActions = actions.filter(a => a.status === 'completed' && a.baseline_mpk && a.actual_mpk);
+  if (completedActions.length > 0) {
+    html += `<div style="margin-bottom:20px">
+      <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:10px">Completed Actions — Before/After MPK</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px">`;
+
+    completedActions.forEach(a => {
+      const before = parseFloat(a.baseline_mpk);
+      const after = parseFloat(a.actual_mpk);
+      const change = after - before;
+      const pct = before > 0 ? ((change / before) * 100).toFixed(1) : '—';
+      const improved = change < 0;
+      const bg = improved ? '#f0fdf4' : '#fef2f2';
+      const color = improved ? '#166534' : '#991b1b';
+      const border = improved ? '#bbf7d0' : '#fecaca';
+
+      html += `<div style="padding:12px;background:${bg};border:1px solid ${border};border-radius:8px">
+        <div style="font-size:12px;font-weight:700;color:${color};margin-bottom:6px">${a.title}</div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:8px">${a.plant_name}</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px">
+          <div style="text-align:center">
+            <div style="font-size:10px;color:var(--muted)">Before</div>
+            <div style="font-size:15px;font-weight:800">₹${fn(before)}</div>
+          </div>
+          <div style="font-size:18px;color:${color}">${improved ? '→' : '→'}</div>
+          <div style="text-align:center">
+            <div style="font-size:10px;color:var(--muted)">After</div>
+            <div style="font-size:15px;font-weight:800;color:${color}">₹${fn(after)}</div>
+          </div>
+          <div style="text-align:center">
+            <div style="font-size:10px;color:var(--muted)">Change</div>
+            <div style="font-size:13px;font-weight:800;color:${color}">${change > 0 ? '+' : ''}${pct}%</div>
+          </div>
+        </div>
+        ${a.resolution_note ? `<div style="font-size:11px;color:var(--muted);margin-top:8px;border-top:1px solid ${border};padding-top:6px">${a.resolution_note}</div>` : ''}
+      </div>`;
+    });
+
+    html += '</div></div>';
+  }
+
+  el.innerHTML = html;
+  el._recsData = recs;
+}
+
+function _actionStatusBadge(status) {
+  if (status === 'open')        return '<span style="font-size:11px;font-weight:700;color:#991b1b;background:#fee2e2;padding:2px 8px;border-radius:10px">Open</span>';
+  if (status === 'in_progress') return '<span style="font-size:11px;font-weight:700;color:#92400e;background:#fef3c7;padding:2px 8px;border-radius:10px">In Progress</span>';
+  if (status === 'completed')   return '<span style="font-size:11px;font-weight:700;color:#166534;background:#dcfce7;padding:2px 8px;border-radius:10px">Completed</span>';
+  if (status === 'dismissed')   return '<span style="font-size:11px;font-weight:700;color:var(--muted);background:#f3f4f6;padding:2px 8px;border-radius:10px">Dismissed</span>';
+  return `<span style="font-size:11px;color:var(--muted)">${status}</span>`;
+}
+
+function _actionMPKImpact(before, after) {
+  const change = after - before;
+  const pct = before > 0 ? ((change / before) * 100).toFixed(1) : null;
+  if (change < -0.005) return `<span style="font-size:11px;font-weight:700;color:#166534">${pct}%</span>`;
+  if (change > 0.005)  return `<span style="font-size:11px;font-weight:700;color:#991b1b">+${pct}%</span>`;
+  return '<span style="font-size:11px;color:var(--muted)">0%</span>';
+}
+
+async function _addRecommendation(idx) {
+  const content = document.getElementById('insightsContent');
+  if (!content || !content._recsData) return;
+  const r = content._recsData[idx];
+  if (!r) return;
+
+  const card = document.getElementById('recCard' + idx);
+  if (card) {
+    card.style.opacity = '0.5';
+    card.style.pointerEvents = 'none';
+  }
+
+  try {
+    await api('POST', '/api/insights/actions', {
+      plant_id: r.plant_id,
+      month: _insightsMonth,
+      finding_type: r.finding_type,
+      finding_ref: r.finding_ref,
+      title: r.title,
+      description: r.description,
+      estimated_saving: r.estimated_saving,
+      baseline_mpk: r.baseline_mpk || null,
+      priority: r.priority,
+    });
+    loadInsights();
+  } catch (e) {
+    if (card) { card.style.opacity = '1'; card.style.pointerEvents = ''; }
+    alert('Failed to create action: ' + e.message);
+  }
+}
+
+function _openActionModal(editId) {
+  let modal = document.getElementById('actionModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'actionModal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:2000;display:flex;align-items:center;justify-content:center';
+    modal.addEventListener('click', e => { if (e.target === modal) modal.style.display = 'none'; });
+    document.body.appendChild(modal);
+  }
+  modal.style.display = 'flex';
+  modal.innerHTML = '<div style="background:#fff;border-radius:12px;padding:24px;max-width:520px;width:90%;max-height:85vh;overflow-y:auto" id="actionModalContent"><p style="color:var(--muted);text-align:center">Loading…</p></div>';
+  _loadActionForm(editId);
+}
+
+async function _loadActionForm(editId) {
+  const content = document.getElementById('actionModalContent');
+  let existing = null;
+  if (editId) {
+    try {
+      const all = await api('GET', `/api/insights/actions?month=${_insightsMonth}`);
+      existing = all.find(a => a.id === editId);
+    } catch {}
+  }
+
+  let plantsResp;
+  try {
+    plantsResp = await fetch('/api/auth/plants', { credentials: 'include' }).then(r => r.json());
+  } catch { plantsResp = []; }
+  const plants = insightsBizType ? plantsResp.filter(p => p.business_type === insightsBizType) : plantsResp;
+
+  const isEdit = !!existing;
+  const title = isEdit ? 'Edit Action' : 'New Action';
+
+  let html = `<div style="font-size:15px;font-weight:700;margin-bottom:16px">${title}</div>`;
+
+  html += `<div style="margin-bottom:10px">
+    <label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">Plant</label>
+    <select id="actionPlantId" style="width:100%;height:34px;border:1px solid var(--border);border-radius:6px;padding:0 8px;font-size:13px">
+      ${plants.map(p => `<option value="${p.id}" ${existing && existing.plant_id === p.id ? 'selected' : ''}>${p.name}</option>`).join('')}
+    </select>
+  </div>`;
+
+  html += `<div style="margin-bottom:10px">
+    <label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">Title</label>
+    <input type="text" id="actionTitle" value="${existing ? existing.title.replace(/"/g, '&quot;') : ''}" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:13px" placeholder="e.g. Negotiate vendor rate">
+  </div>`;
+
+  html += `<div style="margin-bottom:10px">
+    <label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">Description</label>
+    <textarea id="actionDesc" rows="2" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:12px;resize:vertical">${existing ? (existing.description || '') : ''}</textarea>
+  </div>`;
+
+  html += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+    <div>
+      <label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">Priority</label>
+      <select id="actionPriority" style="width:100%;height:34px;border:1px solid var(--border);border-radius:6px;padding:0 8px;font-size:13px">
+        <option value="high" ${existing && existing.priority === 'high' ? 'selected' : ''}>High</option>
+        <option value="medium" ${!existing || existing.priority === 'medium' ? 'selected' : ''}>Medium</option>
+        <option value="low" ${existing && existing.priority === 'low' ? 'selected' : ''}>Low</option>
+      </select>
+    </div>
+    <div>
+      <label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">Status</label>
+      <select id="actionStatus" style="width:100%;height:34px;border:1px solid var(--border);border-radius:6px;padding:0 8px;font-size:13px">
+        <option value="open" ${!existing || existing.status === 'open' ? 'selected' : ''}>Open</option>
+        <option value="in_progress" ${existing && existing.status === 'in_progress' ? 'selected' : ''}>In Progress</option>
+        <option value="completed" ${existing && existing.status === 'completed' ? 'selected' : ''}>Completed</option>
+        <option value="dismissed" ${existing && existing.status === 'dismissed' ? 'selected' : ''}>Dismissed</option>
+      </select>
+    </div>
+  </div>`;
+
+  html += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+    <div>
+      <label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">Owner</label>
+      <input type="text" id="actionOwner" value="${existing ? (existing.owner || '') : ''}" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:13px" placeholder="Person responsible">
+    </div>
+    <div>
+      <label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">Due Date</label>
+      <input type="date" id="actionDue" value="${existing && existing.due_date ? existing.due_date.slice(0, 10) : ''}" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:13px">
+    </div>
+  </div>`;
+
+  html += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+    <div>
+      <label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">Est. Saving (₹)</label>
+      <input type="number" id="actionSaving" step="0.01" value="${existing && existing.estimated_saving ? existing.estimated_saving : ''}" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:13px" placeholder="0">
+    </div>
+    <div>
+      <label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">Finding Ref</label>
+      <input type="text" id="actionRef" value="${existing ? (existing.finding_ref || '') : ''}" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:13px" placeholder="Vendor/SKU name">
+    </div>
+  </div>`;
+
+  if (isEdit) {
+    html += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+      <div>
+        <label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">Baseline MPK</label>
+        <input type="number" id="actionBaseMPK" step="0.01" value="${existing.baseline_mpk || ''}" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:13px">
+      </div>
+      <div>
+        <label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">Actual MPK (after)</label>
+        <input type="number" id="actionActualMPK" step="0.01" value="${existing.actual_mpk || ''}" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:13px">
+      </div>
+    </div>
+    <div style="margin-bottom:10px">
+      <label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">Resolution Note</label>
+      <textarea id="actionResolution" rows="2" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:12px;resize:vertical">${existing.resolution_note || ''}</textarea>
+    </div>`;
+  }
+
+  html += `<div style="display:flex;gap:8px;margin-top:16px">
+    <button onclick="_saveAction(${editId || 'null'})" style="background:var(--primary);color:#fff;border:none;border-radius:8px;padding:10px 20px;font-weight:700;font-size:13px;cursor:pointer;flex:1">${isEdit ? 'Update' : 'Create'}</button>
+    ${isEdit ? `<button onclick="_deleteAction(${editId})" style="background:#fef2f2;color:#991b1b;border:1px solid #fecaca;border-radius:8px;padding:10px 16px;font-weight:700;font-size:13px;cursor:pointer">Delete</button>` : ''}
+    <button onclick="document.getElementById('actionModal').style.display='none'" style="background:#e5e7eb;color:var(--text);border:none;border-radius:8px;padding:10px 20px;font-weight:700;font-size:13px;cursor:pointer">Cancel</button>
+  </div>
+  <div id="actionSaveStatus" style="font-size:12px;margin-top:8px"></div>`;
+
+  content.innerHTML = html;
+}
+
+async function _saveAction(editId) {
+  const status = document.getElementById('actionSaveStatus');
+  status.textContent = 'Saving…';
+  status.style.color = 'var(--muted)';
+
+  const payload = {
+    plant_id: parseInt(document.getElementById('actionPlantId').value),
+    month: _insightsMonth,
+    title: document.getElementById('actionTitle').value.trim(),
+    description: document.getElementById('actionDesc').value.trim(),
+    priority: document.getElementById('actionPriority').value,
+    status: document.getElementById('actionStatus').value,
+    owner: document.getElementById('actionOwner').value.trim(),
+    due_date: document.getElementById('actionDue').value || null,
+    estimated_saving: parseFloat(document.getElementById('actionSaving').value) || null,
+    finding_ref: document.getElementById('actionRef').value.trim() || null,
+    finding_type: 'manual',
+  };
+
+  if (!payload.title) {
+    status.textContent = 'Title is required';
+    status.style.color = '#991b1b';
+    return;
+  }
+
+  if (editId) {
+    const baseMPK = document.getElementById('actionBaseMPK');
+    const actualMPK = document.getElementById('actionActualMPK');
+    const resolution = document.getElementById('actionResolution');
+    if (baseMPK) payload.baseline_mpk = parseFloat(baseMPK.value) || null;
+    if (actualMPK) payload.actual_mpk = parseFloat(actualMPK.value) || null;
+    if (resolution) payload.resolution_note = resolution.value.trim() || null;
+  }
+
+  try {
+    if (editId) {
+      await api('PUT', `/api/insights/actions/${editId}`, payload);
+    } else {
+      await api('POST', '/api/insights/actions', payload);
+    }
+    status.textContent = 'Saved!';
+    status.style.color = '#166534';
+    setTimeout(() => {
+      document.getElementById('actionModal').style.display = 'none';
+      loadInsights();
+    }, 500);
+  } catch (e) {
+    status.textContent = 'Error: ' + e.message;
+    status.style.color = '#991b1b';
+  }
+}
+
+async function _deleteAction(id) {
+  if (!confirm('Delete this action item?')) return;
+  try {
+    await api('DELETE', `/api/insights/actions/${id}`);
+    document.getElementById('actionModal').style.display = 'none';
+    loadInsights();
+  } catch (e) {
+    alert('Failed: ' + e.message);
   }
 }

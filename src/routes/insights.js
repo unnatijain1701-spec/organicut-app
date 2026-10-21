@@ -876,6 +876,305 @@ router.delete('/targets/:id', async (req, res) => {
   }
 });
 
+// ── Layer 5: Recommendations / Action Items ───────────
+// GET /api/insights/actions?month=YYYY-MM&status=&plantId=
+router.get('/actions', async (req, res) => {
+  if (!hasPermission(req.user, 'view_cost_trend'))
+    return res.status(403).json({ error: 'You do not have permission to do this' });
+  const month = (req.query.month || '').slice(0, 7);
+  const status = req.query.status || null;
+  const plantId = parseInt(req.query.plantId) || null;
+  try {
+    const params = [];
+    const clauses = [];
+    if (month) { params.push(month); clauses.push(`ia.month = $${params.length}`); }
+    if (status) { params.push(status); clauses.push(`ia.status = $${params.length}`); }
+    if (plantId) { params.push(plantId); clauses.push(`ia.plant_id = $${params.length}`); }
+    // Plant scope for non-superadmin
+    if (req.user.role !== 'superadmin') {
+      const allowed = req.user.plantIds || (req.user.plant_id != null ? [req.user.plant_id] : []);
+      params.push(allowed);
+      clauses.push(`ia.plant_id = ANY($${params.length})`);
+    }
+    const where = clauses.length ? 'WHERE ' + clauses.join(' AND ') : '';
+    const { rows } = await db.query(`
+      SELECT ia.*, p.name AS plant_name
+      FROM insight_actions ia JOIN plants p ON p.id = ia.plant_id
+      ${where}
+      ORDER BY
+        CASE ia.priority WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END,
+        CASE ia.status WHEN 'open' THEN 0 WHEN 'in_progress' THEN 1 WHEN 'completed' THEN 2 ELSE 3 END,
+        ia.created_at DESC
+    `, params);
+    res.json(rows);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// POST /api/insights/actions — create an action
+router.post('/actions', async (req, res) => {
+  if (!hasPermission(req.user, 'view_cost_trend'))
+    return res.status(403).json({ error: 'You do not have permission to do this' });
+  const { plant_id, month, finding_type, finding_ref, title, description,
+          estimated_saving, baseline_mpk, owner, due_date, priority } = req.body;
+  if (!plant_id || !month || !title) return res.status(400).json({ error: 'plant_id, month, title required' });
+  try {
+    const { rows } = await db.query(`
+      INSERT INTO insight_actions (plant_id, month, finding_type, finding_ref, title, description,
+        estimated_saving, baseline_mpk, owner, due_date, priority, created_by)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *
+    `, [plant_id, month, finding_type || 'manual', finding_ref || null,
+        title, description || null, estimated_saving || null, baseline_mpk || null,
+        owner || null, due_date || null, priority || 'medium', req.user.username]);
+    res.json(rows[0]);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// PUT /api/insights/actions/:id — update status, resolution, actual_mpk
+router.put('/actions/:id', async (req, res) => {
+  if (!hasPermission(req.user, 'view_cost_trend'))
+    return res.status(403).json({ error: 'You do not have permission to do this' });
+  const id = parseInt(req.params.id);
+  const fields = [];
+  const vals = [];
+  const allowed = ['status', 'title', 'description', 'estimated_saving', 'owner',
+                   'due_date', 'priority', 'resolution_note', 'actual_mpk'];
+  for (const key of allowed) {
+    if (req.body[key] !== undefined) {
+      vals.push(req.body[key] === '' ? null : req.body[key]);
+      fields.push(`${key} = $${vals.length}`);
+    }
+  }
+  if (!fields.length) return res.status(400).json({ error: 'No fields to update' });
+  vals.push(id);
+  fields.push('updated_at = NOW()');
+  try {
+    const { rows } = await db.query(
+      `UPDATE insight_actions SET ${fields.join(', ')} WHERE id = $${vals.length} RETURNING *`,
+      vals
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Not found' });
+    res.json(rows[0]);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// DELETE /api/insights/actions/:id
+router.delete('/actions/:id', async (req, res) => {
+  if (!hasPermission(req.user, 'view_cost_trend'))
+    return res.status(403).json({ error: 'You do not have permission to do this' });
+  try {
+    await db.query('DELETE FROM insight_actions WHERE id = $1', [req.params.id]);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// GET /api/insights/recommendations?month=YYYY-MM&businessType=
+// Auto-generate recommended actions from variance/anomaly data
+router.get('/recommendations', async (req, res) => {
+  if (!hasPermission(req.user, 'view_cost_trend'))
+    return res.status(403).json({ error: 'You do not have permission to do this' });
+  const month = (req.query.month || '').slice(0, 7);
+  if (!month || !/^\d{4}-\d{2}$/.test(month)) return res.status(400).json({ error: 'month param required (YYYY-MM)' });
+  const [yr, mo] = month.split('-').map(Number);
+  const from = `${month}-01`;
+  const to   = `${yr}-${String(mo).padStart(2, '0')}-${new Date(yr, mo, 0).getDate()}`;
+  const prevDate = new Date(yr, mo - 2, 1);
+  const prevFrom = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, '0')}-01`;
+  const prevLastDay = new Date(prevDate.getFullYear(), prevDate.getMonth() + 1, 0).getDate();
+  const prevTo   = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, '0')}-${prevLastDay}`;
+  const businessType = req.query.businessType || null;
+
+  try {
+    const recommendations = [];
+
+    // 5a. Vendors with significant cost increase vs previous month
+    const vParams = [from, to, prevFrom, prevTo];
+    let vBtFilter = '';
+    if (businessType) { vParams.push(businessType); vBtFilter = `AND p.business_type = $${vParams.length}`; }
+    const vScope = plantScopeClause(req, vParams);
+
+    const { rows: vendorSwings } = await db.query(`
+      WITH cur AS (
+        SELECT p.id AS plant_id, p.name AS plant_name, ca.contractor_name,
+          SUM(ca.cost)::NUMERIC(14,2) AS cost,
+          SUM(ca.workers)::INT AS workers
+        FROM contractor_attendance ca
+          JOIN daily_records dr ON dr.id = ca.record_id
+          JOIN plants p ON p.id = dr.plant_id
+        WHERE dr.record_date BETWEEN $1 AND $2 ${vBtFilter} ${vScope}
+        GROUP BY p.id, p.name, ca.contractor_name
+      ), prev AS (
+        SELECT p.id AS plant_id, ca.contractor_name,
+          SUM(ca.cost)::NUMERIC(14,2) AS cost,
+          SUM(ca.workers)::INT AS workers
+        FROM contractor_attendance ca
+          JOIN daily_records dr ON dr.id = ca.record_id
+          JOIN plants p ON p.id = dr.plant_id
+        WHERE dr.record_date BETWEEN $3 AND $4 ${vBtFilter} ${vScope}
+        GROUP BY p.id, ca.contractor_name
+      )
+      SELECT cur.plant_id, cur.plant_name, cur.contractor_name,
+        cur.cost AS cur_cost, COALESCE(prev.cost, 0) AS prev_cost,
+        cur.cost - COALESCE(prev.cost, 0) AS delta,
+        CASE WHEN cur.workers > 0 THEN (cur.cost / cur.workers)::NUMERIC(10,2) END AS cur_rate,
+        CASE WHEN prev.workers > 0 THEN (prev.cost / prev.workers)::NUMERIC(10,2) END AS prev_rate
+      FROM cur LEFT JOIN prev ON cur.plant_id = prev.plant_id AND cur.contractor_name = prev.contractor_name
+      WHERE cur.cost - COALESCE(prev.cost, 0) > 5000
+      ORDER BY cur.cost - COALESCE(prev.cost, 0) DESC
+      LIMIT 10
+    `, vParams);
+
+    for (const v of vendorSwings) {
+      const saving = parseFloat(v.delta);
+      const rateUp = v.cur_rate && v.prev_rate && parseFloat(v.cur_rate) > parseFloat(v.prev_rate);
+      recommendations.push({
+        finding_type: 'variance_att',
+        finding_ref: v.contractor_name,
+        plant_id: v.plant_id,
+        plant_name: v.plant_name,
+        title: `Review ${v.contractor_name} cost increase`,
+        description: rateUp
+          ? `Rate per worker rose from ₹${v.prev_rate} to ₹${v.cur_rate}. Total cost up by ₹${Math.round(saving).toLocaleString('en-IN')}.`
+          : `Total cost up by ₹${Math.round(saving).toLocaleString('en-IN')} vs previous month.`,
+        estimated_saving: saving,
+        priority: saving > 50000 ? 'high' : saving > 15000 ? 'medium' : 'low',
+      });
+    }
+
+    // 5b. SKUs with significant rate increase
+    const sParams = [from, to, prevFrom, prevTo];
+    let sBtFilter = '';
+    if (businessType) { sParams.push(businessType); sBtFilter = `AND p.business_type = $${sParams.length}`; }
+    const sScope = plantScopeClause(req, sParams);
+
+    const { rows: skuSwings } = await db.query(`
+      WITH cur AS (
+        SELECT p.id AS plant_id, p.name AS plant_name, vke.sku_name,
+          SUM(vke.cost)::NUMERIC(14,2) AS cost,
+          SUM(vke.qty)::NUMERIC(14,4) AS qty,
+          CASE WHEN SUM(vke.qty) > 0 THEN (SUM(vke.cost)/SUM(vke.qty))::NUMERIC(10,4) END AS rate
+        FROM vendor_kg_entries vke
+          JOIN daily_records dr ON dr.id = vke.record_id
+          JOIN plants p ON p.id = dr.plant_id
+        WHERE dr.record_date BETWEEN $1 AND $2 AND vke.sku_name != '__UNLOADING__'
+          ${sBtFilter} ${sScope}
+        GROUP BY p.id, p.name, vke.sku_name
+      ), prev AS (
+        SELECT p.id AS plant_id, vke.sku_name,
+          SUM(vke.cost)::NUMERIC(14,2) AS cost,
+          SUM(vke.qty)::NUMERIC(14,4) AS qty,
+          CASE WHEN SUM(vke.qty) > 0 THEN (SUM(vke.cost)/SUM(vke.qty))::NUMERIC(10,4) END AS rate
+        FROM vendor_kg_entries vke
+          JOIN daily_records dr ON dr.id = vke.record_id
+          JOIN plants p ON p.id = dr.plant_id
+        WHERE dr.record_date BETWEEN $3 AND $4 AND vke.sku_name != '__UNLOADING__'
+          ${sBtFilter} ${sScope}
+        GROUP BY p.id, vke.sku_name
+      )
+      SELECT cur.plant_id, cur.plant_name, cur.sku_name,
+        cur.cost AS cur_cost, COALESCE(prev.cost,0) AS prev_cost,
+        cur.rate AS cur_rate, prev.rate AS prev_rate,
+        cur.qty AS cur_qty,
+        cur.cost - COALESCE(prev.cost,0) AS delta
+      FROM cur LEFT JOIN prev ON cur.plant_id = prev.plant_id AND cur.sku_name = prev.sku_name
+      WHERE cur.rate IS NOT NULL AND prev.rate IS NOT NULL
+        AND cur.rate > prev.rate * 1.10
+        AND cur.cost - COALESCE(prev.cost,0) > 2000
+      ORDER BY cur.cost - COALESCE(prev.cost,0) DESC
+      LIMIT 10
+    `, sParams);
+
+    for (const s of skuSwings) {
+      const saving = parseFloat(s.delta);
+      const ratePct = s.prev_rate ? ((parseFloat(s.cur_rate) / parseFloat(s.prev_rate) - 1) * 100).toFixed(0) : '?';
+      recommendations.push({
+        finding_type: 'variance_kg',
+        finding_ref: s.sku_name,
+        plant_id: s.plant_id,
+        plant_name: s.plant_name,
+        title: `Negotiate ${s.sku_name} rate (up ${ratePct}%)`,
+        description: `Rate rose from ₹${s.prev_rate} to ₹${s.cur_rate}/unit. Cost impact: +₹${Math.round(saving).toLocaleString('en-IN')}.`,
+        estimated_saving: saving,
+        priority: saving > 30000 ? 'high' : saving > 10000 ? 'medium' : 'low',
+      });
+    }
+
+    // 5c. Plants with worsening MPK trend
+    const mParams = [from, to, prevFrom, prevTo];
+    let mBtFilter = '';
+    if (businessType) { mParams.push(businessType); mBtFilter = `AND p.business_type = $${mParams.length}`; }
+    const mScope = plantScopeClause(req, mParams);
+
+    const { rows: mpkTrend } = await db.query(`
+      WITH cur AS (
+        SELECT p.id AS plant_id, p.name AS plant_name,
+          COALESCE(SUM(dr.total_cost) FILTER (WHERE ${COMPLETE}),0)::NUMERIC(14,2) AS cost,
+          COALESCE(SUM(dr.sale_qty) FILTER (WHERE ${COMPLETE}),0)::NUMERIC(14,2) AS qty
+        FROM daily_records dr JOIN plants p ON p.id = dr.plant_id
+        WHERE dr.record_date BETWEEN $1 AND $2 ${mBtFilter} ${mScope}
+        GROUP BY p.id, p.name
+      ), prev AS (
+        SELECT p.id AS plant_id,
+          COALESCE(SUM(dr.total_cost) FILTER (WHERE ${COMPLETE}),0)::NUMERIC(14,2) AS cost,
+          COALESCE(SUM(dr.sale_qty) FILTER (WHERE ${COMPLETE}),0)::NUMERIC(14,2) AS qty
+        FROM daily_records dr JOIN plants p ON p.id = dr.plant_id
+        WHERE dr.record_date BETWEEN $3 AND $4 ${mBtFilter} ${mScope}
+        GROUP BY p.id
+      )
+      SELECT cur.plant_id, cur.plant_name,
+        CASE WHEN cur.qty > 0 THEN cur.cost/cur.qty END AS cur_mpk,
+        CASE WHEN prev.qty > 0 THEN prev.cost/prev.qty END AS prev_mpk
+      FROM cur LEFT JOIN prev ON cur.plant_id = prev.plant_id
+      WHERE cur.qty > 0 AND prev.qty > 0
+        AND cur.cost/cur.qty > prev.cost/prev.qty * 1.05
+      ORDER BY cur.cost/cur.qty - prev.cost/prev.qty DESC
+    `, mParams);
+
+    for (const m of mpkTrend) {
+      const curMPK = parseFloat(m.cur_mpk);
+      const prevMPK = parseFloat(m.prev_mpk);
+      const pctInc = ((curMPK / prevMPK - 1) * 100).toFixed(1);
+      recommendations.push({
+        finding_type: 'variance_att',
+        finding_ref: m.plant_name,
+        plant_id: m.plant_id,
+        plant_name: m.plant_name,
+        title: `${m.plant_name} MPK up ${pctInc}% — investigate cost drivers`,
+        description: `MPK went from ₹${prevMPK.toFixed(2)} to ₹${curMPK.toFixed(2)}. Check attendance costs, vendor rates, and volume changes.`,
+        estimated_saving: null,
+        priority: parseFloat(pctInc) > 15 ? 'high' : 'medium',
+        baseline_mpk: prevMPK,
+      });
+    }
+
+    // Deduplicate: skip recommendations that already have an action this month
+    const { rows: existingActions } = await db.query(
+      'SELECT finding_type, finding_ref, plant_id FROM insight_actions WHERE month = $1',
+      [month]
+    );
+    const existingSet = new Set(existingActions.map(a => `${a.plant_id}:${a.finding_type}:${a.finding_ref}`));
+    const filtered = recommendations.filter(r =>
+      !existingSet.has(`${r.plant_id}:${r.finding_type}:${r.finding_ref}`)
+    );
+
+    res.json({ month, recommendations: filtered });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 function toISODate(d) {
   const pad = n => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
