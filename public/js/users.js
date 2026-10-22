@@ -7,9 +7,10 @@ let usersPanelOpen = false;
 // Granular permission keys a superadmin (or anyone holding manage_users) can
 // mix-and-match onto a user. Must mirror src/utils/permissions.js ALL_PERMISSIONS.
 const PERMISSION_DEFS = [
-  { key: 'manage_locations', label: 'Manage locations', hint: 'Create and edit locations' },
-  { key: 'delete_locations', label: 'Delete locations', hint: 'Superadmin-only to grant' },
-  { key: 'manage_users',     label: 'Manage users',     hint: 'Superadmin-only to grant' },
+  { key: 'manage_locations',    label: 'Manage locations',    hint: 'Create and edit locations' },
+  { key: 'delete_locations',    label: 'Delete locations',    hint: 'Superadmin-only to grant' },
+  { key: 'manage_users',        label: 'Manage users',        hint: 'Superadmin-only to grant' },
+  { key: 'manage_worker_types', label: 'Manage worker types', hint: 'Set worker-type names & daily rates' },
   { key: 'manage_vendors',   label: 'Manage vendors',   hint: 'Vendors, SKUs & bulk upload' },
   { key: 'view_reports',     label: 'View reports',     hint: 'Multi-plant Report / Compare' },
   { key: 'view_cost_trend',  label: 'View cost trend',  hint: 'Multi-plant Cost Trend view' },
