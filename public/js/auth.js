@@ -28,7 +28,7 @@ async function checkAuth() {
       document.getElementById('histBulkLockBtns').style.display = (isSuperadmin || hasPerm('manage_records')) ? 'flex' : 'none';
       { const rb = document.getElementById('reportMenuBtn'); if (rb) rb.style.display = (canSeeReport || canSeeTrend) ? 'block' : 'none'; }
       { const nr = document.getElementById('navReport'); if (nr) nr.style.display = canSeeReport ? '' : 'none'; }
-      { const nt = document.getElementById('navTrend');  if (nt) nt.style.display = canSeeTrend ? '' : 'none'; }
+      { const nt = document.getElementById('navTrend');  if (nt) nt.style.display = 'none'; }
       { const ni = document.getElementById('navInsights'); if (ni) ni.style.display = canSeeTrend ? '' : 'none'; }
       const showAdminGroup = canSeeUsers || canSeeVendors || canSeeReport || canSeeTrend;
       document.getElementById('navAdminToggle').style.display = showAdminGroup ? '' : 'none';
@@ -119,7 +119,7 @@ async function doLogin() {
     document.getElementById('navDashboard').style.display = canSeeDashboard ? '' : 'none';
     document.getElementById('navVendors').style.display = canSeeVendors ? '' : 'none';
     { const nr = document.getElementById('navReport'); if (nr) nr.style.display = canSeeReport ? '' : 'none'; }
-    { const nt = document.getElementById('navTrend');  if (nt) nt.style.display = canSeeTrend ? '' : 'none'; }
+    { const nt = document.getElementById('navTrend');  if (nt) nt.style.display = 'none'; }
     { const ni = document.getElementById('navInsights'); if (ni) ni.style.display = canSeeTrend ? '' : 'none'; }
     const showAdminGroup = canSeeUsers || canSeeVendors || canSeeReport || canSeeTrend;
     document.getElementById('navAdminToggle').style.display = showAdminGroup ? '' : 'none';

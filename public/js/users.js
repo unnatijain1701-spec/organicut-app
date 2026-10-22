@@ -48,7 +48,7 @@ async function openLocationsModal() {
 
   document.getElementById('locationsModal')?.remove();
   const modalHtml = `<div id="locationsModal" class="modal-overlay">
-    <div class="modal-box" style="max-width:460px">
+    <div class="modal-box" style="max-width:700px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
         <div style="font-weight:700;font-size:16px">📍 Locations</div>
         <button id="locModalCloseBtn" class="modal-x">×</button>
