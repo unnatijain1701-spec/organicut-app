@@ -147,7 +147,7 @@ router.get('/needs-setup', async (req, res) => {
 // the ones this user has been granted access to (via user_plants).
 router.get('/plants', authenticateToken, async (req, res) => {
   try {
-    const { rows } = await db.query('SELECT id, name, business_type, has_kg_processing, has_worker_breakdown, weekly_off_day, observes_holidays FROM plants ORDER BY display_order');
+    const { rows } = await db.query('SELECT id, name, business_type, has_kg_processing, has_worker_breakdown, has_ot_tracking, weekly_off_day, observes_holidays FROM plants ORDER BY display_order');
     if (req.user.role === 'superadmin') return res.json(rows);
     const allowed = new Set(req.user.plantIds || (req.user.plant_id != null ? [req.user.plant_id] : []));
     res.json(rows.filter(p => allowed.has(p.id)));
@@ -167,7 +167,7 @@ router.post('/plants', authenticateToken, requirePermission('manage_locations'),
     const { rows } = await db.query(
       `INSERT INTO plants (name, business_type, has_kg_processing, display_order)
        VALUES ($1, $2, $3, COALESCE((SELECT MAX(display_order)+1 FROM plants), 1))
-       RETURNING id, name, business_type, has_kg_processing, display_order`,
+       RETURNING id, name, business_type, has_kg_processing, has_ot_tracking, display_order`,
       [name.trim(), businessType, hasKgProcessing !== false]
     );
     res.json(rows[0]);
@@ -182,8 +182,8 @@ router.post('/plants', authenticateToken, requirePermission('manage_locations'),
 router.patch('/plants/:id', authenticateToken, requirePermission('manage_locations'), async (req, res) => {
   const plantId = parseInt(req.params.id, 10);
   if (isNaN(plantId)) return res.status(400).json({ error: 'Invalid plant id' });
-  const { name, businessType, hasKgProcessing } = req.body || {};
-  if (name === undefined && businessType === undefined && hasKgProcessing === undefined) {
+  const { name, businessType, hasKgProcessing, hasOtTracking } = req.body || {};
+  if (name === undefined && businessType === undefined && hasKgProcessing === undefined && hasOtTracking === undefined) {
     return res.status(400).json({ error: 'Nothing to update' });
   }
   if (name !== undefined && !name.trim()) return res.status(400).json({ error: 'name cannot be empty' });
@@ -197,10 +197,11 @@ router.patch('/plants/:id', authenticateToken, requirePermission('manage_locatio
     if (name !== undefined) { params.push(name.trim()); sets.push(`name = $${params.length}`); }
     if (businessType !== undefined) { params.push(businessType); sets.push(`business_type = $${params.length}`); }
     if (hasKgProcessing !== undefined) { params.push(!!hasKgProcessing); sets.push(`has_kg_processing = $${params.length}`); }
+    if (hasOtTracking !== undefined) { params.push(!!hasOtTracking); sets.push(`has_ot_tracking = $${params.length}`); }
     params.push(plantId);
     const { rows } = await db.query(
       `UPDATE plants SET ${sets.join(', ')} WHERE id = $${params.length}
-       RETURNING id, name, business_type, has_kg_processing, display_order`,
+       RETURNING id, name, business_type, has_kg_processing, has_ot_tracking, display_order`,
       params
     );
     if (!rows.length) return res.status(404).json({ error: 'Location not found' });
@@ -223,7 +224,7 @@ router.patch('/plants/:id/worker-breakdown', authenticateToken, async (req, res)
   const { enabled } = req.body || {};
   try {
     const { rows } = await db.query(
-      'UPDATE plants SET has_worker_breakdown = $1 WHERE id = $2 RETURNING id, name, business_type, has_kg_processing, has_worker_breakdown',
+      'UPDATE plants SET has_worker_breakdown = $1 WHERE id = $2 RETURNING id, name, business_type, has_kg_processing, has_worker_breakdown, has_ot_tracking',
       [!!enabled, plantId]
     );
     if (!rows.length) return res.status(404).json({ error: 'Location not found' });
@@ -250,7 +251,7 @@ router.patch('/plants/:id/off-days', authenticateToken, async (req, res) => {
   }
   try {
     const { rows } = await db.query(
-      'UPDATE plants SET weekly_off_day = $1, observes_holidays = $2 WHERE id = $3 RETURNING id, name, business_type, has_kg_processing, has_worker_breakdown, weekly_off_day, observes_holidays',
+      'UPDATE plants SET weekly_off_day = $1, observes_holidays = $2 WHERE id = $3 RETURNING id, name, business_type, has_kg_processing, has_worker_breakdown, has_ot_tracking, weekly_off_day, observes_holidays',
       [dayVal, !!observesHolidays, plantId]
     );
     if (!rows.length) return res.status(404).json({ error: 'Location not found' });

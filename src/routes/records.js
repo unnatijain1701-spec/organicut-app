@@ -70,7 +70,7 @@ router.get('/export', async (req, res) => {
       'SELECT * FROM daily_records WHERE plant_id = $1 ORDER BY record_date ASC', [pid]
     );
     const { rows: attendance } = await db.query(`
-      SELECT ca.record_id, ca.contractor_name, ca.workers, ca.cost
+      SELECT ca.record_id, ca.contractor_name, ca.workers, ca.cost, ca.ot_hours, ca.ot_cost
       FROM contractor_attendance ca
       JOIN daily_records dr ON dr.id = ca.record_id
       WHERE dr.plant_id = $1
@@ -147,7 +147,7 @@ router.get('/export-all', async (req, res) => {
 
     const recordIds = records.map(r => r.id);
     const { rows: attendance } = await db.query(`
-      SELECT record_id, contractor_name, workers, cost
+      SELECT record_id, contractor_name, workers, cost, ot_hours, ot_cost
       FROM contractor_attendance
       WHERE record_id = ANY($1)
     `, [recordIds]);
@@ -518,7 +518,7 @@ router.get('/:date', async (req, res) => {
 
     const record = records[0];
     const { rows: attendance } = await db.query(
-      'SELECT id, contractor_name, workers, cost FROM contractor_attendance WHERE record_id = $1 ORDER BY contractor_name',
+      'SELECT id, contractor_name, workers, cost, ot_hours, ot_cost FROM contractor_attendance WHERE record_id = $1 ORDER BY contractor_name',
       [record.id]
     );
     const { rows: kgEntries } = await db.query(
@@ -606,8 +606,8 @@ router.post('/', async (req, res) => {
     await client.query('DELETE FROM contractor_attendance WHERE record_id = $1', [recordId]);
     for (const a of (attendance || [])) {
       const { rows: attRows } = await client.query(
-        'INSERT INTO contractor_attendance (record_id, contractor_name, workers, cost) VALUES ($1,$2,$3,$4) RETURNING id',
-        [recordId, a.contractorName, a.workers ?? 0, a.cost ?? 0]
+        'INSERT INTO contractor_attendance (record_id, contractor_name, workers, cost, ot_hours, ot_cost) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id',
+        [recordId, a.contractorName, a.workers ?? 0, a.cost ?? 0, a.otHours ?? 0, a.otCost ?? 0]
       );
       const attendanceId = attRows[0].id;
       for (const t of (a.types || [])) {

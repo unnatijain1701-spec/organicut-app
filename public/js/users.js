@@ -85,7 +85,7 @@ function renderLocationsList(canDelete) {
     <div class="loc-row" id="locRow_${p.id}">
       <span>
         <span class="loc-row-name" id="locName_${p.id}">${p.name}</span>
-        <span class="loc-row-type">${p.business_type}${p.has_kg_processing === false ? ' · no per-unit cost' : ''}${p.has_worker_breakdown ? ' · worker breakdown on' : ''}${p.weekly_off_day != null ? ' · off ' + WEEKDAY_NAMES[p.weekly_off_day] : ''}${p.observes_holidays ? ' · observes holidays' : ''}</span>
+        <span class="loc-row-type">${p.business_type}${p.has_kg_processing === false ? ' · no per-unit cost' : ''}${p.has_worker_breakdown ? ' · worker breakdown on' : ''}${p.has_ot_tracking ? ' · OT tracking on' : ''}${p.weekly_off_day != null ? ' · off ' + WEEKDAY_NAMES[p.weekly_off_day] : ''}${p.observes_holidays ? ' · observes holidays' : ''}</span>
       </span>
       <span style="display:flex;gap:2px;flex-shrink:0">
         <button class="loc-rename-btn" onclick="startEditLocation(${p.id})" title="Edit">✎</button>
@@ -112,6 +112,10 @@ function startEditLocation(plantId) {
         <input type="checkbox" id="locHasKg_${plantId}" ${plant.has_kg_processing !== false ? 'checked' : ''} style="cursor:pointer">
         Has per-unit processing cost
       </label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text);margin-bottom:8px;cursor:pointer">
+        <input type="checkbox" id="locHasOt_${plantId}" ${plant.has_ot_tracking ? 'checked' : ''} style="cursor:pointer">
+        Has OT (overtime) tracking
+      </label>
       ${isPrivileged ? `
       <select class="users-input" id="locOffDay_${plantId}" style="margin-bottom:8px">${offDayOptions}</select>
       <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text);margin-bottom:8px;cursor:pointer">
@@ -130,9 +134,10 @@ async function saveEditLocation(plantId) {
   const input = document.getElementById('locNameInput_' + plantId);
   const name = input?.value.trim();
   const hasKgProcessing = document.getElementById('locHasKg_' + plantId)?.checked;
+  const hasOtTracking = document.getElementById('locHasOt_' + plantId)?.checked;
   if (!name) { showToast('⚠ Location name cannot be empty', true); return; }
   try {
-    let plant = await api('PATCH', '/api/auth/plants/' + plantId, { name, hasKgProcessing });
+    let plant = await api('PATCH', '/api/auth/plants/' + plantId, { name, hasKgProcessing, hasOtTracking });
     const offDaySel = document.getElementById('locOffDay_' + plantId);
     if (offDaySel) {
       const weeklyOffDay = offDaySel.value === '' ? null : parseInt(offDaySel.value, 10);

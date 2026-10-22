@@ -456,7 +456,7 @@ function renderContractorSearch() {
 function quickAddContractor(name) {
   if (!ATT_VENDORS.includes(name)) {
     ATT_VENDORS.push(name);
-    attState[name] = { workers: 0, cost: 0, designations: {} };
+    attState[name] = { workers: 0, cost: 0, otHours: 0, otCost: 0, designations: {} };
     renderContractorSearch();
     renderAtt();
   }
@@ -480,7 +480,7 @@ async function confirmAddContractor() {
     }
     const canonicalName = existing ? existing.name : name;
     ATT_VENDORS.push(canonicalName);
-    attState[canonicalName] = { workers: 0, cost: 0, designations: {} };
+    attState[canonicalName] = { workers: 0, cost: 0, otHours: 0, otCost: 0, designations: {} };
     inp.value = '';
     renderContractorSearch();
     renderAtt();
@@ -532,7 +532,7 @@ async function saveDefaultSKUEdit(v, i) {
 function r2(n) { return Math.round(n * 100) / 100; }
 
 function totalAtt() {
-  return ATT_VENDORS.reduce((s, v) => s + (parseFloat(attState[v].cost) || 0), 0);
+  return ATT_VENDORS.reduce((s, v) => s + (parseFloat(attState[v].cost) || 0) + (parseFloat(attState[v].otCost) || 0), 0);
 }
 
 function vendorKG(v) {
@@ -679,6 +679,11 @@ function designationsToTypesPayload(designations) {
 // switch, admin/superadmin-only — see toggleWorkerBreakdown). When it's off, attendance
 // behaves exactly as before this feature: one total worker count + one total cost per
 // contractor, no columns.
+function plantOtEnabled() {
+  const pid = currentPlantId || activePlantId;
+  return !!PLANTS_BY_ID[pid]?.has_ot_tracking;
+}
+
 function plantBreakdownEnabled() {
   const pid = currentPlantId || activePlantId;
   return !!PLANTS_BY_ID[pid]?.has_worker_breakdown;
@@ -728,12 +733,14 @@ function toggleDesigView() {
 
 function renderAtt() {
   const breakdownOn = plantBreakdownEnabled();
+  const otOn = plantOtEnabled();
   const toggleBtn = document.getElementById('desigToggleBtn');
   if (toggleBtn) toggleBtn.style.display = breakdownOn ? '' : 'none';
   if (!breakdownOn) _desigViewOn = false;
 
   const desigCols = (breakdownOn && _desigViewOn) ? _getAllDesigCols() : [];
-  const totalCols = 3 + desigCols.length;
+  const otExtra = otOn ? 3 : 0;
+  const totalCols = 3 + desigCols.length + otExtra;
 
   // Rebuild thead
   const thead = document.getElementById('attThead');
@@ -745,7 +752,8 @@ function renderAtt() {
       <th>Contractor</th>
       ${desigHeaders}
       <th class="r">Workers Present</th>
-      <th class="r">Production Attendance Cost (₹)</th>
+      <th class="r">${otOn ? 'Amount-1 (₹)' : 'Production Attendance Cost (₹)'}</th>
+      ${otOn ? '<th class="r">OT Hours</th><th class="r">Amount-OT (₹)</th><th class="r">Total Amount (₹)</th>' : ''}
     </tr>`;
   }
 
@@ -757,11 +765,17 @@ function renderAtt() {
       const total = ATT_VENDORS.reduce((s, v) => s + (attState[v]?.designations?.[d]?.workers || 0), 0);
       return `<td class="r" style="font-size:12px;color:#4a7060">${total || '—'}</td>`;
     }).join('');
+    const otFooter = otOn ? `
+      <td class="r" style="font-size:12px;color:#4a7060">${r2(ATT_VENDORS.reduce((s,v) => s + (parseFloat(attState[v]?.otHours) || 0), 0)) || '—'}</td>
+      <td class="r" style="font-size:12px;color:#4a7060">₹ ${r2(ATT_VENDORS.reduce((s,v) => s + (parseFloat(attState[v]?.otCost) || 0), 0))}</td>
+      <td class="r" style="font-weight:600">₹ ${r2(ATT_VENDORS.reduce((s,v) => s + (parseFloat(attState[v]?.cost) || 0) + (parseFloat(attState[v]?.otCost) || 0), 0))}</td>
+    ` : '';
     tfoot.innerHTML = `<tr class="ft">
       <td>Total</td>
       ${desigTotals}
       <td class="r">${totalWorkers > 0 ? totalWorkers + ' workers' : ''}</td>
       <td class="r" id="attTotal">₹ 0.00</td>
+      ${otFooter}
     </tr>`;
   }
 
@@ -782,9 +796,20 @@ function renderAtt() {
             onchange="onDesigCellChange('${vk}','${d.replace(/'/g,"\\'")}',this.value)">
         </td>`;
       }).join('');
-      // Once the breakdown is on, the contractor's totals are the sum of its breakdown
-      // cells, not a separately hand-typed number — avoids the two ever disagreeing.
       const totalsLocked = hasDesigEntries;
+      const otCells = otOn ? `
+        <td class="r">
+          <input type="number" min="0" step="0.5" value="${s.otHours || 0}" style="width:80px"
+            onchange="attState['${vk}'].otHours=parseFloat(this.value)||0;markDirty();renderAtt();">
+        </td>
+        <td class="r">
+          <input type="number" min="0" step="0.01" value="${s.otCost || 0}" style="width:110px"
+            onchange="attState['${vk}'].otCost=parseFloat(this.value)||0;markDirty();renderAtt();">
+        </td>
+        <td class="r" style="font-weight:600;padding:8px 10px;white-space:nowrap">
+          ₹ ${r2((parseFloat(s.cost) || 0) + (parseFloat(s.otCost) || 0))}
+        </td>
+      ` : '';
       return `<tr>
         <td>${v} <button onclick="removeContractor('${vk}')" title="Remove row"
           style="border:none;background:none;cursor:pointer;color:#b04040;font-size:13px;padding:0 4px">×</button></td>
@@ -795,8 +820,9 @@ function renderAtt() {
         </td>
         <td class="r">
           <input type="number" min="0" step="0.01" value="${s.cost}" style="width:130px" ${totalsLocked ? 'readonly title="Auto-totaled from the breakdown columns"' : ''}
-            onchange="attState['${vk}'].cost=parseFloat(this.value)||0;markDirty();recalc();">
+            onchange="attState['${vk}'].cost=parseFloat(this.value)||0;markDirty();${otOn ? 'renderAtt()' : 'recalc()'};">
         </td>
+        ${otCells}
       </tr>`;
     }).join('');
   }
@@ -1434,6 +1460,8 @@ async function saveRecord() {
     contractorName: v,
     workers: attState[v].workers || 0,
     cost:    parseFloat(attState[v].cost) || 0,
+    otHours: parseFloat(attState[v].otHours) || 0,
+    otCost:  parseFloat(attState[v].otCost) || 0,
     types:   designationsToTypesPayload(attState[v].designations),
   }));
 
@@ -1497,15 +1525,14 @@ function applyRecord(record) {
       if (!ATT_VENDORS.includes(v)) {
         ATT_VENDORS.push(v);
         const a = record.attendance.find(x => x.contractor_name === v);
-        attState[v] = { workers: a?.workers || 0, cost: parseFloat(a?.cost) || 0, designations: designationsFromSavedTypes(a?.types) };
+        attState[v] = { workers: a?.workers || 0, cost: parseFloat(a?.cost) || 0, otHours: parseFloat(a?.ot_hours) || 0, otCost: parseFloat(a?.ot_cost) || 0, designations: designationsFromSavedTypes(a?.types) };
       }
     });
   } else {
-    // Loading a saved record directly (no fresh CSV) — restore attendance from record
     ATT_VENDORS = (record.attendance || []).map(a => a.contractor_name);
     ATT_VENDORS.forEach(v => {
       const a = (record.attendance || []).find(x => x.contractor_name === v);
-      attState[v] = { workers: a ? (a.workers || 0) : 0, cost: a ? parseFloat(a.cost) || 0 : 0, designations: designationsFromSavedTypes(a?.types) };
+      attState[v] = { workers: a ? (a.workers || 0) : 0, cost: a ? parseFloat(a.cost) || 0 : 0, otHours: a ? parseFloat(a.ot_hours) || 0 : 0, otCost: a ? parseFloat(a.ot_cost) || 0 : 0, designations: designationsFromSavedTypes(a?.types) };
     });
   }
 
