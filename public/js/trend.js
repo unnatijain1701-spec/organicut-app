@@ -488,11 +488,38 @@ async function exportMonthRecords() {
   }
 }
 
+// Attendance export columns, shared by every workbook builder. OT rate is derived from
+// the saved amount ÷ hours, so it reflects what was actually charged that day.
+const ATT_EXPORT_HEAD = ['Contractor','Workers','Cost (₹)','OT Hours','OT Rate (₹/hr)','OT Amount (₹)','Total (₹)'];
+const WT_EXPORT_HEAD  = ['Contractor','Worker Type','Workers','Daily Rate (₹)','Cost (₹)'];
+const ATT_EXPORT_COLS = [32,10,12,10,14,14,12];
+const WT_EXPORT_COLS  = [32,20,10,14,12];
+
+function _attExportRow(a) {
+  const cost = parseFloat(a.cost) || 0;
+  const hours = parseFloat(a.ot_hours) || 0;
+  const ot = parseFloat(a.ot_cost) || 0;
+  return [a.contractor_name, a.workers || 0, r2(cost), hours, hours > 0 ? r2(ot / hours) : '', r2(ot), r2(cost + ot)];
+}
+
+function _wtExportRows(a) {
+  return (a.types || []).map(t => [a.contractor_name, t.worker_type, t.count || 0,
+    t.rate_used != null ? r2(parseFloat(t.rate_used)) : '', r2(parseFloat(t.cost) || 0)]);
+}
+
+function _appendWorkerTypeSheet(wb, rows, prefixCols) {
+  if (rows.length <= 1) return;
+  const ws = XLSX.utils.aoa_to_sheet(rows); applyDateColumnFormat(ws);
+  ws['!cols'] = [...prefixCols, ...WT_EXPORT_COLS].map(w => ({ wch: w }));
+  XLSX.utils.book_append_sheet(wb, ws, 'Worker Type Rates');
+}
+
 // Shared workbook builders for detail exports — single-plant (no Plant column) and
 // multi-plant (rows tagged with each record's Plant) — used by every export function.
 function _writeSinglePlantWorkbook(records, _u, filename) {
   const summaryRows = [['Date','Production Attendance Cost','Per KG Cost','Total Cost',`Sale Qty (${_u})`,'MPK','Last Saved By']];
-  const attRows     = [['Date','Contractor','Workers','Cost (₹)']];
+  const attRows     = [['Date', ...ATT_EXPORT_HEAD]];
+  const wtRows      = [['Date', ...WT_EXPORT_HEAD]];
   const kgRows      = [['Date','Vendor','SKU',`Rate (₹/${_u})`,`Qty (${_u})`,'Cost (₹)']];
   for (const detail of records) {
     const dateStr = toISODateStr(detail.record_date);
@@ -503,7 +530,8 @@ function _writeSinglePlantWorkbook(records, _u, filename) {
       parseFloat(detail.mpk)>0 ? r2(parseFloat(detail.mpk)) : '',
       detail.updated_by || '']);
     (detail.attendance||[]).forEach(a => {
-      attRows.push([xd, a.contractor_name, a.workers||0, parseFloat(a.cost)||0]);
+      attRows.push([xd, ..._attExportRow(a)]);
+      _wtExportRows(a).forEach(r => wtRows.push([xd, ...r]));
     });
     (detail.kgEntries||[]).forEach(e => {
       if (e.sku_name==='__UNLOADING__') kgRows.push([xd, e.vendor_name, 'Unloading Cost', '', '', r2(parseFloat(e.cost)||0)]);
@@ -511,18 +539,20 @@ function _writeSinglePlantWorkbook(records, _u, filename) {
     });
   }
   const ws1 = XLSX.utils.aoa_to_sheet(summaryRows); applyDateColumnFormat(ws1); ws1['!cols']=[12,22,14,12,14,10,16].map(w=>({wch:w}));
-  const ws2 = XLSX.utils.aoa_to_sheet(attRows);     applyDateColumnFormat(ws2); ws2['!cols']=[12,32,10,12].map(w=>({wch:w}));
+  const ws2 = XLSX.utils.aoa_to_sheet(attRows);     applyDateColumnFormat(ws2); ws2['!cols']=[12, ...ATT_EXPORT_COLS].map(w=>({wch:w}));
   const ws3 = XLSX.utils.aoa_to_sheet(kgRows);      applyDateColumnFormat(ws3); ws3['!cols']=[12,20,28,12,10,12].map(w=>({wch:w}));
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws1, 'Summary');
   XLSX.utils.book_append_sheet(wb, ws2, 'Attendance Detail');
+  _appendWorkerTypeSheet(wb, wtRows, [12]);
   XLSX.utils.book_append_sheet(wb, ws3, 'KG Detail');
   XLSX.writeFile(wb, filename);
 }
 
 function _writeMultiPlantWorkbook(records, filename) {
   const summaryRows = [['Plant','Business Type','Date','Production Attendance Cost','Per-Unit Cost','Total Cost','Sale Qty','MPK','Last Saved By']];
-  const attRows     = [['Plant','Date','Contractor','Workers','Cost (₹)']];
+  const attRows     = [['Plant','Date', ...ATT_EXPORT_HEAD]];
+  const wtRows      = [['Plant','Date', ...WT_EXPORT_HEAD]];
   const kgRows      = [['Plant','Date','Vendor','SKU','Rate (₹)','Qty','Cost (₹)']];
 
   for (const detail of records) {
@@ -537,7 +567,8 @@ function _writeMultiPlantWorkbook(records, filename) {
       parseFloat(detail.mpk)>0 ? r2(parseFloat(detail.mpk)) : '',
       detail.updated_by || '']);
     (detail.attendance||[]).forEach(a => {
-      attRows.push([plant, xd, a.contractor_name, a.workers||0, parseFloat(a.cost)||0]);
+      attRows.push([plant, xd, ..._attExportRow(a)]);
+      _wtExportRows(a).forEach(r => wtRows.push([plant, xd, ...r]));
     });
     (detail.kgEntries||[]).forEach(e => {
       if (e.sku_name==='__UNLOADING__') kgRows.push([plant, xd, e.vendor_name, 'Unloading Cost', '', '', r2(parseFloat(e.cost)||0)]);
@@ -550,11 +581,12 @@ function _writeMultiPlantWorkbook(records, filename) {
   // for anyway; grandCost/grandQty above are computed but no longer written to the sheet.
 
   const ws1 = XLSX.utils.aoa_to_sheet(summaryRows); applyDateColumnFormat(ws1); ws1['!cols']=[14,14,12,22,14,12,14,10,16].map(w=>({wch:w}));
-  const ws2 = XLSX.utils.aoa_to_sheet(attRows);     applyDateColumnFormat(ws2); ws2['!cols']=[14,12,32,10,12].map(w=>({wch:w}));
+  const ws2 = XLSX.utils.aoa_to_sheet(attRows);     applyDateColumnFormat(ws2); ws2['!cols']=[14,12, ...ATT_EXPORT_COLS].map(w=>({wch:w}));
   const ws3 = XLSX.utils.aoa_to_sheet(kgRows);      applyDateColumnFormat(ws3); ws3['!cols']=[14,12,20,28,12,10,12].map(w=>({wch:w}));
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws1, 'Summary');
   XLSX.utils.book_append_sheet(wb, ws2, 'Attendance Detail');
+  _appendWorkerTypeSheet(wb, wtRows, [14,12]);
   XLSX.utils.book_append_sheet(wb, ws3, 'KG Detail');
   XLSX.writeFile(wb, filename);
 }
@@ -658,7 +690,8 @@ async function exportAllRecords() {
       // the resulting workbook to splice in the two summary sheets before saving once.
       wb = XLSX.utils.book_new();
       const summaryRows = [['Plant','Business Type','Date','Production Attendance Cost','Per-Unit Cost','Total Cost','Sale Qty','MPK','Last Saved By']];
-      const attRows = [['Plant','Date','Contractor','Workers','Cost (₹)']];
+      const attRows = [['Plant','Date', ...ATT_EXPORT_HEAD]];
+      const wtRows  = [['Plant','Date', ...WT_EXPORT_HEAD]];
       const kgRows  = [['Plant','Date','Vendor','SKU','Rate (₹)','Qty','Cost (₹)']];
       records.forEach(detail => {
         const dateStr = toISODateStr(detail.record_date);
@@ -671,7 +704,10 @@ async function exportAllRecords() {
           r2(totalCost), saleQty,
           parseFloat(detail.mpk)>0 ? r2(parseFloat(detail.mpk)) : '',
           detail.updated_by || '']);
-        (detail.attendance||[]).forEach(a => attRows.push([plant, xd, a.contractor_name, a.workers||0, parseFloat(a.cost)||0]));
+        (detail.attendance||[]).forEach(a => {
+          attRows.push([plant, xd, ..._attExportRow(a)]);
+          _wtExportRows(a).forEach(r => wtRows.push([plant, xd, ...r]));
+        });
         (detail.kgEntries||[]).forEach(e => {
           if (e.sku_name==='__UNLOADING__') kgRows.push([plant, xd, e.vendor_name, 'Unloading Cost', '', '', r2(parseFloat(e.cost)||0)]);
           else kgRows.push([plant, xd, e.vendor_name, e.sku_name, parseFloat(e.rate)||0, parseFloat(e.qty)||0, r2(parseFloat(e.cost)||0)]);
@@ -680,16 +716,18 @@ async function exportAllRecords() {
       // No trailing TOTAL row — see _writeMultiPlantWorkbook's comment: a blank/text
       // Date cell there breaks Excel's pivot table "Group" feature on this column.
       const ws1 = XLSX.utils.aoa_to_sheet(summaryRows); applyDateColumnFormat(ws1); ws1['!cols']=[14,14,12,22,14,12,14,10,16].map(w=>({wch:w}));
-      const wsAD = XLSX.utils.aoa_to_sheet(attRows); applyDateColumnFormat(wsAD); wsAD['!cols']=[14,12,32,10,12].map(w=>({wch:w}));
+      const wsAD = XLSX.utils.aoa_to_sheet(attRows); applyDateColumnFormat(wsAD); wsAD['!cols']=[14,12, ...ATT_EXPORT_COLS].map(w=>({wch:w}));
       const wsKD = XLSX.utils.aoa_to_sheet(kgRows);  applyDateColumnFormat(wsKD); wsKD['!cols']=[14,12,20,28,12,10,12].map(w=>({wch:w}));
       XLSX.utils.book_append_sheet(wb, ws1,  'Daily Summary');
       XLSX.utils.book_append_sheet(wb, wsAD, 'Attendance Detail');
       XLSX.utils.book_append_sheet(wb, wsAS, 'Attendance Summary');
+      _appendWorkerTypeSheet(wb, wtRows, [14,12]);
       XLSX.utils.book_append_sheet(wb, wsKD, 'KG Detail');
       XLSX.utils.book_append_sheet(wb, wsKS, 'KG Vendor Summary');
     } else {
       const summaryRows = [['Date','Production Attendance Cost','Per KG Cost','Total Cost',`Sale Qty (${_u})`,'MPK','Last Saved By']];
-      const attRows = [['Date','Contractor','Workers','Cost (₹)']];
+      const attRows = [['Date', ...ATT_EXPORT_HEAD]];
+      const wtRows  = [['Date', ...WT_EXPORT_HEAD]];
       const kgRows  = [['Date','Vendor','SKU',`Rate (₹/${_u})`,`Qty (${_u})`,'Cost (₹)']];
       records.forEach(detail => {
         const dateStr = toISODateStr(detail.record_date);
@@ -699,19 +737,23 @@ async function exportAllRecords() {
           r2(parseFloat(detail.total_cost)||0), parseFloat(detail.sale_qty)||0,
           parseFloat(detail.mpk)>0 ? r2(parseFloat(detail.mpk)) : '',
           detail.updated_by || '']);
-        (detail.attendance||[]).forEach(a => attRows.push([xd, a.contractor_name, a.workers||0, parseFloat(a.cost)||0]));
+        (detail.attendance||[]).forEach(a => {
+          attRows.push([xd, ..._attExportRow(a)]);
+          _wtExportRows(a).forEach(r => wtRows.push([xd, ...r]));
+        });
         (detail.kgEntries||[]).forEach(e => {
           if (e.sku_name==='__UNLOADING__') kgRows.push([xd, e.vendor_name, 'Unloading Cost', '', '', r2(parseFloat(e.cost)||0)]);
           else kgRows.push([xd, e.vendor_name, e.sku_name, parseFloat(e.rate)||0, parseFloat(e.qty)||0, r2(parseFloat(e.cost)||0)]);
         });
       });
       const ws1  = XLSX.utils.aoa_to_sheet(summaryRows); applyDateColumnFormat(ws1);  ws1['!cols']  = [12,22,14,12,14,10,16].map(w=>({wch:w}));
-      const wsAD = XLSX.utils.aoa_to_sheet(attRows);     applyDateColumnFormat(wsAD); wsAD['!cols'] = [12,32,10,12].map(w=>({wch:w}));
+      const wsAD = XLSX.utils.aoa_to_sheet(attRows);     applyDateColumnFormat(wsAD); wsAD['!cols'] = [12, ...ATT_EXPORT_COLS].map(w=>({wch:w}));
       const wsKD = XLSX.utils.aoa_to_sheet(kgRows);      applyDateColumnFormat(wsKD); wsKD['!cols'] = [12,20,28,12,10,12].map(w=>({wch:w}));
       wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws1,  'Daily Summary');
       XLSX.utils.book_append_sheet(wb, wsAD, 'Attendance Detail');
       XLSX.utils.book_append_sheet(wb, wsAS, 'Attendance Summary');
+      _appendWorkerTypeSheet(wb, wtRows, [12]);
       XLSX.utils.book_append_sheet(wb, wsKD, 'KG Detail');
       XLSX.utils.book_append_sheet(wb, wsKS, 'KG Vendor Summary');
     }

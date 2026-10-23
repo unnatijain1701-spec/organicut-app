@@ -61,6 +61,19 @@ router.get('/', async (req, res) => {
   }
 });
 
+// Adds each attendance row's saved worker-type breakdown (count + snapshotted rate)
+// as a.types, so exports can show the rates used.
+async function attachWorkerTypes(attendance) {
+  if (!attendance.length) return;
+  const { rows } = await db.query(
+    'SELECT attendance_id, worker_type, count, rate_used, cost FROM contractor_attendance_types WHERE attendance_id = ANY($1) ORDER BY worker_type',
+    [attendance.map(a => a.id)]
+  );
+  const byAtt = {};
+  rows.forEach(t => (byAtt[t.attendance_id] ||= []).push(t));
+  attendance.forEach(a => { a.types = byAtt[a.id] || []; });
+}
+
 // GET /api/records/export  — ALL records with full detail in 3 queries (no N+1)
 router.get('/export', async (req, res) => {
   const pid = getPlantId(req);
@@ -70,7 +83,7 @@ router.get('/export', async (req, res) => {
       'SELECT * FROM daily_records WHERE plant_id = $1 ORDER BY record_date ASC', [pid]
     );
     const { rows: attendance } = await db.query(`
-      SELECT ca.record_id, ca.contractor_name, ca.workers, ca.cost, ca.ot_hours, ca.ot_cost
+      SELECT ca.id, ca.record_id, ca.contractor_name, ca.workers, ca.cost, ca.ot_hours, ca.ot_cost
       FROM contractor_attendance ca
       JOIN daily_records dr ON dr.id = ca.record_id
       WHERE dr.plant_id = $1
@@ -82,6 +95,7 @@ router.get('/export', async (req, res) => {
       WHERE dr.plant_id = $1
     `, [pid]);
 
+    await attachWorkerTypes(attendance);
     const attMap = {};
     attendance.forEach(a => {
       if (!attMap[a.record_id]) attMap[a.record_id] = [];
@@ -147,7 +161,7 @@ router.get('/export-all', async (req, res) => {
 
     const recordIds = records.map(r => r.id);
     const { rows: attendance } = await db.query(`
-      SELECT record_id, contractor_name, workers, cost, ot_hours, ot_cost
+      SELECT id, record_id, contractor_name, workers, cost, ot_hours, ot_cost
       FROM contractor_attendance
       WHERE record_id = ANY($1)
     `, [recordIds]);
@@ -157,6 +171,7 @@ router.get('/export-all', async (req, res) => {
       WHERE record_id = ANY($1)
     `, [recordIds]);
 
+    await attachWorkerTypes(attendance);
     const attMap = {};
     attendance.forEach(a => {
       if (!attMap[a.record_id]) attMap[a.record_id] = [];

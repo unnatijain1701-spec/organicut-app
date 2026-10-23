@@ -77,13 +77,21 @@ function exportExcel() {
   ws1['!cols'] = [12,16,12,12,14,10].map(w => ({ wch: w }));
 
   // Sheet 2: Attendance Detail
-  const attRows = [['Date','Contractor','Workers','Cost (₹)']];
+  const attRows = [['Date', ...ATT_EXPORT_HEAD]];
+  const wtRows  = [['Date', ...WT_EXPORT_HEAD]];
   ATT_VENDORS.forEach(v => {
-    attRows.push([xd, v, attState[v]?.workers || 0, parseFloat(attState[v]?.cost) || 0]);
+    const s = attState[v] || {};
+    const a = {
+      contractor_name: v, workers: s.workers, cost: s.cost, ot_hours: s.otHours, ot_cost: s.otCost,
+      types: Object.entries(s.designations || {}).filter(([, d]) => (d.workers || 0) > 0)
+        .map(([name, d]) => ({ worker_type: name, count: d.workers, rate_used: d.rate, cost: d.cost })),
+    };
+    attRows.push([xd, ..._attExportRow(a)]);
+    _wtExportRows(a).forEach(r => wtRows.push([xd, ...r]));
   });
   const ws2 = XLSX.utils.aoa_to_sheet(attRows);
   applyDateColumnFormat(ws2);
-  ws2['!cols'] = [12,32,10,12].map(w => ({ wch: w }));
+  ws2['!cols'] = [12, ...ATT_EXPORT_COLS].map(w => ({ wch: w }));
 
   // Sheet 3: KG Detail
   const kgRows = [['Date','Vendor','SKU',`Rate (₹/${_u})`,`Qty (${_u})`,'Cost (₹)']];
@@ -118,6 +126,7 @@ function exportExcel() {
   XLSX.utils.book_append_sheet(wb, ws1, 'Daily Summary');
   XLSX.utils.book_append_sheet(wb, ws4, 'Attendance Summary');
   XLSX.utils.book_append_sheet(wb, ws2, 'Attendance Detail');
+  _appendWorkerTypeSheet(wb, wtRows, [12]);
   XLSX.utils.book_append_sheet(wb, ws3, 'KG Detail');
   XLSX.writeFile(wb, _exportScopeTag() + '_MPK_' + date + '.xlsx');
 }
