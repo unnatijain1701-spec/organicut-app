@@ -26,6 +26,13 @@ function getPlantId(req) {
   return !isNaN(requested) && allowed.includes(requested) ? requested : allowed[0];
 }
 
+// The client can send businessType twice (page param + api() auto-injection), which
+// Express parses as an array — collapse to one value or the SQL filter matches nothing.
+function queryBizType(req) {
+  const bt = req.query.businessType;
+  return (Array.isArray(bt) ? bt[0] : bt) || null;
+}
+
 function plantScopeClause(req, params) {
   if (req.user.role === 'superadmin') return '';
   const allowed = req.user.plantIds || (req.user.plant_id != null ? [req.user.plant_id] : []);
@@ -48,7 +55,7 @@ router.get('/overview', async (req, res) => {
   const [yr, mo] = month.split('-').map(Number);
   const from = `${month}-01`;
   const to   = `${yr}-${String(mo).padStart(2, '0')}-${new Date(yr, mo, 0).getDate()}`;
-  const businessType = req.query.businessType || null;
+  const businessType = queryBizType(req);
   try {
     const params = [from, to];
     let btFilter = '';
@@ -135,7 +142,7 @@ router.get('/variance', async (req, res) => {
   const prevFrom = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, '0')}-01`;
   const prevLastDay = new Date(prevDate.getFullYear(), prevDate.getMonth() + 1, 0).getDate();
   const prevTo   = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, '0')}-${prevLastDay}`;
-  const businessType = req.query.businessType || null;
+  const businessType = queryBizType(req);
   try {
     // Helper to run the per-plant summary for a date range
     async function getPlantSummary(rangeFrom, rangeTo) {
@@ -347,7 +354,7 @@ router.get('/anomalies', async (req, res) => {
   const [yr, mo] = month.split('-').map(Number);
   const from = `${month}-01`;
   const to   = `${yr}-${String(mo).padStart(2, '0')}-${new Date(yr, mo, 0).getDate()}`;
-  const businessType = req.query.businessType || null;
+  const businessType = queryBizType(req);
 
   // Look-back window for historical stats: the 3 months before this one
   const histStart = new Date(yr, mo - 4, 1);
@@ -608,7 +615,7 @@ router.get('/forecast', async (req, res) => {
   const from = `${month}-01`;
   const lastDay = new Date(yr, mo, 0).getDate();
   const to   = `${month}-${String(lastDay).padStart(2, '0')}`;
-  const businessType = req.query.businessType || null;
+  const businessType = queryBizType(req);
   const today = toISODate(new Date());
 
   // Previous month for baseline
@@ -993,7 +1000,7 @@ router.get('/recommendations', async (req, res) => {
   const prevFrom = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, '0')}-01`;
   const prevLastDay = new Date(prevDate.getFullYear(), prevDate.getMonth() + 1, 0).getDate();
   const prevTo   = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, '0')}-${prevLastDay}`;
-  const businessType = req.query.businessType || null;
+  const businessType = queryBizType(req);
 
   try {
     const recommendations = [];
