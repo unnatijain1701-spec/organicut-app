@@ -147,7 +147,7 @@ router.get('/needs-setup', async (req, res) => {
 // the ones this user has been granted access to (via user_plants).
 router.get('/plants', authenticateToken, async (req, res) => {
   try {
-    const { rows } = await db.query('SELECT id, name, business_type, has_kg_processing, has_worker_breakdown, has_ot_tracking, weekly_off_day, observes_holidays FROM plants ORDER BY display_order');
+    const { rows } = await db.query('SELECT id, name, business_type, has_kg_processing, has_worker_breakdown, has_ot_tracking, ot_rate_per_hour, weekly_off_day, observes_holidays FROM plants ORDER BY display_order');
     if (req.user.role === 'superadmin') return res.json(rows);
     const allowed = new Set(req.user.plantIds || (req.user.plant_id != null ? [req.user.plant_id] : []));
     res.json(rows.filter(p => allowed.has(p.id)));
@@ -229,6 +229,35 @@ router.patch('/plants/:id/worker-breakdown', authenticateToken, async (req, res)
     );
     if (!rows.length) return res.status(404).json({ error: 'Location not found' });
     res.json(rows[0]);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// PATCH /api/auth/plants/:id/ot-rate — set the overtime rate per hour for this
+// location, or (allLocations) for every location the caller has access to.
+router.patch('/plants/:id/ot-rate', authenticateToken, async (req, res) => {
+  const isPrivileged = req.user.role === 'admin' || req.user.role === 'superadmin';
+  if (!isPrivileged) return res.status(403).json({ error: 'Admin or superadmin only' });
+  const plantId = parseInt(req.params.id, 10);
+  if (isNaN(plantId)) return res.status(400).json({ error: 'Invalid plant id' });
+  const { rate, allLocations } = req.body || {};
+  const val = parseFloat(rate);
+  if (isNaN(val) || val < 0) return res.status(400).json({ error: 'OT rate must be a non-negative number' });
+  const allowed = req.user.role === 'superadmin' ? null : (req.user.plantIds || (req.user.plant_id != null ? [req.user.plant_id] : []));
+  if (allowed && !allowed.includes(plantId)) return res.status(403).json({ error: 'You do not have access to this location' });
+  try {
+    let result;
+    if (allLocations) {
+      result = allowed
+        ? await db.query('UPDATE plants SET ot_rate_per_hour = $1 WHERE id = ANY($2) RETURNING id, ot_rate_per_hour', [val, allowed])
+        : await db.query('UPDATE plants SET ot_rate_per_hour = $1 RETURNING id, ot_rate_per_hour', [val]);
+    } else {
+      result = await db.query('UPDATE plants SET ot_rate_per_hour = $1 WHERE id = $2 RETURNING id, ot_rate_per_hour', [val, plantId]);
+    }
+    if (!result.rows.length) return res.status(404).json({ error: 'Location not found' });
+    res.json({ updated: result.rows });
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: 'Server error' });

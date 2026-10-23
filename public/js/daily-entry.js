@@ -699,6 +699,20 @@ function plantOtEnabled() {
   return !!PLANTS_BY_ID[pid]?.has_ot_tracking;
 }
 
+function plantOtRate() {
+  const pid = currentPlantId || activePlantId;
+  return parseFloat(PLANTS_BY_ID[pid]?.ot_rate_per_hour) || 0;
+}
+
+function onOtHoursChange(v, val) {
+  const hours = parseFloat(val) || 0;
+  attState[v].otHours = hours;
+  const rate = plantOtRate();
+  if (rate > 0) attState[v].otCost = r2(hours * rate);
+  markDirty();
+  renderAtt();
+}
+
 function plantBreakdownEnabled() {
   const pid = currentPlantId || activePlantId;
   return !!PLANTS_BY_ID[pid]?.has_worker_breakdown;
@@ -749,6 +763,7 @@ function toggleDesigView() {
 function renderAtt() {
   const breakdownOn = plantBreakdownEnabled();
   const otOn = plantOtEnabled();
+  const otRate = plantOtRate();
   const toggleBtn = document.getElementById('desigToggleBtn');
   if (toggleBtn) toggleBtn.style.display = breakdownOn ? '' : 'none';
   if (!breakdownOn) _desigViewOn = false;
@@ -815,10 +830,11 @@ function renderAtt() {
       const otCells = otOn ? `
         <td class="r">
           <input type="number" min="0" step="0.5" value="${s.otHours || 0}" style="width:80px"
-            onchange="attState['${vk}'].otHours=parseFloat(this.value)||0;markDirty();renderAtt();">
+            onchange="onOtHoursChange('${vk}', this.value)">
         </td>
         <td class="r">
           <input type="number" min="0" step="0.01" value="${s.otCost || 0}" style="width:110px"
+            ${otRate > 0 ? `readonly title="OT hours × ₹${otRate}/hour (set in Worker Settings)"` : ''}
             onchange="attState['${vk}'].otCost=parseFloat(this.value)||0;markDirty();renderAtt();">
         </td>
         <td class="r" style="font-weight:600;padding:8px 10px;white-space:nowrap">
@@ -1733,22 +1749,25 @@ async function openWorkerTypesModal() {
 
   const tableHtml = canManageRates ? `
     <table class="wt-table">
-      <thead><tr><th>Worker Type</th><th>Daily Rate (₹)</th><th>Scope</th><th></th></tr></thead>
+      <thead><tr><th>Worker Type</th><th>CTC (₹ / year)</th><th>Scope</th><th></th></tr></thead>
       <tbody id="wtTableBody">
         ${types.map(t => `
           <tr id="wtRow_${t.id}">
             <td>${t.name}</td>
-            <td>₹${(parseFloat(t.daily_rate) || 0).toFixed(2)}</td>
+            <td>₹${(parseFloat(t.ctc) || 0).toLocaleString('en-IN')}
+              <div style="font-size:11px;color:var(--muted)">₹${(parseFloat(t.daily_rate) || 0).toFixed(2)} / day</div></td>
             <td style="color:var(--muted);font-size:11.5px">${t.plant_id ? 'This location' : 'All locations'}</td>
             <td style="white-space:nowrap">
-              <button class="loc-rename-btn" onclick="startEditWorkerType(${t.id},'${t.name.replace(/'/g,"\\'")}',${parseFloat(t.daily_rate) || 0})" title="Edit">✎</button>
+              <button class="loc-rename-btn" onclick="startEditWorkerType(${t.id},'${t.name.replace(/'/g,"\\'")}',${parseFloat(t.ctc) || 0})" title="Edit">✎</button>
               <button class="loc-rename-btn" onclick="deleteWorkerType(${t.id})" title="Delete">🗑</button>
             </td>
           </tr>
         `).join('')}
         <tr id="wtAddRow">
           <td><input class="users-input wt-cell-input" id="newWTName" type="text" placeholder="e.g. Worker, Labour, Cutter" style="margin-bottom:0"></td>
-          <td><input class="users-input wt-cell-input" id="newWTRate" type="number" min="0" step="0.01" placeholder="0.00" style="margin-bottom:0"></td>
+          <td><input class="users-input wt-cell-input" id="newWTRate" type="number" min="0" step="1" placeholder="Annual CTC" style="margin-bottom:0"
+            oninput="document.getElementById('newWTDaily').textContent = this.value ? '₹' + (parseFloat(this.value) / 365).toFixed(2) + ' / day' : ''">
+            <div id="newWTDaily" style="font-size:11px;color:var(--muted)"></div></td>
           <td><label style="display:flex;align-items:center;gap:5px;font-size:11px;white-space:nowrap;cursor:pointer">
             <input type="checkbox" id="newWTGlobal" style="cursor:pointer"> All locations
           </label></td>
@@ -1757,6 +1776,21 @@ async function openWorkerTypesModal() {
       </tbody>
     </table>
     <div id="wtFormErr" class="users-form-err"></div>` : '';
+
+  const otRate = parseFloat(PLANTS_BY_ID[pid]?.ot_rate_per_hour) || 0;
+  const otHtml = isPrivileged ? `
+    <div style="padding:12px 0;border-top:1px solid var(--border);margin-top:14px">
+      <div style="font-weight:600;font-size:13.5px">Overtime rate</div>
+      <div style="font-size:11.5px;color:var(--muted);margin-bottom:8px">OT amount = OT hours × this rate${plantOtEnabled() ? '' : ' (OT tracking is off for this location)'}</div>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <input class="users-input wt-cell-input" id="otRateInput" type="number" min="0" step="0.01" value="${otRate || ''}" placeholder="₹ per hour" style="margin-bottom:0;max-width:140px">
+        <span style="font-size:12px;color:var(--muted)">₹ / hour</span>
+        <label style="display:flex;align-items:center;gap:5px;font-size:11px;white-space:nowrap;cursor:pointer">
+          <input type="checkbox" id="otRateAll" style="cursor:pointer"> All locations
+        </label>
+        <button class="users-add-btn" style="padding:6px 16px;font-size:12px;width:auto" onclick="saveOtRate(${pid})">Save</button>
+      </div>
+    </div>` : '';
 
   document.getElementById('workerTypesModal')?.remove();
   const modalHtml = `<div id="workerTypesModal" class="modal-overlay">
@@ -1767,6 +1801,7 @@ async function openWorkerTypesModal() {
       </div>
       ${toggleHtml}
       ${tableHtml}
+      ${otHtml}
       ${!isPrivileged && !canManageRates ? '<div class="hist-empty" style="padding:10px 0">You do not have access to any worker settings.</div>' : ''}
     </div>
   </div>`;
@@ -1789,13 +1824,27 @@ async function onWorkerBreakdownToggle(pid) {
   }
 }
 
-function startEditWorkerType(id, name, rate) {
+async function saveOtRate(pid) {
+  const rate = document.getElementById('otRateInput').value;
+  const allLocations = document.getElementById('otRateAll').checked;
+  if (rate === '' || isNaN(parseFloat(rate)) || parseFloat(rate) < 0) { showToast('⚠ Enter a valid OT rate', true); return; }
+  if (allLocations && !confirm(`Set the OT rate to ₹${rate}/hour for every location you have access to?`)) return;
+  try {
+    const { updated } = await api('PATCH', `/api/auth/plants/${pid}/ot-rate`, { rate, allLocations });
+    updated.forEach(p => { if (PLANTS_BY_ID[p.id]) PLANTS_BY_ID[p.id].ot_rate_per_hour = p.ot_rate_per_hour; });
+    showToast(`✓ OT rate set to ₹${rate}/hour${allLocations ? ` for ${updated.length} locations` : ''}`, false);
+    renderAtt();
+    openWorkerTypesModal();
+  } catch (e) { showToast('⚠ ' + e.message, true); }
+}
+
+function startEditWorkerType(id, name, ctc) {
   const row = document.getElementById('wtRow_' + id);
   if (!row) return;
   row.innerHTML = `
     <td colspan="3"><div style="display:flex;gap:6px">
       <input class="users-input wt-cell-input" id="wtNameInput_${id}" value="${name.replace(/"/g,'&quot;')}" style="margin-bottom:0">
-      <input class="users-input wt-cell-input" id="wtRateInput_${id}" type="number" min="0" step="0.01" value="${rate}" style="margin-bottom:0;max-width:110px">
+      <input class="users-input wt-cell-input" id="wtRateInput_${id}" type="number" min="0" step="1" value="${ctc}" placeholder="Annual CTC" style="margin-bottom:0;max-width:130px">
     </div></td>
     <td style="white-space:nowrap">
       <button class="btn-save" onclick="saveEditWorkerType(${id})">✓</button>
@@ -1805,10 +1854,10 @@ function startEditWorkerType(id, name, rate) {
 
 async function saveEditWorkerType(id) {
   const name = document.getElementById('wtNameInput_' + id)?.value.trim();
-  const dailyRate = document.getElementById('wtRateInput_' + id)?.value;
+  const ctc = document.getElementById('wtRateInput_' + id)?.value;
   if (!name) { showToast('⚠ Name cannot be empty', true); return; }
   try {
-    await api('PATCH', '/api/worker-types/' + id, { name, dailyRate });
+    await api('PATCH', '/api/worker-types/' + id, { name, ctc });
     showToast('✓ Updated', false);
     await loadWorkerTypes();
     openWorkerTypesModal();
@@ -1828,14 +1877,14 @@ async function deleteWorkerType(id) {
 
 async function addWorkerType() {
   const name = document.getElementById('newWTName').value.trim();
-  const dailyRate = document.getElementById('newWTRate').value;
+  const ctc = document.getElementById('newWTRate').value;
   const isGlobal = document.getElementById('newWTGlobal').checked;
   const errEl = document.getElementById('wtFormErr');
   errEl.textContent = '';
   if (!name) { errEl.textContent = 'Name is required.'; return; }
-  if (dailyRate === '' || isNaN(parseFloat(dailyRate)) || parseFloat(dailyRate) < 0) { errEl.textContent = 'Enter a valid daily rate.'; return; }
+  if (ctc === '' || isNaN(parseFloat(ctc)) || parseFloat(ctc) < 0) { errEl.textContent = 'Enter a valid annual CTC.'; return; }
   try {
-    await api('POST', '/api/worker-types', { name, dailyRate, global: isGlobal });
+    await api('POST', '/api/worker-types', { name, ctc, global: isGlobal });
     showToast(`✓ Worker type "${name}" added`, false);
     await loadWorkerTypes();
     openWorkerTypesModal();
