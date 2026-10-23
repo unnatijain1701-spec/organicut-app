@@ -102,16 +102,16 @@ async function api(method, url, body) {
       url += (url.includes('?') ? '&' : '?') + 'plantId=' + activePlantId;
     } else if (body instanceof FormData) {
       body.append('plantId', activePlantId);
-    } else if (body) {
-      body = { ...body, plantId: activePlantId };
+    } else {
+      body = { ...(body || {}), plantId: activePlantId };
     }
   } else if (!currentPlantId && !activePlantId && activeBizType) {
     if (method === 'GET' || method === 'DELETE') {
       url += (url.includes('?') ? '&' : '?') + 'businessType=' + encodeURIComponent(activeBizType);
     } else if (body instanceof FormData) {
       body.append('businessType', activeBizType);
-    } else if (body) {
-      body = { ...body, businessType: activeBizType };
+    } else {
+      body = { ...(body || {}), businessType: activeBizType };
     }
   }
   const opts = { method, credentials: 'include' };
