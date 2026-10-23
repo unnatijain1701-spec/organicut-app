@@ -160,6 +160,31 @@ router.post('/resolve', async (req, res) => {
   }
 });
 
+// POST /api/contractors/fix-case — normalise the casing of every historical
+// contractor_attendance row whose contractor_name matches a canonical contractor
+// case-insensitively but not exactly.  Returns the number of rows corrected.
+router.post('/fix-case', async (req, res) => {
+  const bt = await getBusinessType(req);
+  if (!bt) return res.status(400).json({ error: 'No plant selected' });
+  try {
+    const { rowCount } = await db.query(`
+      UPDATE contractor_attendance ca
+      SET contractor_name = c.name
+      FROM daily_records dr
+      JOIN plants p ON p.id = dr.plant_id
+      JOIN contractors c ON c.business_type = p.business_type
+                        AND LOWER(TRIM(ca.contractor_name)) = LOWER(TRIM(c.name))
+      WHERE ca.record_id = dr.id
+        AND p.business_type = $1
+        AND ca.contractor_name IS DISTINCT FROM c.name
+    `, [bt]);
+    res.json({ ok: true, fixed: rowCount });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // GET /api/contractors/unmatched — distinct contractor_name values already saved in
 // ANY plant of this business type that don't match the canonical list or a known
 // alias (case-insensitive) — the raw material for the one-off historical cleanup tool.

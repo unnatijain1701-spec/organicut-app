@@ -16,11 +16,16 @@ async function loadSKURateOverrides() {
 }
 
 async function loadContractors() {
+  const cacheKey = 'contractors_' + (currentPlantId || activePlantId || activeBizType || '');
   try {
-    CONTRACTORS = await api('GET', '/api/contractors');
+    let url = '/api/contractors';
+    if (currentPlantId) url += '?plantId=' + currentPlantId;
+    CONTRACTORS = await api('GET', url);
+    try { sessionStorage.setItem(cacheKey, JSON.stringify(CONTRACTORS)); } catch (_) {}
   } catch (e) {
-    CONTRACTORS = [];
     console.error('Failed to load contractors:', e.message);
+    try { const cached = sessionStorage.getItem(cacheKey); if (cached) { CONTRACTORS = JSON.parse(cached); return; } } catch (_) {}
+    CONTRACTORS = [];
   }
 }
 
@@ -293,12 +298,8 @@ async function initApp() {
     return;
   }
 
-  await loadSKURateOverrides();
-  await loadKGVendors();
+  await Promise.all([loadSKURateOverrides(), loadKGVendors(), loadWorkerTypes(), loadContractors(), loadHolidays()]);
   await loadCustomSKUs();
-  await loadWorkerTypes();
-  await loadContractors();
-  await loadHolidays();
   renderAtt();
   renderKGTabs();
   recalc();
@@ -407,8 +408,9 @@ async function loadCustomSKUs() {
    "+ New Contractor" sub-flow still exists for genuinely new vendors, but it creates one
    canonical row (POST /api/contractors) rather than a loose per-browser suggestion. */
 
-function showAddContractorPanel() {
+async function showAddContractorPanel() {
   if (document.getElementById('addContractorModal')) return;
+  await loadContractors();
   const html = `<div id="addContractorModal" style="position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:9999;display:flex;align-items:center;justify-content:center">
     <div style="background:#fff;border-radius:14px;padding:24px;min-width:320px;max-width:480px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,.18)">
       <div style="font-weight:700;font-size:14px;margin-bottom:4px">Add Contractor</div>
@@ -431,6 +433,14 @@ function renderContractorSearch() {
   const wrap = document.getElementById('contractorSearchResults');
   if (!wrap) return;
 
+  if (!CONTRACTORS.length) {
+    wrap.innerHTML = `<div style="padding:14px;text-align:center">
+      <div style="font-size:12px;color:#c00;margin-bottom:8px">Could not load contractor list.</div>
+      <button class="btn btn-card-outline" style="font-size:12px" onclick="retryLoadContractors()">Retry</button>
+    </div>`;
+    return;
+  }
+
   const matches = q ? CONTRACTORS.filter(c => c.name.toLowerCase().includes(q)) : CONTRACTORS;
   const exactMatch = CONTRACTORS.some(c => c.name.toLowerCase() === q);
 
@@ -451,6 +461,11 @@ function renderContractorSearch() {
     : '';
 
   wrap.innerHTML = rowsHtml + newRowHtml + emptyHtml;
+}
+
+async function retryLoadContractors() {
+  await loadContractors();
+  renderContractorSearch();
 }
 
 function quickAddContractor(name) {
@@ -1926,6 +1941,9 @@ async function addContractorFromModal() {
 // plant's history that doesn't match the canonical list or a known alias, and lets you
 // fold each one onto a real contractor — reassigning all its historical records at once.
 async function openContractorMergeModal() {
+  let caseFix = { fixed: 0 };
+  try { caseFix = await api('POST', '/api/contractors/fix-case'); } catch (_) {}
+
   let unmatched;
   try { unmatched = await api('GET', '/api/contractors/unmatched'); } catch (e) { showToast('⚠ ' + e.message, true); return; }
 
@@ -1933,10 +1951,13 @@ async function openContractorMergeModal() {
   document.getElementById('contractorMergeModal')?.remove();
 
   if (!unmatched.length) {
+    const caseMsg = caseFix.fixed
+      ? `Fixed casing on ${caseFix.fixed} historical record(s) to match the canonical list.`
+      : 'No unmatched historical contractor names found — your saved records already line up with the canonical list.';
     const html = `<div id="contractorMergeModal" class="modal-overlay">
       <div class="modal-box" style="max-width:420px">
         <div style="font-weight:700;font-size:15px;margin-bottom:10px">🧹 Clean Up Historical Names</div>
-        <div style="font-size:13px;color:#4a7060;margin-bottom:16px">No unmatched historical contractor names found — your saved records already line up with the canonical list.</div>
+        <div style="font-size:13px;color:#4a7060;margin-bottom:16px">${caseMsg}</div>
         <div style="display:flex;justify-content:flex-end"><button id="cmCloseBtn" style="padding:7px 16px;border-radius:8px;border:1px solid var(--border);background:#fff;cursor:pointer;font-size:13px">Close</button></div>
       </div>
     </div>`;

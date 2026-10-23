@@ -106,9 +106,6 @@ async function api(method, url, body) {
       body = { ...body, plantId: activePlantId };
     }
   } else if (!currentPlantId && !activePlantId && activeBizType) {
-    // "All <Business Type> Locations" view — no single plant selected, but the
-    // business type is known. Some data (e.g. the shared Contractors list) is scoped
-    // by business type rather than by plant, and needs this to resolve at all.
     if (method === 'GET' || method === 'DELETE') {
       url += (url.includes('?') ? '&' : '?') + 'businessType=' + encodeURIComponent(activeBizType);
     } else if (body instanceof FormData) {
@@ -124,13 +121,27 @@ async function api(method, url, body) {
     opts.headers = { 'Content-Type': 'application/json' };
     opts.body = JSON.stringify(body);
   }
-  const resp = await fetch(url, opts);
-  if (resp.status === 401) {
-    document.getElementById('loginOverlay').style.display = 'flex';
-    throw new Error('Session expired — please log in again');
+  let lastErr;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const resp = await fetch(url, opts);
+      if (resp.status === 401) {
+        document.getElementById('loginOverlay').style.display = 'flex';
+        throw new Error('Session expired — please log in again');
+      }
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(data.error || `HTTP ${resp.status}`);
+      return data;
+    } catch (e) {
+      lastErr = e;
+      if (e.message === 'Session expired — please log in again') throw e;
+      if (e instanceof TypeError && attempt < 2) {
+        await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+        continue;
+      }
+      throw e;
+    }
   }
-  const data = await resp.json().catch(() => ({}));
-  if (!resp.ok) throw new Error(data.error || `HTTP ${resp.status}`);
-  return data;
+  throw lastErr;
 }
 

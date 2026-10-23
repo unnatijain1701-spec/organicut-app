@@ -48,7 +48,7 @@ async function openLocationsModal() {
 
   document.getElementById('locationsModal')?.remove();
   const modalHtml = `<div id="locationsModal" class="modal-overlay">
-    <div class="modal-box" style="max-width:700px">
+    <div class="modal-box" style="max-width:900px;max-height:95vh;overflow-y:auto">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
         <div style="font-weight:700;font-size:16px">📍 Locations</div>
         <button id="locModalCloseBtn" class="modal-x">×</button>
@@ -82,8 +82,8 @@ function renderLocationsList(canDelete) {
   if (!wrap) return;
   const plants = allPlantsCache || [];
   if (!plants.length) { wrap.innerHTML = '<div class="hist-empty" style="padding:10px 16px">No locations yet.</div>'; return; }
-  wrap.innerHTML = plants.map(p => `
-    <div class="loc-row" id="locRow_${p.id}">
+  wrap.innerHTML = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">' + plants.map(p => `
+    <div class="loc-row" id="locRow_${p.id}" style="margin:0">
       <span>
         <span class="loc-row-name" id="locName_${p.id}">${p.name}</span>
         <span class="loc-row-type">${p.business_type}${p.has_kg_processing === false ? ' · no per-unit cost' : ''}${p.has_worker_breakdown ? ' · worker breakdown on' : ''}${p.has_ot_tracking ? ' · OT tracking on' : ''}${p.weekly_off_day != null ? ' · off ' + WEEKDAY_NAMES[p.weekly_off_day] : ''}${p.observes_holidays ? ' · observes holidays' : ''}</span>
@@ -93,7 +93,7 @@ function renderLocationsList(canDelete) {
         ${canDelete ? `<button class="loc-rename-btn" onclick="deleteLocation(${p.id},'${p.name.replace(/'/g,"\\'")}')" title="Delete">🗑</button>` : ''}
       </span>
     </div>
-  `).join('');
+  `).join('') + '</div>';
 }
 
 function startEditLocation(plantId) {
