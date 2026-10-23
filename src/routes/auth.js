@@ -438,7 +438,9 @@ router.patch('/users/:id', authenticateToken, requirePermission('manage_users'),
     return res.status(403).json({ error: 'Only a superadmin can modify another superadmin' });
   }
 
-  const { role, plantId, plantIds, permissions } = req.body || {};
+  // plantId is deliberately ignored: api() auto-injects the sidebar's selected plant
+  // into every body, which would otherwise wipe the user's other plants.
+  const { role, plantIds, permissions } = req.body || {};
   if (role === 'superadmin' && !isSuperadmin) {
     return res.status(403).json({ error: 'Only a superadmin can promote someone to superadmin' });
   }
@@ -454,8 +456,6 @@ router.patch('/users/:id', authenticateToken, requirePermission('manage_users'),
     ids = [];
   } else if (Array.isArray(plantIds)) {
     ids = plantIds.map(x => parseInt(x, 10)).filter(x => !isNaN(x));
-  } else if (plantId != null) {
-    ids = [parseInt(plantId, 10)];
   }
 
   if (ids && ids.length) {
