@@ -97,21 +97,24 @@ let _rateChangedOnLoad = false;
 
 async function api(method, url, body) {
   // All-plants users: inject activePlantId so backend knows which plant to query
+  // Callers that already pass plantId/businessType must not get a second copy —
+  // Express parses a repeated param as an array, which breaks server-side filters.
+  const hasParam = name => new RegExp('[?&]' + name + '=').test(url);
   if (!currentPlantId && activePlantId) {
     if (method === 'GET' || method === 'DELETE') {
-      url += (url.includes('?') ? '&' : '?') + 'plantId=' + activePlantId;
+      if (!hasParam('plantId')) url += (url.includes('?') ? '&' : '?') + 'plantId=' + activePlantId;
     } else if (body instanceof FormData) {
       body.append('plantId', activePlantId);
     } else {
-      body = { ...(body || {}), plantId: activePlantId };
+      body = { plantId: activePlantId, ...(body || {}) };
     }
   } else if (!currentPlantId && !activePlantId && activeBizType) {
     if (method === 'GET' || method === 'DELETE') {
-      url += (url.includes('?') ? '&' : '?') + 'businessType=' + encodeURIComponent(activeBizType);
+      if (!hasParam('businessType')) url += (url.includes('?') ? '&' : '?') + 'businessType=' + encodeURIComponent(activeBizType);
     } else if (body instanceof FormData) {
       body.append('businessType', activeBizType);
     } else {
-      body = { ...(body || {}), businessType: activeBizType };
+      body = { businessType: activeBizType, ...(body || {}) };
     }
   }
   const opts = { method, credentials: 'include' };
