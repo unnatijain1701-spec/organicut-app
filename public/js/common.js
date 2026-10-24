@@ -118,7 +118,12 @@ async function api(method, url, body) {
   // Callers that already pass plantId/businessType must not get a second copy —
   // Express parses a repeated param as an array, which breaks server-side filters.
   const hasParam = name => new RegExp('[?&]' + name + '=').test(url);
-  if (!currentPlantId && activePlantId) {
+  // User/location management is never scoped by the sidebar selection — injecting it
+  // there silently changed a location's business type and wiped users' plant lists.
+  const scoped = !url.startsWith('/api/auth/');
+  if (!scoped) {
+    // no injection
+  } else if (!currentPlantId && activePlantId) {
     if (method === 'GET' || method === 'DELETE') {
       if (!hasParam('plantId')) url += (url.includes('?') ? '&' : '?') + 'plantId=' + activePlantId;
     } else if (body instanceof FormData) {

@@ -109,6 +109,9 @@ function startEditLocation(plantId) {
       <input class="loc-rename-input" id="locNameInput_${plantId}" value="${plant.name.replace(/"/g,'&quot;')}"
         style="width:100%;margin-bottom:6px"
         onkeydown="if(event.key==='Enter')saveEditLocation(${plantId});if(event.key==='Escape')renderLocationsList(true)">
+      <select class="users-input" id="locBizType_${plantId}" style="margin-bottom:8px">
+        ${['FnV', 'RTE', 'Beverage', 'Coco-Sutra'].map(t => `<option value="${t}" ${plant.business_type === t ? 'selected' : ''}>Business type: ${t}</option>`).join('')}
+      </select>
       <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text);margin-bottom:8px;cursor:pointer">
         <input type="checkbox" id="locHasKg_${plantId}" ${plant.has_kg_processing !== false ? 'checked' : ''} style="cursor:pointer">
         Has per-unit processing cost
@@ -136,9 +139,10 @@ async function saveEditLocation(plantId) {
   const name = input?.value.trim();
   const hasKgProcessing = document.getElementById('locHasKg_' + plantId)?.checked;
   const hasOtTracking = document.getElementById('locHasOt_' + plantId)?.checked;
+  const businessType = document.getElementById('locBizType_' + plantId)?.value;
   if (!name) { showToast('⚠ Location name cannot be empty', true); return; }
   try {
-    let plant = await api('PATCH', '/api/auth/plants/' + plantId, { name, hasKgProcessing, hasOtTracking });
+    let plant = await api('PATCH', '/api/auth/plants/' + plantId, { name, businessType, hasKgProcessing, hasOtTracking });
     const offDaySel = document.getElementById('locOffDay_' + plantId);
     if (offDaySel) {
       const weeklyOffDay = offDaySel.value === '' ? null : parseInt(offDaySel.value, 10);
