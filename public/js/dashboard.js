@@ -62,7 +62,10 @@ async function loadDashboard() {
     // Scope the aggregate to the active business when no single plant is selected
     const btQs = (!currentPlantId && !activePlantId && activeBizType)
       ? '?businessType=' + encodeURIComponent(activeBizType) : '';
-    const data = await api('GET', '/api/records/analytics' + btQs);
+    const [data] = await Promise.all([
+      api('GET', '/api/records/analytics' + btQs),
+      HOLIDAYS.length ? null : loadHolidays(),
+    ]);
     _dashData = data;
     _applyDashData();
   } catch (e) {
@@ -384,8 +387,12 @@ function _renderDashPrediction(recs) {
   // projected as "missing" and inflate the month-end estimate.
   const _predPid = currentPlantId || activePlantId;
   const _predPlant = _predPid ? PLANTS_BY_ID[_predPid] : null;
-  const workingDaysInMonth = _predPlant
-    ? countWorkingDaysClient(`${curY}-${String(curM+1).padStart(2,'0')}-01`, lastDay, _predPlant.weekly_off_day, _predPlant.observes_holidays)
+  // In a combined view, a date is only "expected" if at least one plant in it works
+  // that day (records are summed per date, so one plant's off-day alone doesn't remove it).
+  const _scopePlants = _predPlant ? [_predPlant]
+    : Object.values(PLANTS_BY_ID).filter(p => !activeBizType || p.business_type === activeBizType);
+  const workingDaysInMonth = _scopePlants.length
+    ? countAnyPlantWorkingDaysClient(`${curY}-${String(curM+1).padStart(2,'0')}-01`, lastDay, _scopePlants)
     : daysInMonth;
   const daysMissing = Math.max(0, workingDaysInMonth - daysRecorded);
 

@@ -91,6 +91,24 @@ let _isDirty = false;         // true when form has unsaved changes
 let _currentRecordLocked = false;
 let _rateChangedOnLoad = false;
 
+// Days in [fromISO, toISO] on which at least one of `plants` works (not its weekly
+// off-day, not a holiday it observes) — for views that combine several plants.
+function countAnyPlantWorkingDaysClient(fromISO, toISO, plants) {
+  const from = new Date(fromISO + 'T00:00:00');
+  const to = new Date(toISO + 'T00:00:00');
+  if (isNaN(from) || isNaN(to) || from > to || !plants.length) return 0;
+  const holidaySet = new Set(HOLIDAYS.map(h => h.date));
+  let count = 0;
+  for (let d = new Date(from); d <= to; d.setDate(d.getDate() + 1)) {
+    const iso = toISODateStr(d);
+    const anyWorks = plants.some(p =>
+      !(p.weekly_off_day != null && d.getDay() === p.weekly_off_day) &&
+      !(p.observes_holidays && holidaySet.has(iso)));
+    if (anyWorks) count++;
+  }
+  return count;
+}
+
 /* ═══════════════════════════════════════════════════════
    API HELPER
 ═══════════════════════════════════════════════════════ */
