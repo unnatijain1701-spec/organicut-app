@@ -1749,24 +1749,24 @@ async function openWorkerTypesModal() {
 
   const tableHtml = canManageRates ? `
     <table class="wt-table">
-      <thead><tr><th>Worker Type</th><th>CTC (₹ / year)</th><th>Scope</th><th></th></tr></thead>
+      <thead><tr><th>Worker Type</th><th>Monthly CTC (₹)</th><th>Scope</th><th></th></tr></thead>
       <tbody id="wtTableBody">
         ${types.map(t => `
           <tr id="wtRow_${t.id}">
             <td>${t.name}</td>
-            <td>₹${(parseFloat(t.ctc) || 0).toLocaleString('en-IN')}
+            <td>₹${(parseFloat(t.monthly_ctc) || 0).toLocaleString('en-IN')}
               <div style="font-size:11px;color:var(--muted)">₹${(parseFloat(t.daily_rate) || 0).toFixed(2)} / day</div></td>
             <td style="color:var(--muted);font-size:11.5px">${t.plant_id ? 'This location' : 'All locations'}</td>
             <td style="white-space:nowrap">
-              <button class="loc-rename-btn" onclick="startEditWorkerType(${t.id},'${t.name.replace(/'/g,"\\'")}',${parseFloat(t.ctc) || 0})" title="Edit">✎</button>
+              <button class="loc-rename-btn" onclick="startEditWorkerType(${t.id},'${t.name.replace(/'/g,"\\'")}',${parseFloat(t.monthly_ctc) || 0})" title="Edit">✎</button>
               <button class="loc-rename-btn" onclick="deleteWorkerType(${t.id})" title="Delete">🗑</button>
             </td>
           </tr>
         `).join('')}
         <tr id="wtAddRow">
           <td><input class="users-input wt-cell-input" id="newWTName" type="text" placeholder="e.g. Worker, Labour, Cutter" style="margin-bottom:0"></td>
-          <td><input class="users-input wt-cell-input" id="newWTRate" type="number" min="0" step="1" placeholder="Annual CTC" style="margin-bottom:0"
-            oninput="document.getElementById('newWTDaily').textContent = this.value ? '₹' + (parseFloat(this.value) / 365).toFixed(2) + ' / day' : ''">
+          <td><input class="users-input wt-cell-input" id="newWTRate" type="number" min="0" step="1" placeholder="Monthly CTC" style="margin-bottom:0"
+            oninput="document.getElementById('newWTDaily').textContent = this.value ? '₹' + (parseFloat(this.value) / 30).toFixed(2) + ' / day' : ''">
             <div id="newWTDaily" style="font-size:11px;color:var(--muted)"></div></td>
           <td><label style="display:flex;align-items:center;gap:5px;font-size:11px;white-space:nowrap;cursor:pointer">
             <input type="checkbox" id="newWTGlobal" style="cursor:pointer"> All locations
@@ -1838,13 +1838,13 @@ async function saveOtRate(pid) {
   } catch (e) { showToast('⚠ ' + e.message, true); }
 }
 
-function startEditWorkerType(id, name, ctc) {
+function startEditWorkerType(id, name, monthlyCtc) {
   const row = document.getElementById('wtRow_' + id);
   if (!row) return;
   row.innerHTML = `
     <td colspan="3"><div style="display:flex;gap:6px">
       <input class="users-input wt-cell-input" id="wtNameInput_${id}" value="${name.replace(/"/g,'&quot;')}" style="margin-bottom:0">
-      <input class="users-input wt-cell-input" id="wtRateInput_${id}" type="number" min="0" step="1" value="${ctc}" placeholder="Annual CTC" style="margin-bottom:0;max-width:130px">
+      <input class="users-input wt-cell-input" id="wtRateInput_${id}" type="number" min="0" step="1" value="${monthlyCtc}" placeholder="Monthly CTC" style="margin-bottom:0;max-width:130px">
     </div></td>
     <td style="white-space:nowrap">
       <button class="btn-save" onclick="saveEditWorkerType(${id})">✓</button>
@@ -1854,10 +1854,10 @@ function startEditWorkerType(id, name, ctc) {
 
 async function saveEditWorkerType(id) {
   const name = document.getElementById('wtNameInput_' + id)?.value.trim();
-  const ctc = document.getElementById('wtRateInput_' + id)?.value;
+  const monthlyCtc = document.getElementById('wtRateInput_' + id)?.value;
   if (!name) { showToast('⚠ Name cannot be empty', true); return; }
   try {
-    await api('PATCH', '/api/worker-types/' + id, { name, ctc });
+    await api('PATCH', '/api/worker-types/' + id, { name, monthlyCtc });
     showToast('✓ Updated', false);
     await loadWorkerTypes();
     openWorkerTypesModal();
@@ -1877,14 +1877,14 @@ async function deleteWorkerType(id) {
 
 async function addWorkerType() {
   const name = document.getElementById('newWTName').value.trim();
-  const ctc = document.getElementById('newWTRate').value;
+  const monthlyCtc = document.getElementById('newWTRate').value;
   const isGlobal = document.getElementById('newWTGlobal').checked;
   const errEl = document.getElementById('wtFormErr');
   errEl.textContent = '';
   if (!name) { errEl.textContent = 'Name is required.'; return; }
-  if (ctc === '' || isNaN(parseFloat(ctc)) || parseFloat(ctc) < 0) { errEl.textContent = 'Enter a valid annual CTC.'; return; }
+  if (monthlyCtc === '' || isNaN(parseFloat(monthlyCtc)) || parseFloat(monthlyCtc) < 0) { errEl.textContent = 'Enter a valid monthly CTC.'; return; }
   try {
-    await api('POST', '/api/worker-types', { name, ctc, global: isGlobal });
+    await api('POST', '/api/worker-types', { name, monthlyCtc, global: isGlobal });
     showToast(`✓ Worker type "${name}" added`, false);
     await loadWorkerTypes();
     openWorkerTypesModal();

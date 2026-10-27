@@ -24,7 +24,7 @@ router.get('/', async (req, res) => {
   const pid = getPlantId(req);
   try {
     const { rows } = await db.query(
-      `SELECT id, plant_id, name, ctc, daily_rate, display_order FROM worker_types
+      `SELECT id, plant_id, name, monthly_ctc, daily_rate, display_order FROM worker_types
        WHERE plant_id IS NULL OR plant_id = $1
        ORDER BY display_order, name`,
       [pid]
@@ -49,18 +49,18 @@ router.get('/', async (req, res) => {
 // create a global default used by every plant that has no override of its own.
 router.post('/', async (req, res) => {
   if (!hasPermission(req.user, 'manage_worker_types')) return res.status(403).json({ error: 'You do not have permission to do this' });
-  const { name, ctc, global: isGlobal } = req.body || {};
+  const { name, monthlyCtc, global: isGlobal } = req.body || {};
   if (!name || !name.trim()) return res.status(400).json({ error: 'Worker type name is required' });
-  const annual = parseFloat(ctc);
-  if (isNaN(annual) || annual < 0) return res.status(400).json({ error: 'CTC must be a non-negative number' });
+  const monthly = parseFloat(monthlyCtc);
+  if (isNaN(monthly) || monthly < 0) return res.status(400).json({ error: 'Monthly CTC must be a non-negative number' });
   const plantId = isGlobal ? null : getPlantId(req);
   if (!isGlobal && !plantId) return res.status(400).json({ error: 'No plant selected' });
   try {
     const { rows } = await db.query(
-      `INSERT INTO worker_types (plant_id, name, ctc, daily_rate, display_order)
-       VALUES ($1, $2, $3, ROUND($3::numeric / 365, 2), COALESCE((SELECT MAX(display_order)+1 FROM worker_types WHERE plant_id IS NOT DISTINCT FROM $4), 0))
-       RETURNING id, plant_id, name, ctc, daily_rate, display_order`,
-      [plantId, name.trim(), annual, plantId]
+      `INSERT INTO worker_types (plant_id, name, monthly_ctc, daily_rate, display_order)
+       VALUES ($1, $2, $3, ROUND($3::numeric / 30, 2), COALESCE((SELECT MAX(display_order)+1 FROM worker_types WHERE plant_id IS NOT DISTINCT FROM $4), 0))
+       RETURNING id, plant_id, name, monthly_ctc, daily_rate, display_order`,
+      [plantId, name.trim(), monthly, plantId]
     );
     res.json(rows[0]);
   } catch (e) {
@@ -70,24 +70,24 @@ router.post('/', async (req, res) => {
   }
 });
 
-// PATCH /api/worker-types/:id — rename and/or change the annual CTC
+// PATCH /api/worker-types/:id — rename and/or change the monthly CTC
 router.patch('/:id', async (req, res) => {
   if (!hasPermission(req.user, 'manage_worker_types')) return res.status(403).json({ error: 'You do not have permission to do this' });
-  const { name, ctc } = req.body || {};
-  if (name === undefined && ctc === undefined) return res.status(400).json({ error: 'Nothing to update' });
+  const { name, monthlyCtc } = req.body || {};
+  if (name === undefined && monthlyCtc === undefined) return res.status(400).json({ error: 'Nothing to update' });
   try {
     const sets = [];
     const params = [];
     if (name !== undefined) { params.push(name.trim()); sets.push(`name = $${params.length}`); }
-    if (ctc !== undefined) {
-      const annual = parseFloat(ctc);
-      if (isNaN(annual) || annual < 0) return res.status(400).json({ error: 'CTC must be a non-negative number' });
-      params.push(annual);
-      sets.push(`ctc = $${params.length}`, `daily_rate = ROUND($${params.length}::numeric / 365, 2)`);
+    if (monthlyCtc !== undefined) {
+      const monthly = parseFloat(monthlyCtc);
+      if (isNaN(monthly) || monthly < 0) return res.status(400).json({ error: 'Monthly CTC must be a non-negative number' });
+      params.push(monthly);
+      sets.push(`monthly_ctc = $${params.length}`, `daily_rate = ROUND($${params.length}::numeric / 30, 2)`);
     }
     params.push(req.params.id);
     const { rows } = await db.query(
-      `UPDATE worker_types SET ${sets.join(', ')} WHERE id = $${params.length} RETURNING id, plant_id, name, ctc, daily_rate, display_order`,
+      `UPDATE worker_types SET ${sets.join(', ')} WHERE id = $${params.length} RETURNING id, plant_id, name, monthly_ctc, daily_rate, display_order`,
       params
     );
     if (!rows.length) return res.status(404).json({ error: 'Worker type not found' });
