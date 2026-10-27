@@ -491,9 +491,9 @@ async function exportMonthRecords() {
 // Attendance export columns, shared by every workbook builder. OT rate is derived from
 // the saved amount ÷ hours, so it reflects what was actually charged that day.
 const ATT_EXPORT_HEAD = ['Contractor','Workers','Cost (₹)','OT Hours','OT Rate (₹/hr)','OT Amount (₹)','Total (₹)'];
-const WT_EXPORT_HEAD  = ['Contractor','Worker Type','Workers','Daily Rate (₹)','Cost (₹)'];
+const WT_EXPORT_HEAD  = ['Contractor','Worker Type','Workers','Daily Rate (₹)','Cost (₹)','OT Hours','OT Rate (₹/hr)','OT Amount (₹)'];
 const ATT_EXPORT_COLS = [32,10,12,10,14,14,12];
-const WT_EXPORT_COLS  = [32,20,10,14,12];
+const WT_EXPORT_COLS  = [32,20,10,14,12,10,14,14];
 
 function _attExportRow(a) {
   const cost = parseFloat(a.cost) || 0;
@@ -504,7 +504,8 @@ function _attExportRow(a) {
 
 function _wtExportRows(a) {
   return (a.types || []).map(t => [a.contractor_name, t.worker_type, t.count || 0,
-    t.rate_used != null ? r2(parseFloat(t.rate_used)) : '', r2(parseFloat(t.cost) || 0)]);
+    t.rate_used != null ? r2(parseFloat(t.rate_used)) : '', r2(parseFloat(t.cost) || 0),
+    parseFloat(t.ot_hours) || 0, t.ot_rate_used != null ? r2(parseFloat(t.ot_rate_used)) : '', r2(parseFloat(t.ot_cost) || 0)]);
 }
 
 function _appendWorkerTypeSheet(wb, rows, prefixCols) {

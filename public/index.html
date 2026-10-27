@@ -72,6 +72,37 @@
   </div>
 </div>
 
+<!-- ═══════════════════ CONTRACTORS PANEL ═══════════════════ -->
+<div id="contractorsPanel" style="display:none">
+  <div class="dash-header">
+    <span class="dash-header-title">🏗 <em>Contractors</em> <span id="ctrPanelPlant" style="font-size:13px;font-weight:500;opacity:.8"></span></span>
+    <button class="dash-close" onclick="toggleContractorsPanel(false)">×</button>
+  </div>
+  <div class="users-toolbar">
+    <input class="users-search" id="ctrSearchInput" type="text" placeholder="🔍 Search contractors…" oninput="renderContractorsPanel()">
+  </div>
+  <div class="users-body">
+    <div class="users-main">
+      <div id="ctrPanelList"></div>
+    </div>
+    <div class="users-side" id="ctrPanelSide">
+      <div class="users-side-card">
+        <div class="users-add-form">
+          <div class="users-add-title">Add Contractor to this Plant</div>
+          <input class="users-input" id="newCtrName" type="text" list="ctrNameSuggestions" placeholder="Contractor name" autocomplete="off"
+            onkeydown="if(event.key==='Enter')addContractorToPlant()">
+          <datalist id="ctrNameSuggestions"></datalist>
+          <div id="ctrFormErr" class="users-form-err"></div>
+          <button class="users-add-btn" onclick="addContractorToPlant()">Add Contractor</button>
+        </div>
+      </div>
+      <div class="users-side-card" style="margin-top:12px">
+        <button class="btn btn-card-outline" style="width:100%" onclick="openContractorMergeModal()">🧹 Clean Up Historical Names</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- ═══════════════════ VENDORS PANEL ═══════════════════ -->
 <div id="vendorsPanel" style="display:none">
   <div class="dash-header">

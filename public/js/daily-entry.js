@@ -15,26 +15,42 @@ async function loadSKURateOverrides() {
   }
 }
 
-async function loadContractors() {
-  const cacheKey = 'contractors_' + (currentPlantId || activePlantId || activeBizType || '');
+let _plantContractorsOk = true;
+
+// Fetches a list, caching the last good copy so a server hiccup doesn't empty it.
+async function _fetchCachedList(url, cacheKey) {
   try {
-    let url = '/api/contractors';
-    if (currentPlantId) url += '?plantId=' + currentPlantId;
-    CONTRACTORS = await api('GET', url);
-    try { sessionStorage.setItem(cacheKey, JSON.stringify(CONTRACTORS)); } catch (_) {}
+    const data = await api('GET', url);
+    try { sessionStorage.setItem(cacheKey, JSON.stringify(data)); } catch (_) {}
+    return data;
   } catch (e) {
-    console.error('Failed to load contractors:', e.message);
-    try { const cached = sessionStorage.getItem(cacheKey); if (cached) { CONTRACTORS = JSON.parse(cached); return; } } catch (_) {}
-    CONTRACTORS = [];
+    console.error('Failed to load ' + url + ':', e.message);
+    try { const cached = sessionStorage.getItem(cacheKey); if (cached) return JSON.parse(cached); } catch (_) {}
+    return null;
   }
+}
+
+// CONTRACTORS = the business type's shared list (CSV matching, cleanup tool);
+// PLANT_CONTRACTORS = the ones linked to this plant (the manual-entry picker).
+async function loadContractors() {
+  const pid = currentPlantId || activePlantId;
+  const qs = currentPlantId ? '?plantId=' + currentPlantId : '';
+  const [all, plant] = await Promise.all([
+    _fetchCachedList('/api/contractors' + qs, 'contractors_' + (pid || activeBizType || '')),
+    pid ? _fetchCachedList('/api/contractors/plant' + qs, 'plantContractors_' + pid) : Promise.resolve([]),
+  ]);
+  CONTRACTORS = all || [];
+  PLANT_CONTRACTORS = plant || [];
+  _plantContractorsOk = plant !== null;
 }
 
 async function loadWorkerTypes() {
   try {
     WORKER_TYPES = await api('GET', '/api/worker-types');
     WORKER_TYPES_BY_NAME = Object.fromEntries(WORKER_TYPES.map(t => [t.name, parseFloat(t.daily_rate) || 0]));
+    WORKER_TYPES_OT_BY_NAME = Object.fromEntries(WORKER_TYPES.filter(t => t.ot_rate_per_hour != null).map(t => [t.name, parseFloat(t.ot_rate_per_hour)]));
   } catch (e) {
-    WORKER_TYPES = []; WORKER_TYPES_BY_NAME = {};
+    WORKER_TYPES = []; WORKER_TYPES_BY_NAME = {}; WORKER_TYPES_OT_BY_NAME = {};
     console.error('Failed to load worker types:', e.message);
   }
 }
@@ -244,6 +260,7 @@ async function onPlantChange(val) {
   clearForm();
   await initApp();
   if (vendorsPanelOpen) loadVendorsList();
+  if (contractorsPanelOpen) loadContractorsPanel();
   const dashOpen = document.getElementById('dashboardOverlay').style.display !== 'none';
   if (dashOpen) await loadDashboard();
   if (activePlantId) {
@@ -401,7 +418,7 @@ async function loadCustomSKUs() {
 
 
 /* ── Manual contractor add / remove ──
-   Contractors are picked from the canonical per-plant list (CONTRACTORS, loaded via
+   Contractors are picked from this plant's list (PLANT_CONTRACTORS, loaded via
    loadContractors()) instead of free-typed — the free-text + per-browser localStorage
    list this used to be is exactly what fragmented the same real contractor into a dozen
    near-duplicate spellings ("Factotum" / "Foctotum" / "FACTOUM" / ...). A deliberate
@@ -433,7 +450,7 @@ function renderContractorSearch() {
   const wrap = document.getElementById('contractorSearchResults');
   if (!wrap) return;
 
-  if (!CONTRACTORS.length) {
+  if (!_plantContractorsOk) {
     wrap.innerHTML = `<div style="padding:14px;text-align:center">
       <div style="font-size:12px;color:#c00;margin-bottom:8px">Could not load contractor list.</div>
       <button class="btn btn-card-outline" style="font-size:12px" onclick="retryLoadContractors()">Retry</button>
@@ -441,8 +458,9 @@ function renderContractorSearch() {
     return;
   }
 
-  const matches = q ? CONTRACTORS.filter(c => c.name.toLowerCase().includes(q)) : CONTRACTORS;
-  const exactMatch = CONTRACTORS.some(c => c.name.toLowerCase() === q);
+  const matches = q ? PLANT_CONTRACTORS.filter(c => c.name.toLowerCase().includes(q)) : PLANT_CONTRACTORS;
+  const exactMatch = PLANT_CONTRACTORS.some(c => c.name.toLowerCase() === q);
+  const sharedMatch = q && CONTRACTORS.find(c => c.name.toLowerCase() === q);
 
   const rowsHtml = matches.map(c => {
     const safe = c.name.replace(/'/g, "\\'");
@@ -453,11 +471,13 @@ function renderContractorSearch() {
   }).join('');
 
   const newRowHtml = (q && !exactMatch)
-    ? `<div class="cr-search-row cr-search-row-new" onclick="confirmAddContractor()">+ Add "${q.replace(/"/g,'&quot;')}" as a new contractor</div>`
+    ? `<div class="cr-search-row cr-search-row-new" onclick="confirmAddContractor()">${sharedMatch
+        ? `+ Add "${sharedMatch.name}" to this plant's list`
+        : `+ Add "${q.replace(/"/g,'&quot;')}" as a new contractor`}</div>`
     : '';
 
   const emptyHtml = (!matches.length && !newRowHtml)
-    ? '<div style="padding:14px;font-size:12px;color:var(--muted)">No contractors set up yet — type a name above to add one.</div>'
+    ? '<div style="padding:14px;font-size:12px;color:var(--muted)">No contractors on this plant\'s list yet — type a name above to add one.</div>'
     : '';
 
   wrap.innerHTML = rowsHtml + newRowHtml + emptyHtml;
@@ -488,12 +508,15 @@ async function confirmAddContractor() {
   if (!name) { showToast('⚠ Enter a contractor name.', true); return; }
   if (ATT_VENDORS.includes(name)) { showToast('⚠ Already in list.', true); return; }
   try {
-    const existing = CONTRACTORS.find(c => c.name.toLowerCase() === name.toLowerCase());
-    if (!existing) {
-      const created = await api('POST', '/api/contractors', { name });
-      CONTRACTORS.push(created);
+    let contractor = PLANT_CONTRACTORS.find(c => c.name.toLowerCase() === name.toLowerCase());
+    if (!contractor) {
+      // Finds the shared contractor (or creates it) and links it to this plant
+      contractor = await api('POST', '/api/contractors/plant', { name });
+      if (!PLANT_CONTRACTORS.some(c => c.id === contractor.id)) PLANT_CONTRACTORS.push(contractor);
+      if (!CONTRACTORS.some(c => c.id === contractor.id)) CONTRACTORS.push(contractor);
     }
-    const canonicalName = existing ? existing.name : name;
+    const canonicalName = contractor.name;
+    if (ATT_VENDORS.includes(canonicalName)) { showToast('⚠ Already in list.', true); return; }
     ATT_VENDORS.push(canonicalName);
     attState[canonicalName] = { workers: 0, cost: 0, otHours: 0, otCost: 0, designations: {} };
     inp.value = '';
@@ -678,6 +701,9 @@ function designationsFromSavedTypes(types) {
       workers: t.count || 0,
       cost: parseFloat(t.cost) || 0,
       rate: t.rate_used != null ? parseFloat(t.rate_used) : (WORKER_TYPES_BY_NAME[t.worker_type] || 0),
+      otHours: parseFloat(t.ot_hours) || 0,
+      otRate: t.ot_rate_used != null ? parseFloat(t.ot_rate_used) : null,
+      otCost: parseFloat(t.ot_cost) || 0,
     };
   });
   return out;
@@ -686,8 +712,9 @@ function designationsFromSavedTypes(types) {
 // attState[v].designations -> the `types` array the backend persists for that contractor.
 function designationsToTypesPayload(designations) {
   return Object.entries(designations || {})
-    .filter(([, d]) => (d.workers > 0) || (d.cost > 0))
-    .map(([name, d]) => ({ workerType: name, count: d.workers || 0, rate: d.rate ?? null, cost: r2(d.cost || 0) }));
+    .filter(([, d]) => (d.workers > 0) || (d.cost > 0) || (d.otHours > 0))
+    .map(([name, d]) => ({ workerType: name, count: d.workers || 0, rate: d.rate ?? null, cost: r2(d.cost || 0),
+      otHours: d.otHours || 0, otRate: d.otHours > 0 ? (d.otRate ?? null) : null, otCost: r2(d.otCost || 0) }));
 }
 
 // Whether the active plant has worker-type breakdown turned on at all (a per-plant
@@ -702,6 +729,79 @@ function plantOtEnabled() {
 function plantOtRate() {
   const pid = currentPlantId || activePlantId;
   return parseFloat(PLANTS_BY_ID[pid]?.ot_rate_per_hour) || 0;
+}
+
+// OT rate for one worker type: its own rate if set, else the location's OT rate.
+function typeOtRate(name) {
+  return WORKER_TYPES_OT_BY_NAME[name] ?? plantOtRate();
+}
+
+// With the worker-type breakdown on, OT hours are entered per worker type so each
+// type is charged at its own OT rate; the contractor's OT total is their sum.
+function openTypeOtEditor(v) {
+  const desig = attState[v].designations || {};
+  const names = [...new Set([...WORKER_TYPES.map(t => t.name), ...Object.keys(desig)])];
+  const vk = v.replace(/'/g, "\\'");
+  const prevTotal = parseFloat(attState[v].otHours) || 0;
+  const hasSplit = Object.values(desig).some(d => d.otHours > 0);
+  const rows = names.map((n, i) => {
+    const d = desig[n] || {};
+    const rate = d.otHours > 0 && d.otRate != null ? d.otRate : typeOtRate(n);
+    return `<tr>
+      <td>${n}${d.workers ? `<div style="font-size:11px;color:var(--muted)">${d.workers} present</div>` : ''}</td>
+      <td><input class="users-input wt-cell-input" type="number" min="0" step="0.5" id="typeOt_${i}" data-type="${n.replace(/"/g,'&quot;')}" data-rate="${rate}"
+        value="${d.otHours || ''}" placeholder="0" style="margin-bottom:0;max-width:90px" oninput="_refreshTypeOtTotal()"></td>
+      <td style="color:var(--muted);font-size:12px">₹${rate} / hr${WORKER_TYPES_OT_BY_NAME[n] == null ? ' (location)' : ''}</td>
+      <td class="r" id="typeOtAmt_${i}">₹ ${r2((d.otHours || 0) * rate)}</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('typeOtModal')?.remove();
+  document.body.insertAdjacentHTML('beforeend', `<div id="typeOtModal" class="modal-overlay">
+    <div class="modal-box" style="max-width:520px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <div style="font-weight:700;font-size:15px">OT hours — ${v}</div>
+        <button class="modal-x" onclick="document.getElementById('typeOtModal').remove()">×</button>
+      </div>
+      ${prevTotal > 0 && !hasSplit ? `<div style="font-size:12px;color:#a06000;margin-bottom:8px">Previously entered as one total: ${prevTotal} h. Saving here replaces it with the split below.</div>` : ''}
+      <table class="wt-table"><thead><tr><th>Worker Type</th><th>OT Hours</th><th>Rate</th><th class="r">Amount</th></tr></thead>
+        <tbody>${rows || '<tr><td colspan="4" style="color:var(--muted)">No worker types set up — add them in Worker Settings.</td></tr>'}</tbody>
+        <tfoot><tr><td colspan="3" style="font-weight:600">Total</td><td class="r" style="font-weight:600" id="typeOtTotal"></td></tr></tfoot></table>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px">
+        <button class="btn btn-card-outline" onclick="document.getElementById('typeOtModal').remove()">Cancel</button>
+        <button class="users-add-btn" style="width:auto;padding:7px 18px" onclick="saveTypeOt('${vk}')">Save</button>
+      </div>
+    </div>
+  </div>`);
+  _refreshTypeOtTotal();
+}
+
+function _refreshTypeOtTotal() {
+  let hours = 0, amt = 0;
+  document.querySelectorAll('#typeOtModal input[data-type]').forEach(inp => {
+    const h = parseFloat(inp.value) || 0, a = r2(h * parseFloat(inp.dataset.rate));
+    hours += h; amt += a;
+    const cell = document.getElementById('typeOtAmt_' + inp.id.split('_')[1]);
+    if (cell) cell.textContent = '₹ ' + a;
+  });
+  const t = document.getElementById('typeOtTotal');
+  if (t) t.textContent = `${r2(hours)} h · ₹ ${r2(amt)}`;
+}
+
+function saveTypeOt(v) {
+  const desig = attState[v].designations || (attState[v].designations = {});
+  let hours = 0, cost = 0;
+  document.querySelectorAll('#typeOtModal input[data-type]').forEach(inp => {
+    const name = inp.dataset.type, h = parseFloat(inp.value) || 0, rate = parseFloat(inp.dataset.rate) || 0;
+    if (!desig[name] && !h) return;
+    desig[name] = { workers: 0, cost: 0, rate: WORKER_TYPES_BY_NAME[name] || 0, ...desig[name],
+      otHours: h, otRate: h ? rate : null, otCost: r2(h * rate) };
+    hours += h; cost += r2(h * rate);
+  });
+  attState[v].otHours = r2(hours);
+  attState[v].otCost = r2(cost);
+  document.getElementById('typeOtModal').remove();
+  markDirty();
+  renderAtt();
 }
 
 function onOtHoursChange(v, val) {
@@ -742,7 +842,7 @@ function onDesigCellChange(v, colName, newCount) {
   const count = parseInt(newCount) || 0;
   const desig = attState[v].designations || (attState[v].designations = {});
   const rate = desig[colName]?.rate ?? (WORKER_TYPES_BY_NAME[colName] || 0);
-  desig[colName] = { workers: count, rate, cost: r2(count * rate) };
+  desig[colName] = { ...desig[colName], workers: count, rate, cost: r2(count * rate) };
   _recalcFromDesignations(v);
   markDirty();
   renderAtt();
@@ -829,12 +929,14 @@ function renderAtt() {
       const totalsLocked = hasDesigEntries;
       const otCells = otOn ? `
         <td class="r">
-          <input type="number" min="0" step="0.5" value="${s.otHours || 0}" style="width:80px"
-            onchange="onOtHoursChange('${vk}', this.value)">
+          ${breakdownOn
+            ? `<button class="btn btn-card-outline" style="font-size:12px;padding:4px 10px;white-space:nowrap" onclick="openTypeOtEditor('${vk}')" title="Enter OT hours per worker type">${s.otHours || 0} h ✎</button>`
+            : `<input type="number" min="0" step="0.5" value="${s.otHours || 0}" style="width:80px"
+            onchange="onOtHoursChange('${vk}', this.value)">`}
         </td>
         <td class="r">
           <input type="number" min="0" step="0.01" value="${s.otCost || 0}" style="width:110px"
-            ${otRate > 0 ? `readonly title="OT hours × ₹${otRate}/hour (set in Worker Settings)"` : ''}
+            ${breakdownOn ? 'readonly title="Sum of OT hours × each worker type\'s OT rate"' : otRate > 0 ? `readonly title="OT hours × ₹${otRate}/hour (set in Worker Settings)"` : ''}
             onchange="attState['${vk}'].otCost=parseFloat(this.value)||0;markDirty();renderAtt();">
         </td>
         <td class="r" style="font-weight:600;padding:8px 10px;white-space:nowrap">
@@ -1749,16 +1851,17 @@ async function openWorkerTypesModal() {
 
   const tableHtml = canManageRates ? `
     <table class="wt-table">
-      <thead><tr><th>Worker Type</th><th>Monthly CTC (₹)</th><th>Scope</th><th></th></tr></thead>
+      <thead><tr><th>Worker Type</th><th>Monthly CTC (₹)</th><th>OT Rate (₹/hr)</th><th>Scope</th><th></th></tr></thead>
       <tbody id="wtTableBody">
         ${types.map(t => `
           <tr id="wtRow_${t.id}">
             <td>${t.name}</td>
             <td>₹${(parseFloat(t.monthly_ctc) || 0).toLocaleString('en-IN')}
               <div style="font-size:11px;color:var(--muted)">₹${(parseFloat(t.daily_rate) || 0).toFixed(2)} / day</div></td>
+            <td>${t.ot_rate_per_hour != null ? '₹' + parseFloat(t.ot_rate_per_hour) + ' / hr' : '<span style="font-size:11px;color:var(--muted)">Location rate</span>'}</td>
             <td style="color:var(--muted);font-size:11.5px">${t.plant_id ? 'This location' : 'All locations'}</td>
             <td style="white-space:nowrap">
-              <button class="loc-rename-btn" onclick="startEditWorkerType(${t.id},'${t.name.replace(/'/g,"\\'")}',${parseFloat(t.monthly_ctc) || 0})" title="Edit">✎</button>
+              <button class="loc-rename-btn" onclick="startEditWorkerType(${t.id},'${t.name.replace(/'/g,"\\'")}',${parseFloat(t.monthly_ctc) || 0},'${t.ot_rate_per_hour ?? ''}')" title="Edit">✎</button>
               <button class="loc-rename-btn" onclick="deleteWorkerType(${t.id})" title="Delete">🗑</button>
             </td>
           </tr>
@@ -1768,6 +1871,7 @@ async function openWorkerTypesModal() {
           <td><input class="users-input wt-cell-input" id="newWTRate" type="number" min="0" step="1" placeholder="Monthly CTC" style="margin-bottom:0"
             oninput="document.getElementById('newWTDaily').textContent = this.value ? '₹' + (parseFloat(this.value) / 30).toFixed(2) + ' / day' : ''">
             <div id="newWTDaily" style="font-size:11px;color:var(--muted)"></div></td>
+          <td><input class="users-input wt-cell-input" id="newWTOtRate" type="number" min="0" step="0.01" placeholder="Optional" title="Leave blank to use the location's OT rate" style="margin-bottom:0"></td>
           <td><label style="display:flex;align-items:center;gap:5px;font-size:11px;white-space:nowrap;cursor:pointer">
             <input type="checkbox" id="newWTGlobal" style="cursor:pointer"> All locations
           </label></td>
@@ -1781,7 +1885,7 @@ async function openWorkerTypesModal() {
   const otHtml = isPrivileged ? `
     <div style="padding:12px 0;border-top:1px solid var(--border);margin-top:14px">
       <div style="font-weight:600;font-size:13.5px">Overtime rate</div>
-      <div style="font-size:11.5px;color:var(--muted);margin-bottom:8px">OT amount = OT hours × this rate${plantOtEnabled() ? '' : ' (OT tracking is off for this location)'}</div>
+      <div style="font-size:11.5px;color:var(--muted);margin-bottom:8px">${breakdownOn ? 'Used for worker types that have no OT rate of their own' : 'OT amount = OT hours × this rate'}${plantOtEnabled() ? '' : ' (OT tracking is off for this location)'}</div>
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
         <input class="users-input wt-cell-input" id="otRateInput" type="number" min="0" step="0.01" value="${otRate || ''}" placeholder="₹ per hour" style="margin-bottom:0;max-width:140px">
         <span style="font-size:12px;color:var(--muted)">₹ / hour</span>
@@ -1838,13 +1942,14 @@ async function saveOtRate(pid) {
   } catch (e) { showToast('⚠ ' + e.message, true); }
 }
 
-function startEditWorkerType(id, name, monthlyCtc) {
+function startEditWorkerType(id, name, monthlyCtc, otRate) {
   const row = document.getElementById('wtRow_' + id);
   if (!row) return;
   row.innerHTML = `
-    <td colspan="3"><div style="display:flex;gap:6px">
+    <td colspan="4"><div style="display:flex;gap:6px">
       <input class="users-input wt-cell-input" id="wtNameInput_${id}" value="${name.replace(/"/g,'&quot;')}" style="margin-bottom:0">
       <input class="users-input wt-cell-input" id="wtRateInput_${id}" type="number" min="0" step="1" value="${monthlyCtc}" placeholder="Monthly CTC" style="margin-bottom:0;max-width:130px">
+      <input class="users-input wt-cell-input" id="wtOtInput_${id}" type="number" min="0" step="0.01" value="${otRate}" placeholder="OT ₹/hr" title="Leave blank to use the location's OT rate" style="margin-bottom:0;max-width:100px">
     </div></td>
     <td style="white-space:nowrap">
       <button class="btn-save" onclick="saveEditWorkerType(${id})">✓</button>
@@ -1855,9 +1960,10 @@ function startEditWorkerType(id, name, monthlyCtc) {
 async function saveEditWorkerType(id) {
   const name = document.getElementById('wtNameInput_' + id)?.value.trim();
   const monthlyCtc = document.getElementById('wtRateInput_' + id)?.value;
+  const otRate = document.getElementById('wtOtInput_' + id)?.value;
   if (!name) { showToast('⚠ Name cannot be empty', true); return; }
   try {
-    await api('PATCH', '/api/worker-types/' + id, { name, monthlyCtc });
+    await api('PATCH', '/api/worker-types/' + id, { name, monthlyCtc, otRate });
     showToast('✓ Updated', false);
     await loadWorkerTypes();
     openWorkerTypesModal();
@@ -1878,13 +1984,14 @@ async function deleteWorkerType(id) {
 async function addWorkerType() {
   const name = document.getElementById('newWTName').value.trim();
   const monthlyCtc = document.getElementById('newWTRate').value;
+  const otRate = document.getElementById('newWTOtRate').value;
   const isGlobal = document.getElementById('newWTGlobal').checked;
   const errEl = document.getElementById('wtFormErr');
   errEl.textContent = '';
   if (!name) { errEl.textContent = 'Name is required.'; return; }
   if (monthlyCtc === '' || isNaN(parseFloat(monthlyCtc)) || parseFloat(monthlyCtc) < 0) { errEl.textContent = 'Enter a valid monthly CTC.'; return; }
   try {
-    await api('POST', '/api/worker-types', { name, monthlyCtc, global: isGlobal });
+    await api('POST', '/api/worker-types', { name, monthlyCtc, otRate, global: isGlobal });
     showToast(`✓ Worker type "${name}" added`, false);
     await loadWorkerTypes();
     openWorkerTypesModal();
@@ -1898,58 +2005,81 @@ async function addWorkerType() {
    CONTRACTORS: canonical list manager + historical merge tool
 ═══════════════════════════════════════════════════════ */
 
-async function openContractorsModal() {
-  await loadContractors();
-  const pid = currentPlantId || activePlantId;
-  const bizType = PLANTS_BY_ID[pid]?.business_type || null;
+let contractorsPanelOpen = false;
 
-  const rowsHtml = CONTRACTORS.length ? CONTRACTORS.map(c => `
+function toggleContractorsPanel(force) {
+  contractorsPanelOpen = (force !== undefined) ? force : !contractorsPanelOpen;
+  document.getElementById('contractorsPanel').style.display = contractorsPanelOpen ? 'flex' : 'none';
+  if (contractorsPanelOpen) loadContractorsPanel();
+  else setActiveNav('daily');
+}
+
+async function loadContractorsPanel() {
+  await loadContractors();
+  renderContractorsPanel();
+}
+
+function renderContractorsPanel() {
+  const list = document.getElementById('ctrPanelList');
+  if (!list) return;
+  const pid = currentPlantId || activePlantId;
+  const plant = PLANTS_BY_ID[pid];
+  document.getElementById('ctrPanelPlant').textContent = plant ? '— ' + plant.name : '';
+  document.getElementById('ctrPanelSide').style.display = pid ? '' : 'none';
+  if (!pid) {
+    list.innerHTML = '<div class="hist-empty">Select a single plant in the sidebar to manage its contractor list.</div>';
+    return;
+  }
+  const q = (document.getElementById('ctrSearchInput')?.value || '').trim().toLowerCase();
+  const match = c => !q || c.name.toLowerCase().includes(q);
+  const linked = new Set(PLANT_CONTRACTORS.map(c => c.id));
+  const mine = PLANT_CONTRACTORS.filter(match);
+  const others = CONTRACTORS.filter(c => !linked.has(c.id) && match(c));
+  const esc = n => n.replace(/'/g, "\\'");
+
+  const mineRows = mine.length ? mine.map(c => `
     <tr id="ctrRow_${c.id}">
       <td>${c.name}</td>
       <td style="white-space:nowrap;text-align:right">
-        <button class="loc-rename-btn" onclick="startEditContractor(${c.id},'${c.name.replace(/'/g,"\\'")}')" title="Edit">✎</button>
-        <button class="loc-rename-btn" onclick="deleteContractor(${c.id})" title="Delete">🗑</button>
+        <button class="loc-rename-btn" onclick="startEditContractor(${c.id},'${esc(c.name)}')" title="Rename">✎</button>
+        <button class="user-del-btn" onclick="removeContractorFromPlant(${c.id},'${esc(c.name)}')">Remove from plant</button>
       </td>
-    </tr>
-  `).join('') : '<tr><td colspan="2" style="text-align:center;color:var(--muted);padding:14px">No contractors yet.</td></tr>';
+    </tr>`).join('')
+    : `<tr><td colspan="2" style="color:var(--muted);padding:14px">${q ? 'No match on this plant\'s list.' : 'No contractors on this plant\'s list yet.'}</td></tr>`;
 
-  document.getElementById('contractorsModal')?.remove();
-  const modalHtml = `<div id="contractorsModal" class="modal-overlay">
-    <div class="modal-box ctr-modal-box" style="max-width:480px">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-        <div style="font-weight:700;font-size:16px">🏗 Contractors${bizType ? ' — ' + bizType : ''}</div>
-        <button id="ctrModalCloseBtn" class="modal-x">×</button>
-      </div>
-      <div style="font-size:12px;color:var(--muted);margin-bottom:10px">This is the shared contractor list for every ${bizType || 'this business type'} location — manual entry and CSV uploads at any ${bizType || 'such'} plant both resolve onto these names instead of free text.</div>
-      <div class="ctr-table-scroll">
-        <table class="wt-table">
-          <thead><tr><th>Contractor Name</th><th></th></tr></thead>
-          <tbody id="ctrTableBody">${rowsHtml}</tbody>
-        </table>
-      </div>
-      <div class="ctr-modal-footer">
-        <div style="display:flex;gap:6px;margin-top:10px">
-          <input class="users-input wt-cell-input" id="newCtrName" type="text" placeholder="Contractor name" autocomplete="off" style="margin-bottom:0;flex:1 1 auto;min-width:0"
-            onkeydown="if(event.key==='Enter')addContractorFromModal();">
-          <button class="users-add-btn" style="width:auto;flex:0 0 auto;white-space:nowrap;padding:8px 16px;font-size:13px" onclick="addContractorFromModal()">+ Add row</button>
-        </div>
-        <div id="ctrFormErr" class="users-form-err"></div>
-        <button class="btn btn-card-outline" style="width:100%;margin-top:10px" onclick="openContractorMergeModal()">🧹 Clean Up Historical Names</button>
-      </div>
+  const otherRows = others.map(c => `
+    <tr>
+      <td>${c.name}</td>
+      <td style="text-align:right"><button class="btn-ghost" style="font-size:12px" onclick="linkContractorToPlant(${c.id})">+ Add to this plant</button></td>
+    </tr>`).join('');
+
+  list.innerHTML = `
+    <div class="vendor-section" style="background:#fff">
+      <div class="vendor-section-header"><span class="vendor-section-name">On this plant's list (${PLANT_CONTRACTORS.length})</span></div>
+      <div style="font-size:11.5px;color:var(--muted);margin:-4px 0 8px">Only these show when adding contractors manually in attendance at ${plant?.name || 'this plant'}.</div>
+      <table class="wt-table"><tbody>${mineRows}</tbody></table>
     </div>
-  </div>`;
-  document.body.insertAdjacentHTML('beforeend', modalHtml);
-  document.getElementById('ctrModalCloseBtn').onclick = () => document.getElementById('contractorsModal').remove();
+    ${others.length ? `
+    <div class="vendor-section" style="background:#fff;margin-top:12px">
+      <div class="vendor-section-header"><span class="vendor-section-name">Other ${plant?.business_type || ''} contractors (${others.length})</span></div>
+      <div style="font-size:11.5px;color:var(--muted);margin:-4px 0 8px">Used at other ${plant?.business_type || ''} plants — not shown in this plant's picker.</div>
+      <table class="wt-table"><tbody>${otherRows}</tbody></table>
+    </div>` : ''}`;
+
+  const dl = document.getElementById('ctrNameSuggestions');
+  if (dl) dl.innerHTML = CONTRACTORS.filter(c => !linked.has(c.id)).map(c => `<option value="${c.name.replace(/"/g,'&quot;')}">`).join('');
 }
 
 function startEditContractor(id, name) {
   const row = document.getElementById('ctrRow_' + id);
   if (!row) return;
   row.innerHTML = `
-    <td><input class="users-input wt-cell-input" id="ctrNameInput_${id}" value="${name.replace(/"/g,'&quot;')}" style="margin-bottom:0;width:100%"></td>
+    <td><input class="users-input wt-cell-input" id="ctrNameInput_${id}" value="${name.replace(/"/g,'&quot;')}" style="margin-bottom:0;width:100%"
+      onkeydown="if(event.key==='Enter')saveEditContractor(${id});if(event.key==='Escape')renderContractorsPanel()">
+      <div style="font-size:11px;color:var(--muted);margin-top:3px">Renames it for every location that uses it.</div></td>
     <td style="white-space:nowrap;text-align:right">
       <button class="btn-save" onclick="saveEditContractor(${id})">✓</button>
-      <button class="btn-cancel" onclick="openContractorsModal()">✕</button>
+      <button class="btn-cancel" onclick="renderContractorsPanel()">✕</button>
     </td>`;
 }
 
@@ -1959,28 +2089,38 @@ async function saveEditContractor(id) {
   try {
     await api('PATCH', '/api/contractors/' + id, { name });
     showToast('✓ Updated', false);
-    openContractorsModal();
-    renderAtt();
+    await loadContractorsPanel();
   } catch (e) { showToast('⚠ ' + e.message, true); }
 }
 
-async function deleteContractor(id) {
-  if (!confirm('Delete this contractor from the canonical list? Already-saved attendance records are unaffected.')) return;
+async function removeContractorFromPlant(id, name) {
+  if (!confirm(`Remove "${name}" from this plant's list? It will no longer show in this plant's picker. No attendance records are changed or deleted.`)) return;
   try {
-    await api('DELETE', '/api/contractors/' + id);
-    openContractorsModal();
+    await api('DELETE', '/api/contractors/plant/' + id);
+    showToast(`✓ "${name}" removed from this plant's list`, false);
+    await loadContractorsPanel();
   } catch (e) { showToast('⚠ ' + e.message, true); }
 }
 
-async function addContractorFromModal() {
-  const name = document.getElementById('newCtrName').value.trim();
+async function linkContractorToPlant(contractorId) {
+  try {
+    const c = await api('POST', '/api/contractors/plant', { contractorId });
+    showToast(`✓ "${c.name}" added to this plant`, false);
+    await loadContractorsPanel();
+  } catch (e) { showToast('⚠ ' + e.message, true); }
+}
+
+async function addContractorToPlant() {
+  const input = document.getElementById('newCtrName');
+  const name = input.value.trim();
   const errEl = document.getElementById('ctrFormErr');
   errEl.textContent = '';
   if (!name) { errEl.textContent = 'Name is required.'; return; }
   try {
-    await api('POST', '/api/contractors', { name });
-    showToast(`✓ Contractor "${name}" added`, false);
-    openContractorsModal();
+    const c = await api('POST', '/api/contractors/plant', { name });
+    input.value = '';
+    showToast(`✓ "${c.name}" added to this plant`, false);
+    await loadContractorsPanel();
   } catch (e) {
     errEl.textContent = e.message;
   }

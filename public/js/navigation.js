@@ -44,6 +44,7 @@ function navTo(section) {
   closeInsights();
   toggleHistory(false);
   toggleVendorsPanel(false);
+  toggleContractorsPanel(false);
   toggleUsersPanel(false);
   setActiveNav(section);
   switch (section) {
@@ -55,7 +56,7 @@ function navTo(section) {
     case 'history':   toggleHistory(true);      break;
     case 'vendors':   toggleVendorsPanel(true); break;
     case 'users':     toggleUsersPanel(true);   break;
-    case 'contractors': openContractorsModal(); break;
+    case 'contractors': toggleContractorsPanel(true); break;
   }
 }
 

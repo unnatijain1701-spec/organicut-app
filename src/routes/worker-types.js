@@ -17,6 +17,13 @@ function getPlantId(req) {
   return !isNaN(requested) && allowed.includes(requested) ? requested : allowed[0];
 }
 
+// OT rate per hour: '' / null clears it (falls back to the location's OT rate).
+function parseOtRate(v) {
+  if (v === '' || v === null || v === undefined) return { value: null };
+  const n = parseFloat(v);
+  return isNaN(n) || n < 0 ? { error: 'OT rate must be a non-negative number' } : { value: n };
+}
+
 // GET /api/worker-types — effective list for this plant: every global (plant_id
 // IS NULL) worker type, with a plant-specific row of the same name overriding its
 // rate. A plant-specific type with no global counterpart is simply added.
@@ -24,7 +31,7 @@ router.get('/', async (req, res) => {
   const pid = getPlantId(req);
   try {
     const { rows } = await db.query(
-      `SELECT id, plant_id, name, monthly_ctc, daily_rate, display_order FROM worker_types
+      `SELECT id, plant_id, name, monthly_ctc, daily_rate, ot_rate_per_hour, display_order FROM worker_types
        WHERE plant_id IS NULL OR plant_id = $1
        ORDER BY display_order, name`,
       [pid]
@@ -49,7 +56,9 @@ router.get('/', async (req, res) => {
 // create a global default used by every plant that has no override of its own.
 router.post('/', async (req, res) => {
   if (!hasPermission(req.user, 'manage_worker_types')) return res.status(403).json({ error: 'You do not have permission to do this' });
-  const { name, monthlyCtc, global: isGlobal } = req.body || {};
+  const { name, monthlyCtc, otRate, global: isGlobal } = req.body || {};
+  const ot = parseOtRate(otRate);
+  if (ot.error) return res.status(400).json({ error: ot.error });
   if (!name || !name.trim()) return res.status(400).json({ error: 'Worker type name is required' });
   const monthly = parseFloat(monthlyCtc);
   if (isNaN(monthly) || monthly < 0) return res.status(400).json({ error: 'Monthly CTC must be a non-negative number' });
@@ -57,10 +66,10 @@ router.post('/', async (req, res) => {
   if (!isGlobal && !plantId) return res.status(400).json({ error: 'No plant selected' });
   try {
     const { rows } = await db.query(
-      `INSERT INTO worker_types (plant_id, name, monthly_ctc, daily_rate, display_order)
-       VALUES ($1, $2, $3, ROUND($3::numeric / 30, 2), COALESCE((SELECT MAX(display_order)+1 FROM worker_types WHERE plant_id IS NOT DISTINCT FROM $4), 0))
-       RETURNING id, plant_id, name, monthly_ctc, daily_rate, display_order`,
-      [plantId, name.trim(), monthly, plantId]
+      `INSERT INTO worker_types (plant_id, name, monthly_ctc, daily_rate, ot_rate_per_hour, display_order)
+       VALUES ($1, $2, $3, ROUND($3::numeric / 30, 2), $5, COALESCE((SELECT MAX(display_order)+1 FROM worker_types WHERE plant_id IS NOT DISTINCT FROM $4), 0))
+       RETURNING id, plant_id, name, monthly_ctc, daily_rate, ot_rate_per_hour, display_order`,
+      [plantId, name.trim(), monthly, plantId, ot.value]
     );
     res.json(rows[0]);
   } catch (e) {
@@ -73,8 +82,8 @@ router.post('/', async (req, res) => {
 // PATCH /api/worker-types/:id — rename and/or change the monthly CTC
 router.patch('/:id', async (req, res) => {
   if (!hasPermission(req.user, 'manage_worker_types')) return res.status(403).json({ error: 'You do not have permission to do this' });
-  const { name, monthlyCtc } = req.body || {};
-  if (name === undefined && monthlyCtc === undefined) return res.status(400).json({ error: 'Nothing to update' });
+  const { name, monthlyCtc, otRate } = req.body || {};
+  if (name === undefined && monthlyCtc === undefined && otRate === undefined) return res.status(400).json({ error: 'Nothing to update' });
   try {
     const sets = [];
     const params = [];
@@ -85,9 +94,15 @@ router.patch('/:id', async (req, res) => {
       params.push(monthly);
       sets.push(`monthly_ctc = $${params.length}`, `daily_rate = ROUND($${params.length}::numeric / 30, 2)`);
     }
+    if (otRate !== undefined) {
+      const ot = parseOtRate(otRate);
+      if (ot.error) return res.status(400).json({ error: ot.error });
+      params.push(ot.value);
+      sets.push(`ot_rate_per_hour = $${params.length}`);
+    }
     params.push(req.params.id);
     const { rows } = await db.query(
-      `UPDATE worker_types SET ${sets.join(', ')} WHERE id = $${params.length} RETURNING id, plant_id, name, monthly_ctc, daily_rate, display_order`,
+      `UPDATE worker_types SET ${sets.join(', ')} WHERE id = $${params.length} RETURNING id, plant_id, name, monthly_ctc, daily_rate, ot_rate_per_hour, display_order`,
       params
     );
     if (!rows.length) return res.status(404).json({ error: 'Worker type not found' });

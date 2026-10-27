@@ -82,6 +82,89 @@ router.post('/', async (req, res) => {
   }
 });
 
+// ── Per-plant list: which of the shared contractors a plant shows in its picker ──
+
+async function plantBizType(pid) {
+  const { rows } = await db.query('SELECT business_type FROM plants WHERE id = $1', [pid]);
+  return rows[0]?.business_type || null;
+}
+
+// GET /api/contractors/plant — the contractors linked to the active plant
+router.get('/plant', async (req, res) => {
+  const pid = getPlantId(req);
+  if (!pid) return res.json([]);
+  try {
+    const { rows } = await db.query(
+      `SELECT c.id, c.name FROM plant_contractors pc JOIN contractors c ON c.id = pc.contractor_id
+       WHERE pc.plant_id = $1 ORDER BY c.display_order, c.name`,
+      [pid]
+    );
+    res.json(rows);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// POST /api/contractors/plant — add a contractor to the active plant's list.
+// Body: { contractorId } to link an existing one, or { name } to find-or-create it in
+// the business type's shared list (matching case-insensitively or by alias) and link it.
+router.post('/plant', async (req, res) => {
+  const pid = getPlantId(req);
+  if (!pid) return res.status(400).json({ error: 'No plant selected' });
+  const { contractorId, name } = req.body || {};
+  try {
+    const bt = await plantBizType(pid);
+    if (!bt) return res.status(400).json({ error: 'No plant selected' });
+    let contractor;
+    if (contractorId != null) {
+      const { rows } = await db.query('SELECT id, name FROM contractors WHERE id = $1 AND business_type = $2', [parseInt(contractorId, 10), bt]);
+      if (!rows.length) return res.status(404).json({ error: 'Contractor not found' });
+      contractor = rows[0];
+    } else {
+      if (!name || !name.trim()) return res.status(400).json({ error: 'Contractor name is required' });
+      const { rows: found } = await db.query(
+        `SELECT id, name FROM contractors WHERE business_type = $1 AND LOWER(TRIM(name)) = LOWER(TRIM($2))
+         UNION ALL
+         SELECT c.id, c.name FROM contractor_aliases a JOIN contractors c ON c.id = a.contractor_id
+         WHERE a.business_type = $1 AND LOWER(TRIM(a.raw_name)) = LOWER(TRIM($2))
+         LIMIT 1`,
+        [bt, name]
+      );
+      if (found.length) {
+        contractor = found[0];
+      } else {
+        const { rows } = await db.query(
+          `INSERT INTO contractors (business_type, name, display_order)
+           VALUES ($1, $2, COALESCE((SELECT MAX(display_order)+1 FROM contractors WHERE business_type = $3), 0))
+           RETURNING id, name`,
+          [bt, name.trim(), bt]
+        );
+        contractor = rows[0];
+      }
+    }
+    await db.query('INSERT INTO plant_contractors (plant_id, contractor_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [pid, contractor.id]);
+    res.json(contractor);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// DELETE /api/contractors/plant/:id — remove a contractor from the active plant's list
+// only. The contractor and every saved attendance record are untouched.
+router.delete('/plant/:id', async (req, res) => {
+  const pid = getPlantId(req);
+  if (!pid) return res.status(400).json({ error: 'No plant selected' });
+  try {
+    await db.query('DELETE FROM plant_contractors WHERE plant_id = $1 AND contractor_id = $2', [pid, parseInt(req.params.id, 10)]);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // PATCH /api/contractors/:id — rename a contractor
 router.patch('/:id', async (req, res) => {
   const { name } = req.body || {};

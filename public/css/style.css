@@ -470,7 +470,7 @@ td input[type="number"]:hover { border-color: #7dbf99; }
 .users-form-err { font-size: 12px; color: #ef4444; min-height: 16px; margin-bottom: 6px; }
 
 /* ── VENDORS PANEL ───────────────────────────────────── */
-#vendorsPanel {
+#vendorsPanel, #contractorsPanel {
   position: fixed; top: 0; right: 0; bottom: 0; left: 210px; z-index: 500;
   background: var(--bg); overflow-y: auto;
   display: flex; flex-direction: column;
@@ -818,7 +818,7 @@ tr.dash-row-alt td { background: #f7fdf9; }
   .sidebar-foot { margin-top: 0; margin-left: auto; border-top: none; border-left: 1px solid rgba(255,255,255,.12); padding: 0; display: flex; align-items: center; }
   .sidebar-user { display: none; }
   .topbar, .sumbar, .main { margin-left: 0; }
-  #dashboardOverlay, #reportOverlay, #trendOverlay, #insightsOverlay, #usersPanel, #vendorsPanel { left: 0; }
+  #dashboardOverlay, #reportOverlay, #trendOverlay, #insightsOverlay, #usersPanel, #vendorsPanel, #contractorsPanel { left: 0; }
 
   .topbar-main { padding: 6px 12px; min-height: 48px; gap: 6px; }
   .field input[type="date"]   { min-width: 120px; }

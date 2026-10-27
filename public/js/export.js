@@ -83,8 +83,9 @@ function exportExcel() {
     const s = attState[v] || {};
     const a = {
       contractor_name: v, workers: s.workers, cost: s.cost, ot_hours: s.otHours, ot_cost: s.otCost,
-      types: Object.entries(s.designations || {}).filter(([, d]) => (d.workers || 0) > 0)
-        .map(([name, d]) => ({ worker_type: name, count: d.workers, rate_used: d.rate, cost: d.cost })),
+      types: Object.entries(s.designations || {}).filter(([, d]) => (d.workers || 0) > 0 || (d.otHours || 0) > 0)
+        .map(([name, d]) => ({ worker_type: name, count: d.workers, rate_used: d.rate, cost: d.cost,
+          ot_hours: d.otHours, ot_rate_used: d.otHours ? d.otRate : null, ot_cost: d.otCost })),
     };
     attRows.push([xd, ..._attExportRow(a)]);
     _wtExportRows(a).forEach(r => wtRows.push([xd, ...r]));

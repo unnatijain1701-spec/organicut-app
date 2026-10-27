@@ -66,7 +66,7 @@ router.get('/', async (req, res) => {
 async function attachWorkerTypes(attendance) {
   if (!attendance.length) return;
   const { rows } = await db.query(
-    'SELECT attendance_id, worker_type, count, rate_used, cost FROM contractor_attendance_types WHERE attendance_id = ANY($1) ORDER BY worker_type',
+    'SELECT attendance_id, worker_type, count, rate_used, cost, ot_hours, ot_rate_used, ot_cost FROM contractor_attendance_types WHERE attendance_id = ANY($1) ORDER BY worker_type',
     [attendance.map(a => a.id)]
   );
   const byAtt = {};
@@ -542,7 +542,7 @@ router.get('/:date', async (req, res) => {
     );
     if (attendance.length) {
       const { rows: types } = await db.query(
-        'SELECT attendance_id, worker_type, count, rate_used, cost FROM contractor_attendance_types WHERE attendance_id = ANY($1)',
+        'SELECT attendance_id, worker_type, count, rate_used, cost, ot_hours, ot_rate_used, ot_cost FROM contractor_attendance_types WHERE attendance_id = ANY($1)',
         [attendance.map(a => a.id)]
       );
       const typesByAtt = {};
@@ -626,10 +626,10 @@ router.post('/', async (req, res) => {
       );
       const attendanceId = attRows[0].id;
       for (const t of (a.types || [])) {
-        if (!(t.count > 0) && !(t.cost > 0)) continue;
+        if (!(t.count > 0) && !(t.cost > 0) && !(t.otHours > 0)) continue;
         await client.query(
-          'INSERT INTO contractor_attendance_types (attendance_id, worker_type, count, rate_used, cost) VALUES ($1,$2,$3,$4,$5)',
-          [attendanceId, t.workerType, t.count ?? 0, t.rate ?? null, t.cost ?? 0]
+          'INSERT INTO contractor_attendance_types (attendance_id, worker_type, count, rate_used, cost, ot_hours, ot_rate_used, ot_cost) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)',
+          [attendanceId, t.workerType, t.count ?? 0, t.rate ?? null, t.cost ?? 0, t.otHours ?? 0, t.otRate ?? null, t.otCost ?? 0]
         );
       }
     }
